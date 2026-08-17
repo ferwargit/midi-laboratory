@@ -26,6 +26,7 @@ export interface UseMidiReturn {
   logs: MidiLogEntry[]
   addLog: (entry: Omit<MidiLogEntry, 'id' | 'time'>) => void
   sendNote: (noteNumber: number, durationMs?: number, velocity?: number) => void
+  changeProgram: (programNumber: number, channel?: number) => void
 }
 
 export function useMidi({
@@ -129,8 +130,6 @@ export function useMidi({
           velocity: parsed.velocity
         })
         if (onNoteOn) onNoteOn(parsed.noteNumber, parsed.velocity)
-      } else if (parsed.isNoteOff) {
-        // Ignoramos el spam de NoteOff en la pantalla de telemetría para mantener el log limpio
       }
     }
 
@@ -139,6 +138,20 @@ export function useMidi({
       inputPort.onmidimessage = null
     }
   }, [midiAccess, selectedInputId, selectedOutputId, enableSoftwareThru, onNoteOn, addLog])
+
+  // Enviar Program Change (Cambio de Instrumento al Korg)
+  const changeProgram = useCallback(
+    (programNumber: number, channel = 1): void => {
+      if (!midiAccess || !selectedOutputId) return
+      const outputPort = midiAccess.outputs.get(selectedOutputId)
+      if (!outputPort) return
+
+      // 0xC0 = Program Change en Canal 1 (0xC0 + channel - 1)
+      const statusByte = 0xc0 | ((channel - 1) & 0x0f)
+      outputPort.send([statusByte, programNumber])
+    },
+    [midiAccess, selectedOutputId]
+  )
 
   const sendNote = useCallback(
     (noteNumber: number, durationMs = 600, velocity = 100): void => {
@@ -165,6 +178,7 @@ export function useMidi({
     setSelectedOutputId,
     logs,
     addLog,
-    sendNote
+    sendNote,
+    changeProgram
   }
 }
