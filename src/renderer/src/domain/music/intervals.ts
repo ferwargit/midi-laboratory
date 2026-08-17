@@ -1,11 +1,12 @@
 export type IntervalDirection = 'ascending' | 'descending' | 'harmonic'
+export type DirectionSelection = 'ascending' | 'descending' | 'both'
 
 export interface IntervalDefinition {
   semitones: number
-  shortName: string // ej: '2M', '3m', '5J'
-  fullName: string // ej: 'Segunda Mayor', 'Tercera Menor'
-  anchorSong: string // Canción mnemotécnica pedagógica
-  inversionName: string // Inversión (ej: 3M -> 6m)
+  shortName: string
+  fullName: string
+  anchorSong: string
+  inversionName: string
 }
 
 export const INTERVAL_DEFINITIONS: Record<number, IntervalDefinition> = {
@@ -83,7 +84,7 @@ export const INTERVAL_DEFINITIONS: Record<number, IntervalDefinition> = {
     semitones: 10,
     shortName: '7m',
     fullName: 'Séptima Menor',
-    anchorSong: 'The Winner Takes It All / Somewhere (West Side)',
+    anchorSong: 'The Winner Takes It All / Somewhere',
     inversionName: '2M'
   },
   11: {
@@ -97,7 +98,7 @@ export const INTERVAL_DEFINITIONS: Record<number, IntervalDefinition> = {
     semitones: 12,
     shortName: '8J',
     fullName: 'Octava Justa',
-    anchorSong: 'Somewhere Over the Rainbow / Singin in the Rain',
+    anchorSong: 'Somewhere Over the Rainbow',
     inversionName: '1P'
   }
 }
@@ -106,9 +107,9 @@ export interface IntervalPreset {
   id: string
   name: string
   description: string
-  intervalSemitones: number[] // Lista de semitonos habilitados
-  defaultDirection: IntervalDirection
-  fixedRootNote: number | null // null = nota base aleatoria
+  intervalSemitones: number[]
+  defaultDirection: DirectionSelection
+  fixedRootNote: number | null
 }
 
 export const INTERVAL_PRESETS: IntervalPreset[] = [
@@ -118,22 +119,22 @@ export const INTERVAL_PRESETS: IntervalPreset[] = [
     description: 'Aprender el procedimiento con la máxima distancia perceptual.',
     intervalSemitones: [1, 12],
     defaultDirection: 'ascending',
-    fixedRootNote: 60 // C4
+    fixedRootNote: 60
   },
   {
     id: 'level_1_1_reference',
     name: 'Nivel 1.1: Intervalos Clásicos (2M, 3M, 4J, 5J, 8J)',
-    description: 'Intervalos consonantes de anclaje con base fija.',
+    description: 'Intervalos consonantes de anclaje con base fija (C4).',
     intervalSemitones: [2, 4, 5, 7, 12],
     defaultDirection: 'ascending',
-    fixedRootNote: 60 // C4
+    fixedRootNote: 60
   },
   {
     id: 'level_1_2_bidirectional',
     name: 'Nivel 1.2: Clásicos Bidireccionales (Asc/Desc)',
-    description: 'Mismos intervalos clásicos pero mezclando direcciones.',
+    description: 'Mismos intervalos clásicos pero mezclando direcciones al azar.',
     intervalSemitones: [2, 4, 5, 7, 12],
-    defaultDirection: 'ascending',
+    defaultDirection: 'both',
     fixedRootNote: 60
   },
   {
@@ -149,14 +150,11 @@ export const INTERVAL_PRESETS: IntervalPreset[] = [
     name: 'Nivel 1.4: Oído Relativo Puro (Base Libre C3-C5)',
     description: 'Todos los intervalos con nota raíz aleatoria en registro medio.',
     intervalSemitones: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-    defaultDirection: 'ascending',
+    defaultDirection: 'both',
     fixedRootNote: null
   }
 ]
 
-/**
- * Obtiene la definición completa de un intervalo dado su número de semitonos (0-12).
- */
 export function getIntervalDefinition(semitones: number): IntervalDefinition {
   const normalized = Math.abs(semitones) % 13
   return INTERVAL_DEFINITIONS[normalized] || INTERVAL_DEFINITIONS[0]

@@ -12,6 +12,7 @@ export interface MidiLogEntry {
 
 interface UseMidiOptions {
   onNoteOn?: (noteNumber: number, velocity: number) => void
+  onNoteOff?: (noteNumber: number) => void
   enableSoftwareThru?: boolean
 }
 
@@ -23,6 +24,7 @@ export interface UseMidiReturn {
   selectedOutputId: string
   setSelectedInputId: (id: string) => void
   setSelectedOutputId: (id: string) => void
+  pressedNotes: number[] // Notas presionadas físicamente en este milisegundo
   logs: MidiLogEntry[]
   addLog: (entry: Omit<MidiLogEntry, 'id' | 'time'>) => void
   sendNote: (noteNumber: number, durationMs?: number, velocity?: number) => void
@@ -31,6 +33,7 @@ export interface UseMidiReturn {
 
 export function useMidi({
   onNoteOn,
+  onNoteOff,
   enableSoftwareThru = true
 }: UseMidiOptions = {}): UseMidiReturn {
   const [midiAccess, setMidiAccess] = useState<MIDIAccess | null>(null)
@@ -38,6 +41,7 @@ export function useMidi({
   const [outputs, setOutputs] = useState<MIDIOutput[]>([])
   const [selectedInputId, setSelectedInputId] = useState<string>('')
   const [selectedOutputId, setSelectedOutputId] = useState<string>('')
+  const [pressedNotes, setPressedNotes] = useState<number[]>([])
   const [status, setStatus] = useState<string>(() =>
     typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator
       ? 'Iniciando Web MIDI...'
@@ -123,6 +127,9 @@ export function useMidi({
       if (!parsed) return
 
       if (parsed.isNoteOn) {
+        setPressedNotes((prev) =>
+          prev.includes(parsed.noteNumber) ? prev : [...prev, parsed.noteNumber]
+        )
         addLog({
           type: 'IN',
           message: `🎹 Tecla pulsada -> ${parsed.noteNumber}`,
@@ -130,6 +137,9 @@ export function useMidi({
           velocity: parsed.velocity
         })
         if (onNoteOn) onNoteOn(parsed.noteNumber, parsed.velocity)
+      } else if (parsed.isNoteOff) {
+        setPressedNotes((prev) => prev.filter((n) => n !== parsed.noteNumber))
+        if (onNoteOff) onNoteOff(parsed.noteNumber)
       }
     }
 
@@ -137,16 +147,22 @@ export function useMidi({
     return (): void => {
       inputPort.onmidimessage = null
     }
-  }, [midiAccess, selectedInputId, selectedOutputId, enableSoftwareThru, onNoteOn, addLog])
+  }, [
+    midiAccess,
+    selectedInputId,
+    selectedOutputId,
+    enableSoftwareThru,
+    onNoteOn,
+    onNoteOff,
+    addLog
+  ])
 
-  // Enviar Program Change (Cambio de Instrumento al Korg)
   const changeProgram = useCallback(
     (programNumber: number, channel = 1): void => {
       if (!midiAccess || !selectedOutputId) return
       const outputPort = midiAccess.outputs.get(selectedOutputId)
       if (!outputPort) return
 
-      // 0xC0 = Program Change en Canal 1 (0xC0 + channel - 1)
       const statusByte = 0xc0 | ((channel - 1) & 0x0f)
       outputPort.send([statusByte, programNumber])
     },
@@ -176,6 +192,7 @@ export function useMidi({
     selectedOutputId,
     setSelectedInputId,
     setSelectedOutputId,
+    pressedNotes,
     logs,
     addLog,
     sendNote,

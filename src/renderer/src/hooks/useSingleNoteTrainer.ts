@@ -11,6 +11,7 @@ interface TrainerOptions {
   onPlayStimulus: (noteNumber: number, decision: SelectionDecision) => void
   onInstrumentChanged: (programNumber: number) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
+  onDatabaseUpdated?: () => void
 }
 
 export interface UseSingleNoteTrainerReturn {
@@ -44,10 +45,11 @@ export interface UseSingleNoteTrainerReturn {
 export function useSingleNoteTrainer({
   onPlayStimulus,
   onInstrumentChanged,
-  onTelemetryLog
+  onTelemetryLog,
+  onDatabaseUpdated
 }: TrainerOptions): UseSingleNoteTrainerReturn {
   const [activeNotes, setActiveNotes] = useState<number[]>([60, 62, 64, 65, 67, 69, 71, 72])
-  const [sessionLength, setSessionLength] = useState<number>(10)
+  const [sessionLength, setSessionLength] = useState<number>(10) // -1 = Modo Maestría, 0 = Infinito
   const [selectedStrategyId, setSelectedStrategyId] = useState<StrategyId>('adaptive_v1')
   const [selectedInstrumentId, setSelectedInstrumentIdState] =
     useState<string>('acoustic_grand_piano')
@@ -72,7 +74,13 @@ export function useSingleNoteTrainer({
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<ExerciseResult[]>([])
 
-  // Inicializar IndexedDB
+  const refreshSummary = useCallback(async (): Promise<void> => {
+    if (!dbEngineRef.current) return
+    const summary = await dbEngineRef.current.getSummary()
+    setDbSummary(summary)
+    if (onDatabaseUpdated) onDatabaseUpdated()
+  }, [onDatabaseUpdated])
+
   useEffect(() => {
     const engine = new DatabaseEngine()
     engine
@@ -89,12 +97,6 @@ export function useSingleNoteTrainer({
     return (): void => {
       engine.close()
     }
-  }, [])
-
-  const refreshSummary = useCallback(async (): Promise<void> => {
-    if (!dbEngineRef.current) return
-    const summary = await dbEngineRef.current.getSummary()
-    setDbSummary(summary)
   }, [])
 
   const selectedInstrument = useMemo(
@@ -144,12 +146,44 @@ export function useSingleNoteTrainer({
     triggerNextQuestion()
   }
 
-  const stopSession = (): void => {
+  // Guardar y finalizar la sesión de forma garantizada
+  const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
     setIsSessionActive(false)
-    setIsSessionFinished(false)
+    setIsSessionFinished(true)
     setIsWaitingAnswer(false)
-    setCurrentExpectedNote(null)
-  }
+
+    const allAnswers = [...answersBufferRef.current]
+    if (allAnswers.length === 0) return
+
+    const finalStats = calculateSessionStats(historyBufferRef.current)
+    const sessionRecord: DbSessionRecord = {
+      id: sessionIdRef.current,
+      createdAt: new Date().toISOString(),
+      strategyId: selectedStrategyId,
+      instrumentId: selectedInstrument.id,
+      presetName: `Notas (${activeNotes.length})`,
+      totalQuestions: allAnswers.length,
+      correctAnswers: finalStats.correctAnswers,
+      accuracyPercentage: finalStats.accuracyPercentage,
+      avgResponseTimeMs: finalStats.avgResponseTimeMs
+    }
+
+    if (dbEngineRef.current) {
+      await dbEngineRef.current.saveSession(sessionRecord, allAnswers)
+      await refreshSummary()
+    }
+  }, [selectedStrategyId, selectedInstrument, activeNotes, refreshSummary])
+
+  const stopSession = useCallback((): void => {
+    if (answersBufferRef.current.length > 0) {
+      finalizeAndSaveSession()
+    } else {
+      setIsSessionActive(false)
+      setIsSessionFinished(false)
+      setIsWaitingAnswer(false)
+      setCurrentExpectedNote(null)
+    }
+  }, [finalizeAndSaveSession])
 
   const resetToConfig = (): void => {
     setIsSessionActive(false)
@@ -199,30 +233,22 @@ export function useSingleNoteTrainer({
         onTelemetryLog('EVAL', evalMsg)
       }
 
-      setTimeout(async () => {
-        if (sessionLength > 0 && currentQuestionIndex >= sessionLength) {
-          setIsSessionActive(false)
-          setIsSessionFinished(true)
-          setIsWaitingAnswer(false)
+      // Comprobar si se completó el criterio de parada
+      const currentPerformances = strategy.getNotePerformances(
+        activeNotes,
+        historyBufferRef.current
+      )
+      const allMastered = activeNotes.every((note) => {
+        const perf = currentPerformances.get(note)
+        return perf && perf.attempts >= 2 && perf.accuracyPercentage >= 85
+      })
 
-          const allAnswers = [...answersBufferRef.current]
-          const finalStats = calculateSessionStats(historyBufferRef.current)
-          const sessionRecord: DbSessionRecord = {
-            id: sessionIdRef.current,
-            createdAt: new Date().toISOString(),
-            strategyId: selectedStrategyId,
-            instrumentId: selectedInstrument.id,
-            presetName: `${activeNotes.length} notas`,
-            totalQuestions: allAnswers.length,
-            correctAnswers: finalStats.correctAnswers,
-            accuracyPercentage: finalStats.accuracyPercentage,
-            avgResponseTimeMs: finalStats.avgResponseTimeMs
-          }
+      const isMasteryCompleted = sessionLength === -1 && allMastered
+      const isFixedLengthCompleted = sessionLength > 0 && currentQuestionIndex >= sessionLength
 
-          if (dbEngineRef.current) {
-            await dbEngineRef.current.saveSession(sessionRecord, allAnswers)
-            await refreshSummary()
-          }
+      setTimeout(() => {
+        if (isMasteryCompleted || isFixedLengthCompleted) {
+          finalizeAndSaveSession()
         } else {
           setCurrentQuestionIndex((prev) => prev + 1)
           triggerNextQuestion()
@@ -238,10 +264,9 @@ export function useSingleNoteTrainer({
       currentQuestionIndex,
       lastDecision,
       onTelemetryLog,
-      selectedStrategyId,
-      selectedInstrument,
       activeNotes,
-      refreshSummary,
+      strategy,
+      finalizeAndSaveSession,
       triggerNextQuestion
     ]
   )

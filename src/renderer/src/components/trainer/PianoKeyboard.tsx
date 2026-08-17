@@ -5,6 +5,7 @@ import { NotePerformance } from '../../domain/adaptation/types'
 interface PianoKeyboardProps {
   keys: number[]
   activeNotes: number[]
+  pressedNotes?: number[] // Teclas pulsadas dinámicamente en tiempo real
   onToggleNote: (note: number) => void
   performances?: Map<number, NotePerformance>
   showHeatmap?: boolean
@@ -14,24 +15,34 @@ interface PianoKeyboardProps {
 export function PianoKeyboard({
   keys,
   activeNotes,
+  pressedNotes = [],
   onToggleNote,
   performances,
   showHeatmap = false,
   disabled = false
 }: PianoKeyboardProps): React.ReactElement {
-  // Separamos teclas blancas (base) de las notas totales
   const whiteKeys = keys.filter((k) => !isBlackKey(k))
 
-  // Función para determinar el color de cada tecla
   const getKeyStyle = (
     note: number,
     black: boolean
-  ): { bg: string; text: string; ring?: string; dot?: boolean } => {
+  ): { bg: string; text: string; dot?: boolean } => {
+    const isCurrentlyPressed = pressedNotes.includes(note)
     const active = activeNotes.includes(note)
     const perf = performances?.get(note)
     const hasAttempts = perf && perf.attempts > 0
 
-    // Modo HEATMAP (Diagnóstico final o en vivo)
+    // 1. PRIORIDAD MÁXIMA: Tecla presionada físicamente en vivo (Ámbar brillante / Iluminada)
+    if (isCurrentlyPressed) {
+      return {
+        bg: black
+          ? 'bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] brightness-125'
+          : 'bg-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.9)] brightness-125',
+        text: 'text-black font-extrabold'
+      }
+    }
+
+    // 2. MODO HEATMAP (Diagnóstico final o en vivo)
     if (showHeatmap) {
       if (hasAttempts) {
         if (perf.accuracyPercentage >= 85) {
@@ -58,23 +69,23 @@ export function PianoKeyboard({
         }
       }
 
-      // Si estaba activa en la sesión pero no se llegó a preguntar
+      // Si formaba parte de la sesión pero no se llegó a preguntar
       if (active) {
         return {
           bg: black ? 'bg-zinc-800' : 'bg-zinc-100',
           text: black ? 'text-zinc-400' : 'text-zinc-700',
-          dot: true // Muestra un pequeño punto sutil
+          dot: true
         }
       }
 
-      // Nota no incluida en la sesión
+      // Inactiva
       return {
         bg: black ? 'bg-zinc-900 opacity-60' : 'bg-zinc-200 opacity-60',
         text: black ? 'text-zinc-600' : 'text-zinc-400'
       }
     }
 
-    // Modo CONFIGURACIÓN / SELECCIÓN NORMAL
+    // 3. MODO NORMAL / EN SESIÓN (Teclas fijadas o activas)
     if (active) {
       return {
         bg: black
@@ -97,24 +108,20 @@ export function PianoKeyboard({
     }
   }
 
-  // Calcula la posición horizontal (left %) de cada tecla negra respecto a las blancas
   const getBlackKeyOffsetPercent = (blackNote: number): number | null => {
-    // Busca la tecla blanca inmediatamente anterior
     const prevWhiteIndex = whiteKeys.indexOf(blackNote - 1)
     if (prevWhiteIndex === -1) return null
 
     const totalWhiteKeys = whiteKeys.length
     const whiteKeyWidthPercent = 100 / totalWhiteKeys
 
-    // Se posiciona en la frontera derecha de la tecla blanca previa menos la mitad de su ancho
     return (prevWhiteIndex + 1) * whiteKeyWidthPercent - whiteKeyWidthPercent * 0.32
   }
 
   return (
     <div className="w-full bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 shadow-2xl overflow-hidden select-none">
-      {/* Contenedor del Teclado con perspectiva */}
       <div className="relative w-full h-24 md:h-28 flex">
-        {/* 1. CAPA DE TECLAS BLANCAS (Base continua) */}
+        {/* TECLAS BLANCAS */}
         {whiteKeys.map((note) => {
           const style = getKeyStyle(note, false)
           return (
@@ -124,7 +131,7 @@ export function PianoKeyboard({
               disabled={disabled}
               onClick={(): void => onToggleNote(note)}
               title={`${midiNoteToName(note)} (${note})`}
-              className={`relative flex-1 h-full rounded-b-md border-r border-zinc-300/60 last:border-r-0 flex flex-col justify-end items-center pb-1.5 transition-all duration-100 cursor-pointer ${
+              className={`relative flex-1 h-full rounded-b-md border-r border-zinc-300/60 last:border-r-0 flex flex-col justify-end items-center pb-1.5 transition-all duration-75 cursor-pointer ${
                 style.bg
               } ${style.text} ${disabled ? 'cursor-default' : 'active:brightness-95'}`}
             >
@@ -138,7 +145,7 @@ export function PianoKeyboard({
           )
         })}
 
-        {/* 2. CAPA DE TECLAS NEGRAS (Superpuestas por encima) */}
+        {/* TECLAS NEGRAS */}
         {keys
           .filter((k) => isBlackKey(k))
           .map((note) => {
@@ -160,7 +167,7 @@ export function PianoKeyboard({
                   left: `${leftPercent}%`,
                   width: `${blackKeyWidthPercent}%`
                 }}
-                className={`absolute top-0 h-[62%] rounded-b-md z-20 flex flex-col justify-end items-center pb-1 transition-all duration-100 cursor-pointer border-x border-b border-black/40 ${
+                className={`absolute top-0 h-[62%] rounded-b-md z-20 flex flex-col justify-end items-center pb-1 transition-all duration-75 cursor-pointer border-x border-b border-black/40 ${
                   style.bg
                 } ${style.text} ${disabled ? 'cursor-default' : 'active:scale-[0.98]'}`}
               >
