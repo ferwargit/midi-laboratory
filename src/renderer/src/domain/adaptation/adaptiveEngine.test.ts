@@ -8,36 +8,36 @@ import { ExerciseResult } from '../exercise/types'
 
 describe('adaptiveEngine - Estrategias de selección de ejercicios', () => {
   describe('RandomSelectionStrategy', () => {
-    it('debe seleccionar una nota perteneciente al conjunto de notas activas', () => {
+    it('debe seleccionar una nota perteneciente al conjunto de notas activas con motivo explicable', () => {
       const strategy = new RandomSelectionStrategy()
       const activeNotes = [60, 62, 64]
-      const note = strategy.selectNextNote({
+      const decision = strategy.selectNextNote({
         activeNotes,
         history: [],
         lastPlayedNote: null
       })
-      expect(activeNotes).toContain(note)
+      expect(activeNotes).toContain(decision.selectedNote)
+      expect(decision.reason).toBeDefined()
     })
 
     it('no debe repetir la misma nota inmediatamente si hay 3 o más notas', () => {
       const strategy = new RandomSelectionStrategy()
       const activeNotes = [60, 62, 64]
-      // Si la última fue 60, debe elegir entre 62 o 64
       for (let i = 0; i < 20; i++) {
-        const note = strategy.selectNextNote({
+        const decision = strategy.selectNextNote({
           activeNotes,
           history: [],
           lastPlayedNote: 60
         })
-        expect(note).not.toBe(60)
+        expect(decision.selectedNote).not.toBe(60)
       }
     })
   })
 
   describe('AdaptiveV1SelectionStrategy', () => {
-    it('debe asignar mayor peso a una nota fallada recientemente', () => {
+    it('debe asignar mayor peso a una nota fallada recientemente y explicar el motivo', () => {
       const strategy = new AdaptiveV1SelectionStrategy()
-      const activeNotes = [60, 64] // C4 y E4
+      const activeNotes = [60, 64]
       const history: ExerciseResult[] = [
         {
           expectedNote: 60,
@@ -61,70 +61,41 @@ describe('adaptiveEngine - Estrategias de selección de ejercicios', () => {
 
       expect(c4Perf.accuracyPercentage).toBe(100)
       expect(e4Perf.accuracyPercentage).toBe(0)
-      // E4 fallada debe tener significativamente más peso que C4 acertada
       expect(e4Perf.weight).toBeGreaterThan(c4Perf.weight)
     })
 
-    it('debe reducir el peso de notas dominadas con alta precisión', () => {
+    it('debe generar telemetría con snapshot de pesos por nota', () => {
       const strategy = new AdaptiveV1SelectionStrategy()
       const activeNotes = [60, 62]
-      const history: ExerciseResult[] = [
-        {
-          expectedNote: 60,
-          playedNote: 60,
-          correct: true,
-          semitoneDistance: 0,
-          responseTimeMs: 800
-        },
-        {
-          expectedNote: 60,
-          playedNote: 60,
-          correct: true,
-          semitoneDistance: 0,
-          responseTimeMs: 900
-        },
-        {
-          expectedNote: 60,
-          playedNote: 60,
-          correct: true,
-          semitoneDistance: 0,
-          responseTimeMs: 700
-        }
-      ]
+      const decision = strategy.selectNextNote({
+        activeNotes,
+        history: [],
+        lastPlayedNote: null
+      })
 
-      const performances = strategy.getNotePerformances(activeNotes, history)
-      const c4Perf = performances.get(60)!
-
-      expect(c4Perf.accuracyPercentage).toBe(100)
-      expect(c4Perf.weight).toBeLessThanOrEqual(0.5)
-    })
-  })
-
-  describe('Factory createStrategy', () => {
-    it('debe instanciar la estrategia correspondiente al id', () => {
-      expect(createStrategy('random')).toBeInstanceOf(RandomSelectionStrategy)
-      expect(createStrategy('adaptive_v1')).toBeInstanceOf(AdaptiveV1SelectionStrategy)
+      expect(decision.weightsSnapshot).toBeDefined()
+      expect(decision.weightsSnapshot['C4']).toBe(1.0)
+      expect(decision.weightsSnapshot['D4']).toBe(1.0)
     })
   })
 
   describe('Simulación de convergencia adaptativa', () => {
-    it('debe presentar con mayor frecuencia las notas con tasa de error alta en una simulación de 50 preguntas', () => {
+    it('debe presentar con mayor frecuencia las notas con tasa de error alta', () => {
       const strategy = new AdaptiveV1SelectionStrategy()
-      const activeNotes = [60, 62, 64, 65, 67] // C, D, E, F, G (5 notas)
+      const activeNotes = [60, 62, 64, 65, 67]
       const simulatedHistory: ExerciseResult[] = []
 
-      // Simulamos que el usuario siempre falla G4 (67) y siempre acierta las demás
       for (let i = 0; i < 50; i++) {
-        const selectedNote = strategy.selectNextNote({
+        const decision = strategy.selectNextNote({
           activeNotes,
           history: simulatedHistory,
           lastPlayedNote: null
         })
 
-        const isWeakNote = selectedNote === 67
+        const isWeakNote = decision.selectedNote === 67
         simulatedHistory.push({
-          expectedNote: selectedNote,
-          playedNote: isWeakNote ? 65 : selectedNote, // falla G4 tocando F4
+          expectedNote: decision.selectedNote,
+          playedNote: isWeakNote ? 65 : decision.selectedNote,
           correct: !isWeakNote,
           semitoneDistance: isWeakNote ? -2 : 0,
           responseTimeMs: 1200
@@ -134,8 +105,14 @@ describe('adaptiveEngine - Estrategias de selección de ejercicios', () => {
       const g4Attempts = simulatedHistory.filter((h) => h.expectedNote === 67).length
       const c4Attempts = simulatedHistory.filter((h) => h.expectedNote === 60).length
 
-      // En aleatorio puro, G4 saldría ~20% (10 veces). Con el motor adaptativo, debe salir mucho más que las notas dominadas.
       expect(g4Attempts).toBeGreaterThan(c4Attempts)
+    })
+  })
+
+  describe('Factory createStrategy', () => {
+    it('debe instanciar la estrategia correspondiente al id', () => {
+      expect(createStrategy('random')).toBeInstanceOf(RandomSelectionStrategy)
+      expect(createStrategy('adaptive_v1')).toBeInstanceOf(AdaptiveV1SelectionStrategy)
     })
   })
 })

@@ -23,11 +23,17 @@ export interface SelectionContext {
   lastPlayedNote: number | null
 }
 
+export interface SelectionDecision {
+  selectedNote: number
+  reason: string
+  weightsSnapshot: Record<string, number>
+}
+
 export interface ExerciseSelectionStrategy {
   readonly id: StrategyId
   readonly name: string
   readonly description: string
-  selectNextNote(context: SelectionContext): number
+  selectNextNote(context: SelectionContext): SelectionDecision
   getNotePerformances(
     activeNotes: number[],
     history: ExerciseResult[]

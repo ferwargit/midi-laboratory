@@ -24,14 +24,31 @@ export default function App(): React.ReactElement {
   })
 
   const trainer = useSingleNoteTrainer({
-    onPlayStimulus: (note) => midi.sendNote(note)
+    onPlayStimulus: (note, decision) => {
+      midi.sendNote(note)
+      const noteName = midiNoteToName(note)
+      midi.addLog({
+        type: 'OUT',
+        message: `🎵 Estímulo -> ${noteName} (${note})`
+      })
+      midi.addLog({
+        type: 'AI',
+        message: `🧠 Decisión IA: ${decision.reason} | Pesos: ${Object.entries(
+          decision.weightsSnapshot
+        )
+          .map(([k, v]) => `${k}:${v}`)
+          .join(', ')}`
+      })
+    },
+    onTelemetryLog: (type, message) => {
+      midi.addLog({ type, message })
+    }
   })
 
   useEffect(() => {
     handleNoteRef.current = trainer.handleUserNotePlayed
   }, [trainer.handleUserNotePlayed])
 
-  // Obtener notas débiles de la sesión para el diagnóstico
   const weakNotesList = Array.from(trainer.performances.values())
     .filter((p) => p.attempts > 0 && p.accuracyPercentage < 85)
     .map((p) => ({
@@ -54,7 +71,7 @@ export default function App(): React.ReactElement {
         disabled={trainer.isSessionActive}
       />
 
-      {/* 1. PANTALLA DE RESUMEN FINAL (Al terminar la sesión) */}
+      {/* 1. PANTALLA DE RESUMEN FINAL */}
       {trainer.isSessionFinished ? (
         <Card className="border-sky-500/40 bg-zinc-900/90">
           <div className="flex justify-between items-center mb-4">
@@ -79,7 +96,6 @@ export default function App(): React.ReactElement {
             </div>
           </div>
 
-          {/* Heatmap del resultado final */}
           <div className="space-y-2 mb-4">
             <div className="flex justify-between items-center text-xs text-zinc-400">
               <span className="font-semibold text-zinc-300">Mapa de Calor Final:</span>
@@ -108,7 +124,6 @@ export default function App(): React.ReactElement {
             />
           </div>
 
-          {/* Diagnóstico de debilidades */}
           {weakNotesList.length > 0 ? (
             <div className="bg-zinc-950 p-3 rounded border border-red-900/40 text-xs">
               <strong className="text-red-400 block mb-1">Notas prioritarias a reforzar:</strong>
@@ -173,7 +188,6 @@ export default function App(): React.ReactElement {
             />
           )}
 
-          {/* HEATMAP EN VIVO DURANTE LA SESIÓN */}
           {trainer.isSessionActive && (
             <div className="space-y-1.5 mb-3">
               <div className="flex justify-between items-center text-xs text-zinc-400">
@@ -204,7 +218,6 @@ export default function App(): React.ReactElement {
             </div>
           )}
 
-          {/* PANEL DE CONFIGURACIÓN PREVIA */}
           {!trainer.isSessionActive && (
             <div className="space-y-3">
               <div>

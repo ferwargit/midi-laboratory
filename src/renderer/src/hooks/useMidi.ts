@@ -4,7 +4,7 @@ import { parseMidiData, ParsedMidiMessage } from '../services/midi/midiParser'
 export interface MidiLogEntry {
   id: number
   time: string
-  type: 'IN' | 'OUT'
+  type: 'IN' | 'OUT' | 'AI' | 'EVAL'
   message: string
   noteNumber?: number
   velocity?: number
@@ -24,6 +24,7 @@ export interface UseMidiReturn {
   setSelectedInputId: (id: string) => void
   setSelectedOutputId: (id: string) => void
   logs: MidiLogEntry[]
+  addLog: (entry: Omit<MidiLogEntry, 'id' | 'time'>) => void
   sendNote: (noteNumber: number, durationMs?: number, velocity?: number) => void
 }
 
@@ -53,7 +54,7 @@ export function useMidi({
       .toString()
       .padStart(3, '0')}`
 
-    setLogs((prev) => [...prev.slice(-25), { id: Date.now() + Math.random(), time, ...entry }])
+    setLogs((prev) => [...prev.slice(-35), { id: Date.now() + Math.random(), time, ...entry }])
   }, [])
 
   const refreshPorts = useCallback((access: MIDIAccess): void => {
@@ -123,18 +124,13 @@ export function useMidi({
       if (parsed.isNoteOn) {
         addLog({
           type: 'IN',
-          message: `Note ON -> ${parsed.noteNumber}`,
+          message: `🎹 Tecla pulsada -> ${parsed.noteNumber}`,
           noteNumber: parsed.noteNumber,
           velocity: parsed.velocity
         })
         if (onNoteOn) onNoteOn(parsed.noteNumber, parsed.velocity)
       } else if (parsed.isNoteOff) {
-        addLog({
-          type: 'IN',
-          message: `Note OFF -> ${parsed.noteNumber}`,
-          noteNumber: parsed.noteNumber,
-          velocity: 0
-        })
+        // Ignoramos el spam de NoteOff en la pantalla de telemetría para mantener el log limpio
       }
     }
 
@@ -151,18 +147,12 @@ export function useMidi({
       if (!outputPort) return
 
       outputPort.send([0x90, noteNumber, velocity])
-      addLog({
-        type: 'OUT',
-        message: `Estímulo -> ${noteNumber}`,
-        noteNumber,
-        velocity
-      })
 
       setTimeout(() => {
         outputPort.send([0x80, noteNumber, 0])
       }, durationMs)
     },
-    [midiAccess, selectedOutputId, addLog]
+    [midiAccess, selectedOutputId]
   )
 
   return {
@@ -174,6 +164,7 @@ export function useMidi({
     setSelectedInputId,
     setSelectedOutputId,
     logs,
+    addLog,
     sendNote
   }
 }

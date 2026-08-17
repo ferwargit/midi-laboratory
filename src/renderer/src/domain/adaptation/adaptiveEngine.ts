@@ -1,8 +1,10 @@
 import { ExerciseResult } from '../exercise/types'
+import { midiNoteToName } from '../music/noteUtils'
 import {
   ExerciseSelectionStrategy,
   NotePerformance,
   SelectionContext,
+  SelectionDecision,
   StrategyId,
   StrategyInfo
 } from './types'
@@ -15,18 +17,33 @@ export class RandomSelectionStrategy implements ExerciseSelectionStrategy {
   readonly name = 'Aleatorio Clásico'
   readonly description = 'Todas las notas seleccionadas tienen exactamente la misma probabilidad.'
 
-  selectNextNote(context: SelectionContext): number {
+  selectNextNote(context: SelectionContext): SelectionDecision {
     const { activeNotes, lastPlayedNote } = context
     if (activeNotes.length === 0) throw new Error('No hay notas activas.')
-    if (activeNotes.length === 1) return activeNotes[0]
+    if (activeNotes.length === 1) {
+      return {
+        selectedNote: activeNotes[0],
+        reason: 'Única nota disponible',
+        weightsSnapshot: { [midiNoteToName(activeNotes[0])]: 1.0 }
+      }
+    }
 
-    // Anti-repetición inmediata si hay 3 o más notas
     const candidates =
       activeNotes.length >= 3 && lastPlayedNote !== null
         ? activeNotes.filter((n) => n !== lastPlayedNote)
         : activeNotes
 
-    return candidates[Math.floor(Math.random() * candidates.length)]
+    const selected = candidates[Math.floor(Math.random() * candidates.length)]
+    const weightsSnapshot: Record<string, number> = {}
+    activeNotes.forEach((n) => {
+      weightsSnapshot[midiNoteToName(n)] = 1.0
+    })
+
+    return {
+      selectedNote: selected,
+      reason: 'Selección uniforme aleatoria',
+      weightsSnapshot
+    }
   }
 
   getNotePerformances(
@@ -46,20 +63,32 @@ export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
   readonly description =
     'Prioriza notas con fallos frecuentes, errores recientes y pares de confusión de semitono.'
 
-  selectNextNote(context: SelectionContext): number {
+  selectNextNote(context: SelectionContext): SelectionDecision {
     const { activeNotes, history, lastPlayedNote } = context
     if (activeNotes.length === 0) throw new Error('No hay notas activas.')
-    if (activeNotes.length === 1) return activeNotes[0]
+    if (activeNotes.length === 1) {
+      return {
+        selectedNote: activeNotes[0],
+        reason: 'Única nota activa',
+        weightsSnapshot: { [midiNoteToName(activeNotes[0])]: 1.0 }
+      }
+    }
 
     const performances = this.getNotePerformances(activeNotes, history)
 
-    // Filtrar candidatos para evitar repetición inmediata si hay opciones
     const candidates =
       activeNotes.length >= 3 && lastPlayedNote !== null
         ? activeNotes.filter((n) => n !== lastPlayedNote)
         : activeNotes
 
-    // Selección por Ruleta Ponderada (Weighted Random Choice)
+    // Snapshot de pesos formateado para telemetría
+    const weightsSnapshot: Record<string, number> = {}
+    activeNotes.forEach((note) => {
+      const perf = performances.get(note)
+      weightsSnapshot[midiNoteToName(note)] = perf ? Number(perf.weight.toFixed(1)) : 1.0
+    })
+
+    // Selección por Ruleta Ponderada
     let totalWeight = 0
     for (const note of candidates) {
       const perf = performances.get(note)
@@ -67,16 +96,38 @@ export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
     }
 
     let randomThreshold = Math.random() * totalWeight
+    let chosenNote = candidates[candidates.length - 1]
+
     for (const note of candidates) {
       const perf = performances.get(note)
       const weight = perf ? perf.weight : 1.0
       if (randomThreshold <= weight) {
-        return note
+        chosenNote = note
+        break
       }
       randomThreshold -= weight
     }
 
-    return candidates[candidates.length - 1]
+    // Explicación de la decisión (Telemetría de la IA)
+    const perf = performances.get(chosenNote)
+    let reason = 'Exploración inicial'
+    if (perf && perf.attempts > 0) {
+      if (perf.lastResultWasCorrect === false) {
+        reason = `🎯 Refuerzo inmediato de fallo reciente (Precisión: ${perf.accuracyPercentage}%)`
+      } else if (perf.accuracyPercentage < 50) {
+        reason = `⚠️ Nota con tasa de error alta (Precisión: ${perf.accuracyPercentage}%)`
+      } else if (perf.accuracyPercentage >= 85 && perf.attempts >= 3) {
+        reason = `🔁 Mantenimiento de nota dominada (${perf.accuracyPercentage}%)`
+      } else {
+        reason = `📈 Entrenamiento en progreso (${perf.accuracyPercentage}%)`
+      }
+    }
+
+    return {
+      selectedNote: chosenNote,
+      reason,
+      weightsSnapshot
+    }
   }
 
   getNotePerformances(
@@ -86,24 +137,19 @@ export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
     return calculateBasePerformances(activeNotes, history, (perf, _, confusions) => {
       let weight = 1.0
 
-      // Si nunca se ha preguntado, peso neutral
       if (perf.attempts === 0) return 1.0
 
-      // 1. Penalización por baja precisión: más peso a menor precisión
       const errorRate = 1 - perf.accuracyPercentage / 100
-      weight += errorRate * 2.5 // Hasta +2.5 de peso si tiene 0% de aciertos
+      weight += errorRate * 2.5
 
-      // 2. Si el último intento fue fallo, prioridad alta inmediata (+2.0)
       if (perf.lastResultWasCorrect === false) {
         weight += 2.0
       }
 
-      // 3. Matriz de confusión: si esta nota fue tocada erróneamente en lugar de otra
       if (confusions.has(perf.noteNumber)) {
         weight += 1.5
       }
 
-      // 4. Si la nota está dominada (>85% con al menos 3 intentos), reducimos su frecuencia
       if (perf.accuracyPercentage >= 85 && perf.attempts >= 3) {
         weight = 0.3
       }
@@ -113,9 +159,6 @@ export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
   }
 }
 
-/**
- * Función auxiliar pura para calcular el mapa de rendimiento de notas.
- */
 function calculateBasePerformances(
   activeNotes: number[],
   history: ExerciseResult[],
@@ -129,7 +172,6 @@ function calculateBasePerformances(
   const recentMistakes = new Set<number>()
   const confusions = new Set<number>()
 
-  // Inicializar todas las notas activas
   for (const note of activeNotes) {
     result.set(note, {
       noteNumber: note,
@@ -141,7 +183,6 @@ function calculateBasePerformances(
     })
   }
 
-  // Procesar historial
   for (const item of history) {
     if (!result.has(item.expectedNote)) continue
 
@@ -153,13 +194,11 @@ function calculateBasePerformances(
     } else {
       perf.lastResultWasCorrect = false
       recentMistakes.add(item.expectedNote)
-      // La nota que tocó el usuario entra en el radar de confusión
       confusions.add(item.playedNote)
     }
     perf.accuracyPercentage = Math.round((perf.correct / perf.attempts) * 100)
   }
 
-  // Calcular pesos finales
   for (const [, perf] of result) {
     perf.weight = weightCalculator(perf, recentMistakes, confusions)
   }

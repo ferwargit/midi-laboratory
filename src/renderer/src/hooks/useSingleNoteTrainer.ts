@@ -1,11 +1,12 @@
 import { useState, useCallback, useMemo } from 'react'
 import { ExerciseResult, SessionStats } from '../domain/exercise/types'
 import { evaluateSingleNoteAnswer, calculateSessionStats } from '../domain/exercise/evaluator'
-import { StrategyId, NotePerformance } from '../domain/adaptation/types'
+import { StrategyId, NotePerformance, SelectionDecision } from '../domain/adaptation/types'
 import { createStrategy } from '../domain/adaptation/adaptiveEngine'
 
 interface TrainerOptions {
-  onPlayStimulus: (noteNumber: number) => void
+  onPlayStimulus: (noteNumber: number, decision: SelectionDecision) => void
+  onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
 }
 
 export interface UseSingleNoteTrainerReturn {
@@ -33,7 +34,8 @@ export interface UseSingleNoteTrainerReturn {
 }
 
 export function useSingleNoteTrainer({
-  onPlayStimulus
+  onPlayStimulus,
+  onTelemetryLog
 }: TrainerOptions): UseSingleNoteTrainerReturn {
   const [activeNotes, setActiveNotes] = useState<number[]>([60, 62, 64, 65, 67, 69, 71, 72])
   const [sessionLength, setSessionLength] = useState<number>(10)
@@ -42,6 +44,7 @@ export function useSingleNoteTrainer({
   const [isSessionFinished, setIsSessionFinished] = useState<boolean>(false)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
   const [currentExpectedNote, setCurrentExpectedNote] = useState<number | null>(null)
+  const [lastDecision, setLastDecision] = useState<SelectionDecision | null>(null)
   const [stimulusStartTime, setStimulusStartTime] = useState<number>(0)
   const [isWaitingAnswer, setIsWaitingAnswer] = useState<boolean>(false)
   const [lastResult, setLastResult] = useState<ExerciseResult | null>(null)
@@ -52,18 +55,19 @@ export function useSingleNoteTrainer({
   const triggerNextQuestion = useCallback((): void => {
     if (activeNotes.length < 2) return
 
-    const nextNote = strategy.selectNextNote({
+    const decision = strategy.selectNextNote({
       activeNotes,
       history: sessionHistory,
       lastPlayedNote: currentExpectedNote
     })
 
-    setCurrentExpectedNote(nextNote)
+    setCurrentExpectedNote(decision.selectedNote)
+    setLastDecision(decision)
     setLastResult(null)
     setIsWaitingAnswer(true)
     setStimulusStartTime(Date.now())
 
-    onPlayStimulus(nextNote)
+    onPlayStimulus(decision.selectedNote, decision)
   }, [activeNotes, sessionHistory, currentExpectedNote, strategy, onPlayStimulus])
 
   const startSession = (): void => {
@@ -93,8 +97,8 @@ export function useSingleNoteTrainer({
   }
 
   const repeatCurrentNote = (): void => {
-    if (currentExpectedNote !== null) {
-      onPlayStimulus(currentExpectedNote)
+    if (currentExpectedNote !== null && lastDecision !== null) {
+      onPlayStimulus(currentExpectedNote, lastDecision)
     }
   }
 
@@ -108,6 +112,13 @@ export function useSingleNoteTrainer({
       setLastResult(result)
       setSessionHistory((prev) => [...prev, result])
       setIsWaitingAnswer(false)
+
+      if (onTelemetryLog) {
+        const evalMsg = result.correct
+          ? `✅ Acierto (0 st) | Tiempo: ${(responseTimeMs / 1000).toFixed(2)}s`
+          : `❌ Fallo (${result.semitoneDistance > 0 ? `+${result.semitoneDistance}` : result.semitoneDistance} st) | Tiempo: ${(responseTimeMs / 1000).toFixed(2)}s`
+        onTelemetryLog('EVAL', evalMsg)
+      }
 
       setTimeout(() => {
         if (sessionLength > 0 && currentQuestionIndex >= sessionLength) {
@@ -127,6 +138,7 @@ export function useSingleNoteTrainer({
       stimulusStartTime,
       sessionLength,
       currentQuestionIndex,
+      onTelemetryLog,
       triggerNextQuestion
     ]
   )
@@ -143,7 +155,6 @@ export function useSingleNoteTrainer({
     [strategy, activeNotes, sessionHistory]
   )
 
-  // Entrenar únicamente las notas que tuvieron fallos en esta sesión
   const trainWeakNotesOnly = (): void => {
     const weakNotes: number[] = []
     performances.forEach((perf, note) => {
@@ -154,7 +165,7 @@ export function useSingleNoteTrainer({
 
     if (weakNotes.length < 2) {
       alert(
-        '¡Felicitaciones! No tienes suficientes notas débiles para aislar (< 2). Puedes seguir con la selección actual.'
+        '¡Felicitaciones! Tienes menos de 2 notas débiles. Puedes continuar con la selección actual.'
       )
       return
     }
