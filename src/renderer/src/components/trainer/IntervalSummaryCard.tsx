@@ -32,7 +32,6 @@ export function IntervalSummaryCard({
       ? (history.reduce((acc, h) => acc + h.responseTimeMs, 0) / total / 1000).toFixed(2)
       : '0.00'
 
-  // Estadísticas por clase de intervalo
   const intervalStats = Array.from(new Set(history.map((h) => h.expectedStimulus.semitones))).map(
     (semitones) => {
       const items = history.filter((h) => h.expectedStimulus.semitones === semitones)
@@ -50,7 +49,6 @@ export function IntervalSummaryCard({
 
   const weakCount = intervalStats.filter((s) => s.accuracy < 85).length
 
-  // Mapa de calor acumulado sobre las teclas objetivo tocadas
   const keyboardPerformances = useMemo(() => {
     const map = new Map<number, NotePerformance>()
     history.forEach((h) => {

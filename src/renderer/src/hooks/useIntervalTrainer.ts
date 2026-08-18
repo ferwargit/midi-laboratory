@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   INTERVAL_PRESETS,
   IntervalPreset,
@@ -10,25 +10,24 @@ import {
   IntervalExerciseResult,
   evaluateIntervalAnswer
 } from '../domain/exercise/intervalEvaluator'
-import { DatabaseEngine } from '../domain/database/databaseEngine'
-import { DatabaseSummary, DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
+import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
+import { useDatabaseStore } from '../stores/useDatabaseStore'
 
 interface IntervalTrainerOptions {
   onPlayInterval: (root: number, target: number, direction: IntervalDirection) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
-  onDatabaseUpdated?: () => void
 }
 
 export interface UseIntervalTrainerReturn {
   presets: IntervalPreset[]
   selectedPresetId: string
   setSelectedPresetId: (id: string) => void
-  activeIntervals: number[] // Semitonos activos (1 a 12)
+  activeIntervals: number[]
   setActiveIntervals: (st: number[]) => void
   toggleInterval: (semitone: number) => void
   directionMode: DirectionSelection
   setDirectionMode: (dir: DirectionSelection) => void
-  rootRangeNotes: number[] // Notas candidatas para la raíz
+  rootRangeNotes: number[]
   setRootRangeNotes: (notes: number[]) => void
   toggleRootNote: (note: number) => void
   sessionLength: number
@@ -41,7 +40,6 @@ export interface UseIntervalTrainerReturn {
   firstNotePlayed: number | null
   lastResult: IntervalExerciseResult | null
   sessionHistory: IntervalExerciseResult[]
-  dbSummary: DatabaseSummary
   startSession: () => void
   stopSession: () => void
   repeatCurrentInterval: () => void
@@ -52,13 +50,12 @@ export interface UseIntervalTrainerReturn {
 
 export function useIntervalTrainer({
   onPlayInterval,
-  onTelemetryLog,
-  onDatabaseUpdated
+  onTelemetryLog
 }: IntervalTrainerOptions): UseIntervalTrainerReturn {
   const [selectedPresetId, setSelectedPresetIdState] = useState<string>('level_1_1_reference')
-  const [activeIntervals, setActiveIntervals] = useState<number[]>([2, 4, 5, 7, 12]) // 2M, 3M, 4J, 5J, 8J
+  const [activeIntervals, setActiveIntervals] = useState<number[]>([2, 4, 5, 7, 12])
   const [directionMode, setDirectionMode] = useState<DirectionSelection>('ascending')
-  const [rootRangeNotes, setRootRangeNotes] = useState<number[]>([60]) // C4 por defecto
+  const [rootRangeNotes, setRootRangeNotes] = useState<number[]>([60])
   const [sessionLength, setSessionLength] = useState<number>(10)
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false)
   const [isSessionFinished, setIsSessionFinished] = useState<boolean>(false)
@@ -69,42 +66,12 @@ export function useIntervalTrainer({
   const [stimulusStartTime, setStimulusStartTime] = useState<number>(0)
   const [lastResult, setLastResult] = useState<IntervalExerciseResult | null>(null)
   const [sessionHistory, setSessionHistory] = useState<IntervalExerciseResult[]>([])
-  const [dbSummary, setDbSummary] = useState<DatabaseSummary>({
-    totalSessions: 0,
-    totalExercises: 0,
-    overallAccuracy: 0,
-    overallAvgTimeMs: 0
-  })
 
-  const dbEngineRef = useRef<DatabaseEngine | null>(null)
+  const saveSessionToDb = useDatabaseStore((state) => state.saveSession)
+
   const sessionIdRef = useRef<string>('')
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<IntervalExerciseResult[]>([])
-
-  const refreshSummary = useCallback(async (): Promise<void> => {
-    if (!dbEngineRef.current) return
-    const summary = await dbEngineRef.current.getSummary()
-    setDbSummary(summary)
-    if (onDatabaseUpdated) onDatabaseUpdated()
-  }, [onDatabaseUpdated])
-
-  useEffect(() => {
-    const engine = new DatabaseEngine()
-    engine
-      .initialize()
-      .then(async () => {
-        dbEngineRef.current = engine
-        const summary = await engine.getSummary()
-        setDbSummary(summary)
-      })
-      .catch((err) => {
-        console.error('Error al inicializar IndexedDB en IntervalTrainer:', err)
-      })
-
-    return (): void => {
-      engine.close()
-    }
-  }, [])
 
   const setSelectedPresetId = (id: string): void => {
     setSelectedPresetIdState(id)
@@ -115,7 +82,6 @@ export function useIntervalTrainer({
       if (preset.fixedRootNote !== null) {
         setRootRangeNotes([preset.fixedRootNote])
       } else {
-        // C3 a C5
         setRootRangeNotes(Array.from({ length: 25 }, (_, i) => 48 + i))
       }
     }
@@ -214,11 +180,8 @@ export function useIntervalTrainer({
       avgResponseTimeMs: avgTime
     }
 
-    if (dbEngineRef.current) {
-      await dbEngineRef.current.saveSession(sessionRecord, allAnswers)
-      await refreshSummary()
-    }
-  }, [activeIntervals.length, refreshSummary])
+    await saveSessionToDb(sessionRecord, allAnswers)
+  }, [activeIntervals.length, saveSessionToDb])
 
   const stopSession = useCallback((): void => {
     if (answersBufferRef.current.length > 0) {
@@ -366,7 +329,6 @@ export function useIntervalTrainer({
     firstNotePlayed,
     lastResult,
     sessionHistory,
-    dbSummary,
     startSession,
     stopSession,
     repeatCurrentInterval,

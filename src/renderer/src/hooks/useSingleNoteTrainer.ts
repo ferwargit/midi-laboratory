@@ -1,17 +1,16 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { ExerciseResult, SessionStats } from '../domain/exercise/types'
 import { evaluateSingleNoteAnswer, calculateSessionStats } from '../domain/exercise/evaluator'
 import { StrategyId, NotePerformance, SelectionDecision } from '../domain/adaptation/types'
 import { createStrategy } from '../domain/adaptation/adaptiveEngine'
 import { InstrumentProfile, getInstrumentById } from '../domain/music/instruments'
-import { DatabaseEngine } from '../domain/database/databaseEngine'
-import { DatabaseSummary, DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
+import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
+import { useDatabaseStore } from '../stores/useDatabaseStore'
 
 interface TrainerOptions {
   onPlayStimulus: (noteNumber: number, decision: SelectionDecision) => void
   onInstrumentChanged: (programNumber: number) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
-  onDatabaseUpdated?: () => void
 }
 
 export interface UseSingleNoteTrainerReturn {
@@ -32,21 +31,18 @@ export interface UseSingleNoteTrainerReturn {
   sessionHistory: ExerciseResult[]
   stats: SessionStats
   performances: Map<number, NotePerformance>
-  dbSummary: DatabaseSummary
   startSession: () => void
   stopSession: () => void
   repeatCurrentNote: () => void
   handleUserNotePlayed: (playedNoteNumber: number) => void
   trainWeakNotesOnly: () => void
   resetToConfig: () => void
-  clearDatabaseHistory: () => void
 }
 
 export function useSingleNoteTrainer({
   onPlayStimulus,
   onInstrumentChanged,
-  onTelemetryLog,
-  onDatabaseUpdated
+  onTelemetryLog
 }: TrainerOptions): UseSingleNoteTrainerReturn {
   const [activeNotes, setActiveNotes] = useState<number[]>([60, 62, 64, 65, 67, 69, 71, 72])
   const [sessionLength, setSessionLength] = useState<number>(10) // -1 = Modo Maestría, 0 = Infinito
@@ -62,42 +58,12 @@ export function useSingleNoteTrainer({
   const [isWaitingAnswer, setIsWaitingAnswer] = useState<boolean>(false)
   const [lastResult, setLastResult] = useState<ExerciseResult | null>(null)
   const [sessionHistory, setSessionHistory] = useState<ExerciseResult[]>([])
-  const [dbSummary, setDbSummary] = useState<DatabaseSummary>({
-    totalSessions: 0,
-    totalExercises: 0,
-    overallAccuracy: 0,
-    overallAvgTimeMs: 0
-  })
 
-  const dbEngineRef = useRef<DatabaseEngine | null>(null)
+  const saveSessionToDb = useDatabaseStore((state) => state.saveSession)
+
   const sessionIdRef = useRef<string>('')
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<ExerciseResult[]>([])
-
-  const refreshSummary = useCallback(async (): Promise<void> => {
-    if (!dbEngineRef.current) return
-    const summary = await dbEngineRef.current.getSummary()
-    setDbSummary(summary)
-    if (onDatabaseUpdated) onDatabaseUpdated()
-  }, [onDatabaseUpdated])
-
-  useEffect(() => {
-    const engine = new DatabaseEngine()
-    engine
-      .initialize()
-      .then(async () => {
-        dbEngineRef.current = engine
-        const summary = await engine.getSummary()
-        setDbSummary(summary)
-      })
-      .catch((err) => {
-        console.error('Error al inicializar IndexedDB:', err)
-      })
-
-    return (): void => {
-      engine.close()
-    }
-  }, [])
 
   const selectedInstrument = useMemo(
     () => getInstrumentById(selectedInstrumentId),
@@ -146,7 +112,6 @@ export function useSingleNoteTrainer({
     triggerNextQuestion()
   }
 
-  // Guardar y finalizar la sesión de forma garantizada
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
     setIsSessionActive(false)
     setIsSessionFinished(true)
@@ -168,11 +133,8 @@ export function useSingleNoteTrainer({
       avgResponseTimeMs: finalStats.avgResponseTimeMs
     }
 
-    if (dbEngineRef.current) {
-      await dbEngineRef.current.saveSession(sessionRecord, allAnswers)
-      await refreshSummary()
-    }
-  }, [selectedStrategyId, selectedInstrument, activeNotes, refreshSummary])
+    await saveSessionToDb(sessionRecord, allAnswers)
+  }, [selectedStrategyId, selectedInstrument, activeNotes, saveSessionToDb])
 
   const stopSession = useCallback((): void => {
     if (answersBufferRef.current.length > 0) {
@@ -233,7 +195,6 @@ export function useSingleNoteTrainer({
         onTelemetryLog('EVAL', evalMsg)
       }
 
-      // Comprobar si se completó el criterio de parada
       const currentPerformances = strategy.getNotePerformances(
         activeNotes,
         historyBufferRef.current
@@ -275,13 +236,6 @@ export function useSingleNoteTrainer({
     setActiveNotes((prev) =>
       prev.includes(note) ? prev.filter((n) => n !== note) : [...prev, note].sort((a, b) => a - b)
     )
-  }
-
-  const clearDatabaseHistory = async (): Promise<void> => {
-    if (dbEngineRef.current) {
-      await dbEngineRef.current.clearDatabase()
-      await refreshSummary()
-    }
   }
 
   const stats: SessionStats = calculateSessionStats(sessionHistory)
@@ -334,13 +288,11 @@ export function useSingleNoteTrainer({
     sessionHistory,
     stats,
     performances,
-    dbSummary,
     startSession,
     stopSession,
     repeatCurrentNote,
     handleUserNotePlayed,
     trainWeakNotesOnly,
-    resetToConfig,
-    clearDatabaseHistory
+    resetToConfig
   }
 }
