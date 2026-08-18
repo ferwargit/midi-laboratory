@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   INTERVAL_PRESETS,
   IntervalPreset,
@@ -10,7 +10,7 @@ import {
   IntervalExerciseResult,
   evaluateIntervalAnswer
 } from '../domain/exercise/intervalEvaluator'
-import { AdvanceMode } from '../domain/exercise/types'
+import { AdvanceMode, SessionLimitType } from '../domain/exercise/types'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
 
@@ -31,8 +31,13 @@ export interface UseIntervalTrainerReturn {
   rootRangeNotes: number[]
   setRootRangeNotes: (notes: number[]) => void
   toggleRootNote: (note: number) => void
-  sessionLength: number
-  setSessionLength: (len: number) => void
+  sessionLimitType: SessionLimitType
+  setSessionLimitType: (type: SessionLimitType) => void
+  sessionQuestionsCount: number
+  setSessionQuestionsCount: (count: number) => void
+  sessionDurationMinutes: number
+  setSessionDurationMinutes: (minutes: number) => void
+  timeRemainingSeconds: number
   advanceMode: AdvanceMode
   setAdvanceMode: (mode: AdvanceMode) => void
   isSessionActive: boolean
@@ -61,7 +66,10 @@ export function useIntervalTrainer({
   const [activeIntervals, setActiveIntervals] = useState<number[]>([2, 4, 5, 7, 12])
   const [directionMode, setDirectionMode] = useState<DirectionSelection>('ascending')
   const [rootRangeNotes, setRootRangeNotes] = useState<number[]>([60])
-  const [sessionLength, setSessionLength] = useState<number>(10)
+  const [sessionLimitType, setSessionLimitType] = useState<SessionLimitType>('questions')
+  const [sessionQuestionsCount, setSessionQuestionsCount] = useState<number>(10)
+  const [sessionDurationMinutes, setSessionDurationMinutes] = useState<number>(5)
+  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(300)
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false)
   const [isSessionFinished, setIsSessionFinished] = useState<boolean>(false)
@@ -80,6 +88,7 @@ export function useIntervalTrainer({
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<IntervalExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const setSelectedPresetId = (id: string): void => {
     setSelectedPresetIdState(id)
@@ -147,30 +156,14 @@ export function useIntervalTrainer({
     onPlayInterval(chosenRoot, targetNote, finalDirection)
   }, [activeIntervals, directionMode, rootRangeNotes, onPlayInterval])
 
-  const startSession = (): void => {
-    if (activeIntervals.length === 0) {
-      alert('Debes seleccionar al menos 1 intervalo.')
-      return
-    }
-    if (rootRangeNotes.length === 0) {
-      alert('Debes seleccionar al menos 1 nota raíz en el teclado.')
-      return
-    }
-
-    sessionIdRef.current = `session_int_${Date.now()}`
-    answersBufferRef.current = []
-    historyBufferRef.current = []
-    setSessionHistory([])
-    setCurrentQuestionIndex(1)
-    setIsSessionFinished(false)
-    setIsSessionActive(true)
-    triggerNextInterval()
-  }
-
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
     if (autoAdvanceTimerRef.current) {
       clearTimeout(autoAdvanceTimerRef.current)
       autoAdvanceTimerRef.current = null
+    }
+    if (sessionCountdownTimerRef.current) {
+      clearInterval(sessionCountdownTimerRef.current)
+      sessionCountdownTimerRef.current = null
     }
 
     setIsSessionActive(false)
@@ -188,12 +181,17 @@ export function useIntervalTrainer({
       historyBufferRef.current.reduce((acc, r) => acc + r.responseTimeMs, 0) / allAnswers.length
     )
 
+    const presetLabel =
+      sessionLimitType === 'time'
+        ? `Intervalos Tiempo (${sessionDurationMinutes}m)`
+        : `Intervalos (${activeIntervals.length})`
+
     const sessionRecord: DbSessionRecord = {
       id: sessionIdRef.current,
       createdAt: new Date().toISOString(),
       strategyId: 'intervals_v1',
       instrumentId: 'piano_intervals',
-      presetName: `Intervalos (${activeIntervals.length})`,
+      presetName: presetLabel,
       totalQuestions: allAnswers.length,
       correctAnswers: correctCount,
       accuracyPercentage: accPercent,
@@ -201,16 +199,71 @@ export function useIntervalTrainer({
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
-  }, [activeIntervals.length, saveSessionToDb])
+  }, [sessionLimitType, sessionDurationMinutes, activeIntervals.length, saveSessionToDb])
+
+  useEffect(() => {
+    if (isSessionActive && sessionLimitType === 'time') {
+      sessionCountdownTimerRef.current = setInterval(() => {
+        setTimeRemainingSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(sessionCountdownTimerRef.current!)
+            finalizeAndSaveSession()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+
+    return (): void => {
+      if (sessionCountdownTimerRef.current) {
+        clearInterval(sessionCountdownTimerRef.current)
+      }
+    }
+  }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
+
+  const startSession = (): void => {
+    if (activeIntervals.length === 0) {
+      alert('Debes seleccionar al menos 1 intervalo.')
+      return
+    }
+    if (rootRangeNotes.length === 0) {
+      alert('Debes seleccionar al menos 1 nota raíz en el teclado.')
+      return
+    }
+
+    sessionIdRef.current = `session_int_${Date.now()}`
+    answersBufferRef.current = []
+    historyBufferRef.current = []
+    setSessionHistory([])
+    setCurrentQuestionIndex(1)
+    setIsSessionFinished(false)
+    setIsSessionActive(true)
+
+    if (sessionLimitType === 'time') {
+      setTimeRemainingSeconds(sessionDurationMinutes * 60)
+    }
+
+    triggerNextInterval()
+  }
 
   const advanceToNextInterval = useCallback((): void => {
-    if (sessionLength > 0 && currentQuestionIndex >= sessionLength) {
+    const isFixedQuestionsCompleted =
+      sessionLimitType === 'questions' && currentQuestionIndex >= sessionQuestionsCount
+
+    if (isFixedQuestionsCompleted) {
       finalizeAndSaveSession()
     } else {
       setCurrentQuestionIndex((prev) => prev + 1)
       triggerNextInterval()
     }
-  }, [currentQuestionIndex, finalizeAndSaveSession, sessionLength, triggerNextInterval])
+  }, [
+    currentQuestionIndex,
+    finalizeAndSaveSession,
+    sessionLimitType,
+    sessionQuestionsCount,
+    triggerNextInterval
+  ])
 
   const stopSession = useCallback((): void => {
     if (answersBufferRef.current.length > 0) {
@@ -352,8 +405,13 @@ export function useIntervalTrainer({
     rootRangeNotes,
     setRootRangeNotes,
     toggleRootNote,
-    sessionLength,
-    setSessionLength,
+    sessionLimitType,
+    setSessionLimitType,
+    sessionQuestionsCount,
+    setSessionQuestionsCount,
+    sessionDurationMinutes,
+    setSessionDurationMinutes,
+    timeRemainingSeconds,
     advanceMode,
     setAdvanceMode,
     isSessionActive,

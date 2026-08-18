@@ -1,7 +1,7 @@
 import React from 'react'
 import { UseIntervalTrainerReturn } from '../../hooks/useIntervalTrainer'
 import { getIntervalDefinition } from '../../domain/music/intervals'
-import { ADVANCE_MODE_OPTIONS, AdvanceMode } from '../../domain/exercise/types'
+import { ADVANCE_MODE_OPTIONS, AdvanceMode, SessionLimitType } from '../../domain/exercise/types'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -16,6 +16,12 @@ interface IntervalsViewProps {
   onVirtualKeyPress?: (note: number) => void
 }
 
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
 export function IntervalsView({
   trainer,
   pianoKeys,
@@ -27,6 +33,16 @@ export function IntervalsView({
       ? [trainer.firstNotePlayed]
       : trainer.rootRangeNotes
     : trainer.rootRangeNotes
+
+  const getSessionProgressLabel = (): string => {
+    if (trainer.sessionLimitType === 'time') {
+      return `⏳ Tiempo Restante: ${formatTime(trainer.timeRemainingSeconds)} (Pregunta ${trainer.currentQuestionIndex})`
+    }
+    if (trainer.sessionLimitType === 'infinite') {
+      return `∞ Intervalo ${trainer.currentQuestionIndex}`
+    }
+    return `Pregunta ${trainer.currentQuestionIndex} / ${trainer.sessionQuestionsCount}`
+  }
 
   return (
     <>
@@ -43,7 +59,7 @@ export function IntervalsView({
             <div>
               <h3 className="text-sm font-semibold text-zinc-100 m-0">
                 {trainer.isSessionActive
-                  ? `Pregunta ${trainer.currentQuestionIndex} / ${trainer.sessionLength === 0 ? '∞' : trainer.sessionLength}`
+                  ? getSessionProgressLabel()
                   : 'Configuración: Reconocimiento de Intervalos'}
               </h3>
               <div className="text-[11px] text-zinc-400 mt-0.5">
@@ -174,9 +190,9 @@ export function IntervalsView({
                     }
                     className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
                   >
-                    <option value="ascending">⬆️ Solo Ascendente (Grave → Aguda)</option>
-                    <option value="descending">⬇️ Solo Descendente (Aguda → Grave)</option>
-                    <option value="both">🔀 Mixta (Ascendente y Descendente)</option>
+                    <option value="ascending">⬆️ Solo Ascendente</option>
+                    <option value="descending">⬇️ Solo Descendente</option>
+                    <option value="both">🔀 Mixta</option>
                   </select>
                 </div>
 
@@ -196,17 +212,50 @@ export function IntervalsView({
                 </div>
 
                 <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Preguntas por sesión:</label>
-                  <select
-                    value={trainer.sessionLength}
-                    onChange={(e): void => trainer.setSessionLength(Number(e.target.value))}
-                    className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
-                  >
-                    <option value={5}>5 ejercicios</option>
-                    <option value={10}>10 ejercicios</option>
-                    <option value={20}>20 ejercicios</option>
-                    <option value={0}>∞ Práctica Libre</option>
-                  </select>
+                  <label className="block text-xs text-zinc-400 mb-1">Límite de Sesión:</label>
+                  <div className="flex gap-1.5">
+                    <select
+                      value={trainer.sessionLimitType}
+                      onChange={(e): void =>
+                        trainer.setSessionLimitType(e.target.value as SessionLimitType)
+                      }
+                      className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-1.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                    >
+                      <option value="questions">Preguntas</option>
+                      <option value="time">Por Tiempo</option>
+                      <option value="infinite">∞ Libre</option>
+                    </select>
+
+                    {trainer.sessionLimitType === 'questions' && (
+                      <select
+                        value={trainer.sessionQuestionsCount}
+                        onChange={(e): void =>
+                          trainer.setSessionQuestionsCount(Number(e.target.value))
+                        }
+                        className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-1.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                      >
+                        <option value={5}>5 ej.</option>
+                        <option value={10}>10 ej.</option>
+                        <option value={20}>20 ej.</option>
+                      </select>
+                    )}
+
+                    {trainer.sessionLimitType === 'time' && (
+                      <select
+                        value={trainer.sessionDurationMinutes}
+                        onChange={(e): void =>
+                          trainer.setSessionDurationMinutes(Number(e.target.value))
+                        }
+                        className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-1.5 py-1.5 text-xs focus:outline-none focus:border-sky-500 font-semibold text-emerald-400"
+                      >
+                        <option value={1}>1 min</option>
+                        <option value={3}>3 min</option>
+                        <option value={5}>5 min</option>
+                        <option value={10}>10 min</option>
+                        <option value={15}>15 min</option>
+                      </select>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

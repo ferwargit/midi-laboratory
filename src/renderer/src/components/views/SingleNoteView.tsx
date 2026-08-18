@@ -3,7 +3,7 @@ import { UseSingleNoteTrainerReturn } from '../../hooks/useSingleNoteTrainer'
 import { EXERCISE_PRESETS } from '../../domain/music/presets'
 import { AVAILABLE_STRATEGIES } from '../../domain/adaptation/adaptiveEngine'
 import { INSTRUMENT_CATALOG } from '../../domain/music/instruments'
-import { ADVANCE_MODE_OPTIONS, AdvanceMode } from '../../domain/exercise/types'
+import { ADVANCE_MODE_OPTIONS, AdvanceMode, SessionLimitType } from '../../domain/exercise/types'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -16,6 +16,12 @@ interface SingleNoteViewProps {
   pianoKeys: number[]
   pressedNotes: number[]
   onVirtualKeyPress?: (note: number) => void
+}
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
 }
 
 export function SingleNoteView({
@@ -31,6 +37,19 @@ export function SingleNoteView({
       accuracy: p.accuracyPercentage,
       attempts: p.attempts
     }))
+
+  const getSessionProgressLabel = (): string => {
+    if (trainer.sessionLimitType === 'time') {
+      return `⏳ Tiempo Restante: ${formatTime(trainer.timeRemainingSeconds)} (Pregunta ${trainer.currentQuestionIndex})`
+    }
+    if (trainer.sessionLimitType === 'mastery') {
+      return `🎯 Modo Maestría (Pregunta ${trainer.currentQuestionIndex})`
+    }
+    if (trainer.sessionLimitType === 'infinite') {
+      return `∞ Pregunta ${trainer.currentQuestionIndex}`
+    }
+    return `Pregunta ${trainer.currentQuestionIndex} / ${trainer.sessionQuestionsCount}`
+  }
 
   return (
     <>
@@ -92,18 +111,11 @@ export function SingleNoteView({
         </Card>
       ) : (
         <Card className="space-y-3">
-          {/* BARRA SUPERIOR DE ESTADO & CONTROL */}
           <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
             <div>
               <h3 className="text-sm font-semibold text-zinc-100 m-0">
                 {trainer.isSessionActive
-                  ? `Pregunta ${trainer.currentQuestionIndex} / ${
-                      trainer.sessionLength === -1
-                        ? '🎯 Modo Maestría'
-                        : trainer.sessionLength === 0
-                          ? '∞'
-                          : trainer.sessionLength
-                    }`
+                  ? getSessionProgressLabel()
                   : 'Configuración: Reconocimiento de Notas'}
               </h3>
               <div className="text-[11px] text-zinc-400 mt-0.5">
@@ -134,7 +146,6 @@ export function SingleNoteView({
             </div>
           </div>
 
-          {/* SLOT FIJO DE FEEDBACK DURANTE EL EJERCICIO */}
           {trainer.isSessionActive && (
             <FeedbackPanel
               isWaitingAnswer={trainer.isWaitingAnswer}
@@ -144,7 +155,6 @@ export function SingleNoteView({
             />
           )}
 
-          {/* TECLADO DE PIANO ESTABLE (SIEMPRE EN LA MISMA COORDENADA) */}
           <div className="space-y-1.5">
             <div className="text-xs text-zinc-400 flex justify-between items-center">
               <span>
@@ -165,7 +175,6 @@ export function SingleNoteView({
             />
           </div>
 
-          {/* CONTROLES PREVIOS DE CONFIGURACIÓN */}
           {!trainer.isSessionActive && (
             <div className="space-y-3 pt-2">
               <div>
@@ -191,6 +200,7 @@ export function SingleNoteView({
                 </div>
               </div>
 
+              {/* PANEL DE 4 CONFIGURACIONES INCLUYENDO TIEMPO Y CRITERIO */}
               <div className="grid grid-cols-4 gap-3 pt-2 border-t border-zinc-800">
                 <div>
                   <label className="block text-xs text-zinc-400 mb-1">Timbre / Instrumento:</label>
@@ -242,18 +252,51 @@ export function SingleNoteView({
                 </div>
 
                 <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Criterio de Sesión:</label>
-                  <select
-                    value={trainer.sessionLength}
-                    onChange={(e): void => trainer.setSessionLength(Number(e.target.value))}
-                    className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
-                  >
-                    <option value={5}>5 ejercicios</option>
-                    <option value={10}>10 ejercicios</option>
-                    <option value={20}>20 ejercicios</option>
-                    <option value={-1}>🎯 Modo Maestría (Hasta dominar en verde)</option>
-                    <option value={0}>∞ Práctica Libre</option>
-                  </select>
+                  <label className="block text-xs text-zinc-400 mb-1">Límite de Sesión:</label>
+                  <div className="flex gap-1.5">
+                    <select
+                      value={trainer.sessionLimitType}
+                      onChange={(e): void =>
+                        trainer.setSessionLimitType(e.target.value as SessionLimitType)
+                      }
+                      className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-1.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                    >
+                      <option value="questions">Preguntas</option>
+                      <option value="time">Por Tiempo</option>
+                      <option value="mastery">🎯 Maestría</option>
+                      <option value="infinite">∞ Libre</option>
+                    </select>
+
+                    {trainer.sessionLimitType === 'questions' && (
+                      <select
+                        value={trainer.sessionQuestionsCount}
+                        onChange={(e): void =>
+                          trainer.setSessionQuestionsCount(Number(e.target.value))
+                        }
+                        className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-1.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                      >
+                        <option value={5}>5 ej.</option>
+                        <option value={10}>10 ej.</option>
+                        <option value={20}>20 ej.</option>
+                      </select>
+                    )}
+
+                    {trainer.sessionLimitType === 'time' && (
+                      <select
+                        value={trainer.sessionDurationMinutes}
+                        onChange={(e): void =>
+                          trainer.setSessionDurationMinutes(Number(e.target.value))
+                        }
+                        className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-1.5 py-1.5 text-xs focus:outline-none focus:border-sky-500 font-semibold text-emerald-400"
+                      >
+                        <option value={1}>1 min</option>
+                        <option value={3}>3 min</option>
+                        <option value={5}>5 min</option>
+                        <option value={10}>10 min</option>
+                        <option value={15}>15 min</option>
+                      </select>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

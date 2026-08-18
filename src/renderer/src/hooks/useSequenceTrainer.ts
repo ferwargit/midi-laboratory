@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   SEQUENCE_PRESETS,
   SequencePreset,
@@ -8,7 +8,7 @@ import {
   SequenceExerciseResult,
   evaluateSequenceAnswer
 } from '../domain/exercise/sequenceEvaluator'
-import { AdvanceMode } from '../domain/exercise/types'
+import { AdvanceMode, SessionLimitType } from '../domain/exercise/types'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
 
@@ -26,8 +26,13 @@ export interface UseSequenceTrainerReturn {
   customCandidateNotes: number[]
   setCustomCandidateNotes: (notes: number[]) => void
   toggleCustomNote: (note: number) => void
-  sessionLength: number
-  setSessionLength: (len: number) => void
+  sessionLimitType: SessionLimitType
+  setSessionLimitType: (type: SessionLimitType) => void
+  sessionQuestionsCount: number
+  setSessionQuestionsCount: (count: number) => void
+  sessionDurationMinutes: number
+  setSessionDurationMinutes: (minutes: number) => void
+  timeRemainingSeconds: number
   advanceMode: AdvanceMode
   setAdvanceMode: (mode: AdvanceMode) => void
   isSessionActive: boolean
@@ -56,7 +61,10 @@ export function useSequenceTrainer({
   )
   const [sequenceLength, setSequenceLength] = useState<number>(3)
   const [customCandidateNotes, setCustomCandidateNotes] = useState<number[]>([60, 62, 64, 65, 67])
-  const [sessionLength, setSessionLength] = useState<number>(10)
+  const [sessionLimitType, setSessionLimitType] = useState<SessionLimitType>('questions')
+  const [sessionQuestionsCount, setSessionQuestionsCount] = useState<number>(10)
+  const [sessionDurationMinutes, setSessionDurationMinutes] = useState<number>(5)
+  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(300)
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false)
   const [isSessionFinished, setIsSessionFinished] = useState<boolean>(false)
@@ -74,6 +82,7 @@ export function useSequenceTrainer({
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<SequenceExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const setSelectedPresetId = (id: string): void => {
     setSelectedPresetIdState(id)
@@ -118,26 +127,14 @@ export function useSequenceTrainer({
     onPlaySequence(sequence)
   }, [customCandidateNotes, selectedPresetId, sequenceLength, onPlaySequence])
 
-  const startSession = (): void => {
-    if (customCandidateNotes.length < 2) {
-      alert('Debes seleccionar al menos 2 notas candidatas en el teclado.')
-      return
-    }
-
-    sessionIdRef.current = `session_seq_${Date.now()}`
-    answersBufferRef.current = []
-    historyBufferRef.current = []
-    setSessionHistory([])
-    setCurrentQuestionIndex(1)
-    setIsSessionFinished(false)
-    setIsSessionActive(true)
-    triggerNextSequence()
-  }
-
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
     if (autoAdvanceTimerRef.current) {
       clearTimeout(autoAdvanceTimerRef.current)
       autoAdvanceTimerRef.current = null
+    }
+    if (sessionCountdownTimerRef.current) {
+      clearInterval(sessionCountdownTimerRef.current)
+      sessionCountdownTimerRef.current = null
     }
 
     setIsSessionActive(false)
@@ -157,12 +154,17 @@ export function useSequenceTrainer({
       historyBufferRef.current.reduce((acc, r) => acc + r.responseTimeMs, 0) / allAnswers.length
     )
 
+    const presetLabel =
+      sessionLimitType === 'time'
+        ? `Secuencias Tiempo (${sessionDurationMinutes}m)`
+        : `Secuencias (${sequenceLength} notas)`
+
     const sessionRecord: DbSessionRecord = {
       id: sessionIdRef.current,
       createdAt: new Date().toISOString(),
       strategyId: 'sequences_v1',
       instrumentId: 'piano_sequences',
-      presetName: `Secuencias (${sequenceLength} notas)`,
+      presetName: presetLabel,
       totalQuestions: allAnswers.length,
       correctAnswers: exactCount,
       accuracyPercentage: avgScore,
@@ -170,16 +172,67 @@ export function useSequenceTrainer({
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
-  }, [sequenceLength, saveSessionToDb])
+  }, [sessionLimitType, sessionDurationMinutes, sequenceLength, saveSessionToDb])
+
+  useEffect(() => {
+    if (isSessionActive && sessionLimitType === 'time') {
+      sessionCountdownTimerRef.current = setInterval(() => {
+        setTimeRemainingSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(sessionCountdownTimerRef.current!)
+            finalizeAndSaveSession()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+
+    return (): void => {
+      if (sessionCountdownTimerRef.current) {
+        clearInterval(sessionCountdownTimerRef.current)
+      }
+    }
+  }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
+
+  const startSession = (): void => {
+    if (customCandidateNotes.length < 2) {
+      alert('Debes seleccionar al menos 2 notas candidatas en el teclado.')
+      return
+    }
+
+    sessionIdRef.current = `session_seq_${Date.now()}`
+    answersBufferRef.current = []
+    historyBufferRef.current = []
+    setSessionHistory([])
+    setCurrentQuestionIndex(1)
+    setIsSessionFinished(false)
+    setIsSessionActive(true)
+
+    if (sessionLimitType === 'time') {
+      setTimeRemainingSeconds(sessionDurationMinutes * 60)
+    }
+
+    triggerNextSequence()
+  }
 
   const advanceToNextSequence = useCallback((): void => {
-    if (sessionLength > 0 && currentQuestionIndex >= sessionLength) {
+    const isFixedQuestionsCompleted =
+      sessionLimitType === 'questions' && currentQuestionIndex >= sessionQuestionsCount
+
+    if (isFixedQuestionsCompleted) {
       finalizeAndSaveSession()
     } else {
       setCurrentQuestionIndex((prev) => prev + 1)
       triggerNextSequence()
     }
-  }, [currentQuestionIndex, finalizeAndSaveSession, sessionLength, triggerNextSequence])
+  }, [
+    currentQuestionIndex,
+    finalizeAndSaveSession,
+    sessionLimitType,
+    sessionQuestionsCount,
+    triggerNextSequence
+  ])
 
   const stopSession = useCallback((): void => {
     if (answersBufferRef.current.length > 0) {
@@ -306,8 +359,13 @@ export function useSequenceTrainer({
     customCandidateNotes,
     setCustomCandidateNotes,
     toggleCustomNote,
-    sessionLength,
-    setSessionLength,
+    sessionLimitType,
+    setSessionLimitType,
+    sessionQuestionsCount,
+    setSessionQuestionsCount,
+    sessionDurationMinutes,
+    setSessionDurationMinutes,
+    timeRemainingSeconds,
     advanceMode,
     setAdvanceMode,
     isSessionActive,

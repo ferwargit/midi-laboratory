@@ -1,5 +1,10 @@
-import { useState, useCallback, useMemo, useRef } from 'react'
-import { ExerciseResult, SessionStats, AdvanceMode } from '../domain/exercise/types'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import {
+  ExerciseResult,
+  SessionStats,
+  AdvanceMode,
+  SessionLimitType
+} from '../domain/exercise/types'
 import { evaluateSingleNoteAnswer, calculateSessionStats } from '../domain/exercise/evaluator'
 import { StrategyId, NotePerformance, SelectionDecision } from '../domain/adaptation/types'
 import { createStrategy } from '../domain/adaptation/adaptiveEngine'
@@ -17,8 +22,13 @@ export interface UseSingleNoteTrainerReturn {
   activeNotes: number[]
   setActiveNotes: (notes: number[]) => void
   toggleNote: (note: number) => void
-  sessionLength: number
-  setSessionLength: (len: number) => void
+  sessionLimitType: SessionLimitType
+  setSessionLimitType: (type: SessionLimitType) => void
+  sessionQuestionsCount: number
+  setSessionQuestionsCount: (count: number) => void
+  sessionDurationMinutes: number
+  setSessionDurationMinutes: (minutes: number) => void
+  timeRemainingSeconds: number
   advanceMode: AdvanceMode
   setAdvanceMode: (mode: AdvanceMode) => void
   selectedStrategyId: StrategyId
@@ -49,7 +59,10 @@ export function useSingleNoteTrainer({
   onTelemetryLog
 }: TrainerOptions): UseSingleNoteTrainerReturn {
   const [activeNotes, setActiveNotes] = useState<number[]>([60, 62, 64, 65, 67, 69, 71, 72])
-  const [sessionLength, setSessionLength] = useState<number>(10)
+  const [sessionLimitType, setSessionLimitType] = useState<SessionLimitType>('questions')
+  const [sessionQuestionsCount, setSessionQuestionsCount] = useState<number>(10)
+  const [sessionDurationMinutes, setSessionDurationMinutes] = useState<number>(5)
+  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(300)
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
   const [selectedStrategyId, setSelectedStrategyId] = useState<StrategyId>('adaptive_v1')
   const [selectedInstrumentId, setSelectedInstrumentIdState] =
@@ -71,6 +84,7 @@ export function useSingleNoteTrainer({
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<ExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const selectedInstrument = useMemo(
     () => getInstrumentById(selectedInstrumentId),
@@ -109,6 +123,76 @@ export function useSingleNoteTrainer({
     onPlayStimulus(decision.selectedNote, decision)
   }, [activeNotes, currentExpectedNote, strategy, onPlayStimulus])
 
+  const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current)
+      autoAdvanceTimerRef.current = null
+    }
+    if (sessionCountdownTimerRef.current) {
+      clearInterval(sessionCountdownTimerRef.current)
+      sessionCountdownTimerRef.current = null
+    }
+
+    setIsSessionActive(false)
+    setIsSessionFinished(true)
+    setIsWaitingAnswer(false)
+    setIsWaitingManualAdvance(false)
+
+    const allAnswers = [...answersBufferRef.current]
+    if (allAnswers.length === 0) return
+
+    const finalStats = calculateSessionStats(historyBufferRef.current)
+    const presetLabel =
+      sessionLimitType === 'time'
+        ? `Tiempo (${sessionDurationMinutes}m)`
+        : sessionLimitType === 'mastery'
+          ? 'Maestría'
+          : `Notas (${activeNotes.length})`
+
+    const sessionRecord: DbSessionRecord = {
+      id: sessionIdRef.current,
+      createdAt: new Date().toISOString(),
+      strategyId: selectedStrategyId,
+      instrumentId: selectedInstrument.id,
+      presetName: presetLabel,
+      totalQuestions: allAnswers.length,
+      correctAnswers: finalStats.correctAnswers,
+      accuracyPercentage: finalStats.accuracyPercentage,
+      avgResponseTimeMs: finalStats.avgResponseTimeMs
+    }
+
+    await saveSessionToDb(sessionRecord, allAnswers)
+  }, [
+    sessionLimitType,
+    sessionDurationMinutes,
+    activeNotes.length,
+    selectedStrategyId,
+    selectedInstrument.id,
+    saveSessionToDb
+  ])
+
+  // Temporizador regresivo para sesiones por tiempo
+  useEffect(() => {
+    if (isSessionActive && sessionLimitType === 'time') {
+      sessionCountdownTimerRef.current = setInterval(() => {
+        setTimeRemainingSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(sessionCountdownTimerRef.current!)
+            finalizeAndSaveSession()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+
+    return (): void => {
+      if (sessionCountdownTimerRef.current) {
+        clearInterval(sessionCountdownTimerRef.current)
+      }
+    }
+  }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
+
   const startSession = (): void => {
     if (activeNotes.length < 2) {
       alert('Debes seleccionar al menos 2 notas para entrenar.')
@@ -121,39 +205,14 @@ export function useSingleNoteTrainer({
     setCurrentQuestionIndex(1)
     setIsSessionFinished(false)
     setIsSessionActive(true)
+
+    if (sessionLimitType === 'time') {
+      setTimeRemainingSeconds(sessionDurationMinutes * 60)
+    }
+
     onInstrumentChanged(selectedInstrument.programNumber)
     triggerNextQuestion()
   }
-
-  const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-
-    setIsSessionActive(false)
-    setIsSessionFinished(true)
-    setIsWaitingAnswer(false)
-    setIsWaitingManualAdvance(false)
-
-    const allAnswers = [...answersBufferRef.current]
-    if (allAnswers.length === 0) return
-
-    const finalStats = calculateSessionStats(historyBufferRef.current)
-    const sessionRecord: DbSessionRecord = {
-      id: sessionIdRef.current,
-      createdAt: new Date().toISOString(),
-      strategyId: selectedStrategyId,
-      instrumentId: selectedInstrument.id,
-      presetName: `Notas (${activeNotes.length})`,
-      totalQuestions: allAnswers.length,
-      correctAnswers: finalStats.correctAnswers,
-      accuracyPercentage: finalStats.accuracyPercentage,
-      avgResponseTimeMs: finalStats.avgResponseTimeMs
-    }
-
-    await saveSessionToDb(sessionRecord, allAnswers)
-  }, [selectedStrategyId, selectedInstrument, activeNotes, saveSessionToDb])
 
   const advanceToNextQuestion = useCallback((): void => {
     const currentPerformances = strategy.getNotePerformances(activeNotes, historyBufferRef.current)
@@ -162,10 +221,11 @@ export function useSingleNoteTrainer({
       return perf && perf.attempts >= 2 && perf.accuracyPercentage >= 85
     })
 
-    const isMasteryCompleted = sessionLength === -1 && allMastered
-    const isFixedLengthCompleted = sessionLength > 0 && currentQuestionIndex >= sessionLength
+    const isMasteryCompleted = sessionLimitType === 'mastery' && allMastered
+    const isFixedQuestionsCompleted =
+      sessionLimitType === 'questions' && currentQuestionIndex >= sessionQuestionsCount
 
-    if (isMasteryCompleted || isFixedLengthCompleted) {
+    if (isMasteryCompleted || isFixedQuestionsCompleted) {
       finalizeAndSaveSession()
     } else {
       setCurrentQuestionIndex((prev) => prev + 1)
@@ -175,7 +235,8 @@ export function useSingleNoteTrainer({
     activeNotes,
     currentQuestionIndex,
     finalizeAndSaveSession,
-    sessionLength,
+    sessionLimitType,
+    sessionQuestionsCount,
     strategy,
     triggerNextQuestion
   ])
@@ -241,7 +302,6 @@ export function useSingleNoteTrainer({
         onTelemetryLog('EVAL', evalMsg)
       }
 
-      // DETERMINAR SI AVANZA AUTOMÁTICO O ESPERA CLIC / ESPACIO
       const shouldWaitManual =
         advanceMode === 'manual' || (advanceMode === 'smart' && !result.correct)
 
@@ -309,8 +369,13 @@ export function useSingleNoteTrainer({
     activeNotes,
     setActiveNotes,
     toggleNote,
-    sessionLength,
-    setSessionLength,
+    sessionLimitType,
+    setSessionLimitType,
+    sessionQuestionsCount,
+    setSessionQuestionsCount,
+    sessionDurationMinutes,
+    setSessionDurationMinutes,
+    timeRemainingSeconds,
     advanceMode,
     setAdvanceMode,
     selectedStrategyId,
