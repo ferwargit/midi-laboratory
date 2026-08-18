@@ -10,13 +10,15 @@ import { MidiDeviceSelect } from './components/trainer/MidiDeviceSelect'
 import { SingleNoteView } from './components/views/SingleNoteView'
 import { IntervalsView } from './components/views/IntervalsView'
 import { SequencesView } from './components/views/SequencesView'
+import { AnalyticsView } from './components/views/AnalyticsView'
 import { DatabaseCard } from './components/views/DatabaseCard'
 import { ConfirmModal } from './components/ui/ConfirmModal'
 import { MidiMonitor } from './components/trainer/MidiMonitor'
+import { AiExercisePrescription } from './domain/ai/types'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
 
-type AppMode = 'single_note' | 'intervals' | 'sequences'
+type AppMode = 'single_note' | 'intervals' | 'sequences' | 'analytics'
 
 export default function App(): React.ReactElement {
   const [appMode, setAppMode] = useState<AppMode>('single_note')
@@ -114,7 +116,7 @@ export default function App(): React.ReactElement {
       handleNoteRef.current = singleNoteTrainer.handleUserNotePlayed
     } else if (appMode === 'intervals') {
       handleNoteRef.current = intervalTrainer.handleUserNotePlayed
-    } else {
+    } else if (appMode === 'sequences') {
       handleNoteRef.current = sequenceTrainer.handleUserNotePlayed
     }
   }, [
@@ -124,7 +126,7 @@ export default function App(): React.ReactElement {
     sequenceTrainer.handleUserNotePlayed
   ])
 
-  // ATAJOS DE TECLADO DE COMPUTADORA: Space (Avanzar) / R (Repetir)
+  // Atajos de Teclado (Space = Avanzar / R = Repetir)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.code === 'Space') {
@@ -172,6 +174,37 @@ export default function App(): React.ReactElement {
     [midi, appMode, singleNoteTrainer, intervalTrainer, sequenceTrainer]
   )
 
+  // Cargar y ejecutar la prescripción diseñada por la IA
+  const handleLoadPrescription = (p: AiExercisePrescription): void => {
+    if (p.targetMode === 'single_note') {
+      setAppMode('single_note')
+      singleNoteTrainer.setActiveNotes(p.recommendedNotes)
+      singleNoteTrainer.setSelectedInstrumentId(p.instrumentId)
+      singleNoteTrainer.setSessionLimitType(p.limitType)
+      singleNoteTrainer.setSessionQuestionsCount(p.questionsCount)
+      singleNoteTrainer.setSessionDurationMinutes(p.durationMinutes)
+      singleNoteTrainer.setAdvanceMode(p.advanceMode)
+      setTimeout(() => singleNoteTrainer.startSession(), 200)
+    } else if (p.targetMode === 'intervals') {
+      setAppMode('intervals')
+      if (p.recommendedIntervals) intervalTrainer.setActiveIntervals(p.recommendedIntervals)
+      intervalTrainer.setSessionLimitType(p.limitType)
+      intervalTrainer.setSessionQuestionsCount(p.questionsCount)
+      intervalTrainer.setSessionDurationMinutes(p.durationMinutes)
+      intervalTrainer.setAdvanceMode(p.advanceMode)
+      setTimeout(() => intervalTrainer.startSession(), 200)
+    } else {
+      setAppMode('sequences')
+      sequenceTrainer.setCustomCandidateNotes(p.recommendedNotes)
+      if (p.sequenceLength) sequenceTrainer.setSequenceLength(p.sequenceLength)
+      sequenceTrainer.setSessionLimitType(p.limitType)
+      sequenceTrainer.setSessionQuestionsCount(p.questionsCount)
+      sequenceTrainer.setSessionDurationMinutes(p.durationMinutes)
+      sequenceTrainer.setAdvanceMode(p.advanceMode)
+      setTimeout(() => sequenceTrainer.startSession(), 200)
+    }
+  }
+
   const isAnySessionActive =
     singleNoteTrainer.isSessionActive ||
     intervalTrainer.isSessionActive ||
@@ -186,7 +219,7 @@ export default function App(): React.ReactElement {
     <div className="p-5 max-w-5xl mx-auto space-y-4">
       <Header status={midi.status} />
 
-      {/* SELECTOR DE MODALIDAD */}
+      {/* SELECTOR PRINCIPAL */}
       <div className="flex gap-2 bg-zinc-900/90 border border-zinc-800 p-1.5 rounded-lg">
         <button
           type="button"
@@ -198,7 +231,7 @@ export default function App(): React.ReactElement {
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          🎵 Modalidad 1: Nota Individual
+          🎵 Nota Individual
         </button>
         <button
           type="button"
@@ -210,7 +243,7 @@ export default function App(): React.ReactElement {
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          📏 Modalidad 2: Intervalos (2 Notas)
+          📏 Intervalos (2 Notas)
         </button>
         <button
           type="button"
@@ -222,7 +255,19 @@ export default function App(): React.ReactElement {
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          🎼 Modalidad 3: Secuencias (3 a 6 Notas)
+          🎼 Secuencias (3 a 6 Notas)
+        </button>
+        <button
+          type="button"
+          disabled={isAnySessionActive}
+          onClick={(): void => setAppMode('analytics')}
+          className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
+            appMode === 'analytics'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+          }`}
+        >
+          📊 Historial & IA
         </button>
       </div>
 
@@ -263,6 +308,8 @@ export default function App(): React.ReactElement {
           onVirtualKeyPress={handleVirtualKeyPress}
         />
       )}
+
+      {appMode === 'analytics' && <AnalyticsView onLoadPrescription={handleLoadPrescription} />}
 
       {/* TARJETA DE BASE DE DATOS GLOBAL */}
       <DatabaseCard onOpenResetModal={(): void => setIsResetModalOpen(true)} />

@@ -56,6 +56,39 @@ export class DatabaseEngine {
     })
   }
 
+  async getAllSessions(): Promise<DbSessionRecord[]> {
+    if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(SESSIONS_STORE, 'readonly')
+      const store = tx.objectStore(SESSIONS_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = (): void => {
+        const sessions: DbSessionRecord[] = request.result || []
+        // Ordenadas de más reciente a más antigua
+        sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        resolve(sessions)
+      }
+      request.onerror = (): void => reject(request.error)
+    })
+  }
+
+  async getAllAnswers(): Promise<DbAnswerRecord[]> {
+    if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(ANSWERS_STORE, 'readonly')
+      const store = tx.objectStore(ANSWERS_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = (): void => {
+        resolve(request.result || [])
+      }
+      request.onerror = (): void => reject(request.error)
+    })
+  }
+
   async getSummary(): Promise<DatabaseSummary> {
     if (!this.db) throw new Error('Base de datos no inicializada.')
 
