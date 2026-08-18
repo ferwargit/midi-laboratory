@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { generateMidiRange, midiNoteToName } from './domain/music/noteUtils'
 import { useMidi } from './hooks/useMidi'
 import { useSingleNoteTrainer } from './hooks/useSingleNoteTrainer'
@@ -21,7 +21,7 @@ export default function App(): React.ReactElement {
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false)
   const handleNoteRef = useRef<(note: number) => void>(() => {})
 
-  // 1. Inicializar Store Global de Base de Datos
+  // 1. Inicializar Store de Base de Datos
   const initializeDb = useDatabaseStore((state) => state.initialize)
   const clearDb = useDatabaseStore((state) => state.clearDatabase)
 
@@ -89,7 +89,7 @@ export default function App(): React.ReactElement {
     }
   })
 
-  // Enrutar pulsación MIDI según la vista activa
+  // Enrutar pulsaciones físicas del piano FP-8
   useEffect(() => {
     if (appMode === 'single_note') {
       handleNoteRef.current = singleNoteTrainer.handleUserNotePlayed
@@ -97,6 +97,30 @@ export default function App(): React.ReactElement {
       handleNoteRef.current = intervalTrainer.handleUserNotePlayed
     }
   }, [appMode, singleNoteTrainer.handleUserNotePlayed, intervalTrainer.handleUserNotePlayed])
+
+  // Handler unificado para cuando hacés clic en una tecla del piano virtual
+  const handleVirtualKeyPress = useCallback(
+    (noteNumber: number): void => {
+      // Reproduce el sonido en el Korg NS5R
+      midi.sendNote(noteNumber, 350, 95)
+
+      // Registra en el log
+      midi.addLog({
+        type: 'IN',
+        message: `🖱️ Clic en Piano Virtual -> ${midiNoteToName(noteNumber)} (${noteNumber})`,
+        noteNumber,
+        velocity: 95
+      })
+
+      // Envía la nota a la modalidad activa
+      if (appMode === 'single_note') {
+        singleNoteTrainer.handleUserNotePlayed(noteNumber)
+      } else {
+        intervalTrainer.handleUserNotePlayed(noteNumber)
+      }
+    },
+    [midi, appMode, singleNoteTrainer, intervalTrainer]
+  )
 
   const isAnySessionActive = singleNoteTrainer.isSessionActive || intervalTrainer.isSessionActive
 
@@ -147,25 +171,27 @@ export default function App(): React.ReactElement {
         disabled={isAnySessionActive}
       />
 
-      {/* VISTAS MODULARES */}
+      {/* VISTAS MODULARES CON SOPORTE DE CLIC VIRTUAL */}
       {appMode === 'single_note' ? (
         <SingleNoteView
           trainer={singleNoteTrainer}
           pianoKeys={PIANO_KEYS}
           pressedNotes={midi.pressedNotes}
+          onVirtualKeyPress={handleVirtualKeyPress}
         />
       ) : (
         <IntervalsView
           trainer={intervalTrainer}
           pianoKeys={PIANO_KEYS}
           pressedNotes={midi.pressedNotes}
+          onVirtualKeyPress={handleVirtualKeyPress}
         />
       )}
 
-      {/* TARJETA DE BASE DE DATOS GLOBAL CON ZUSTAND */}
+      {/* TARJETA DE BASE DE DATOS GLOBAL */}
       <DatabaseCard onOpenResetModal={(): void => setIsResetModalOpen(true)} />
 
-      {/* MODAL DE CONFIRMACIÓN */}
+      {/* MODAL DE RESET */}
       <ConfirmModal
         isOpen={isResetModalOpen}
         title="¿Resetear Base de Datos de Prueba?"

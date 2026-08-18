@@ -1,14 +1,16 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { isBlackKey, midiNoteToName } from '../../domain/music/noteUtils'
 import { NotePerformance } from '../../domain/adaptation/types'
 
 interface PianoKeyboardProps {
   keys: number[]
   activeNotes: number[]
-  pressedNotes?: number[] // Teclas pulsadas dinámicamente en tiempo real
-  onToggleNote: (note: number) => void
+  pressedNotes?: number[] // Teclas pulsadas por MIDI físico
+  onToggleNote?: (note: number) => void // Para modo configuración
+  onPlayNoteVirtual?: (note: number) => void // Para responder haciendo clic en el piano virtual
   performances?: Map<number, NotePerformance>
   showHeatmap?: boolean
+  isInteractiveTraining?: boolean // Si es true, el clic responde el ejercicio
   disabled?: boolean
 }
 
@@ -17,23 +19,42 @@ export function PianoKeyboard({
   activeNotes,
   pressedNotes = [],
   onToggleNote,
+  onPlayNoteVirtual,
   performances,
   showHeatmap = false,
+  isInteractiveTraining = false,
   disabled = false
 }: PianoKeyboardProps): React.ReactElement {
   const whiteKeys = keys.filter((k) => !isBlackKey(k))
+  const [clickedNote, setClickedNote] = useState<number | null>(null)
+
+  const handleKeyInteraction = (note: number): void => {
+    if (disabled) return
+
+    // Si estamos en sesión de entrenamiento activa y se permite responder por clic
+    if (isInteractiveTraining && onPlayNoteVirtual) {
+      setClickedNote(note)
+      onPlayNoteVirtual(note)
+      setTimeout(() => setClickedNote(null), 250)
+      return
+    }
+
+    // Modo configuración previa: alternar selección
+    if (onToggleNote) {
+      onToggleNote(note)
+    }
+  }
 
   const getKeyStyle = (
     note: number,
     black: boolean
   ): { bg: string; text: string; dot?: boolean } => {
-    const isCurrentlyPressed = pressedNotes.includes(note)
-    const active = activeNotes.includes(note)
-    const perf = performances?.get(note)
-    const hasAttempts = perf && perf.attempts > 0
+    const isPhysicallyPressed = pressedNotes.includes(note)
+    const isVirtualClicked = clickedNote === note
+    const isCurrentlyActive = isPhysicallyPressed || isVirtualClicked
 
-    // 1. PRIORIDAD MÁXIMA: Tecla presionada físicamente en vivo (Ámbar brillante / Iluminada)
-    if (isCurrentlyPressed) {
+    // 1. PRIORIDAD MÁXIMA: Tecla presionada físicamente o por clic virtual en vivo
+    if (isCurrentlyActive) {
       return {
         bg: black
           ? 'bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] brightness-125'
@@ -44,6 +65,9 @@ export function PianoKeyboard({
 
     // 2. MODO HEATMAP (Diagnóstico final o en vivo)
     if (showHeatmap) {
+      const perf = performances?.get(note)
+      const hasAttempts = perf && perf.attempts > 0
+
       if (hasAttempts) {
         if (perf.accuracyPercentage >= 85) {
           return {
@@ -69,8 +93,7 @@ export function PianoKeyboard({
         }
       }
 
-      // Si formaba parte de la sesión pero no se llegó a preguntar
-      if (active) {
+      if (activeNotes.includes(note)) {
         return {
           bg: black ? 'bg-zinc-800' : 'bg-zinc-100',
           text: black ? 'text-zinc-400' : 'text-zinc-700',
@@ -78,15 +101,14 @@ export function PianoKeyboard({
         }
       }
 
-      // Inactiva
       return {
         bg: black ? 'bg-zinc-900 opacity-60' : 'bg-zinc-200 opacity-60',
         text: black ? 'text-zinc-600' : 'text-zinc-400'
       }
     }
 
-    // 3. MODO NORMAL / EN SESIÓN (Teclas fijadas o activas)
-    if (active) {
+    // 3. MODO CONFIGURACIÓN O EN SESIÓN
+    if (activeNotes.includes(note)) {
       return {
         bg: black
           ? 'bg-sky-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.5)]'
@@ -129,7 +151,7 @@ export function PianoKeyboard({
               key={note}
               type="button"
               disabled={disabled}
-              onClick={(): void => onToggleNote(note)}
+              onClick={(): void => handleKeyInteraction(note)}
               title={`${midiNoteToName(note)} (${note})`}
               className={`relative flex-1 h-full rounded-b-md border-r border-zinc-300/60 last:border-r-0 flex flex-col justify-end items-center pb-1.5 transition-all duration-75 cursor-pointer ${
                 style.bg
@@ -161,7 +183,7 @@ export function PianoKeyboard({
                 key={note}
                 type="button"
                 disabled={disabled}
-                onClick={(): void => onToggleNote(note)}
+                onClick={(): void => handleKeyInteraction(note)}
                 title={`${midiNoteToName(note)} (${note})`}
                 style={{
                   left: `${leftPercent}%`,

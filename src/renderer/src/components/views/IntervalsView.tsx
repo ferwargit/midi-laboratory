@@ -12,12 +12,14 @@ interface IntervalsViewProps {
   trainer: UseIntervalTrainerReturn
   pianoKeys: number[]
   pressedNotes: number[]
+  onVirtualKeyPress?: (note: number) => void
 }
 
 export function IntervalsView({
   trainer,
   pianoKeys,
-  pressedNotes
+  pressedNotes,
+  onVirtualKeyPress
 }: IntervalsViewProps): React.ReactElement {
   const liveActiveNotes = trainer.isSessionActive
     ? trainer.firstNotePlayed !== null
@@ -83,19 +85,20 @@ export function IntervalsView({
             lastResult={trainer.lastResult}
           />
 
+          {/* TECLADO EN VIVO DE INTERVALOS: CLICKABLE PARA RESPONDER */}
           {trainer.isSessionActive && (
             <div className="space-y-1.5 mb-3">
               <div className="text-xs text-zinc-400 font-medium">
                 {trainer.waitingNoteStep === 1
-                  ? '🎹 Rango de partida activo (Tocá la primera nota):'
-                  : `🎹 1ª Nota (${midiNoteToName(trainer.firstNotePlayed!)}) fijada. Tocá la 2ª nota en el piano:`}
+                  ? '🎹 Rango de partida activo (Tocá la primera nota en el FP-8 o hacé clic):'
+                  : `🎹 1ª Nota (${midiNoteToName(trainer.firstNotePlayed!)}) fijada. Tocá la 2ª nota en el FP-8 o hacé clic:`}
               </div>
               <PianoKeyboard
                 keys={pianoKeys}
                 activeNotes={liveActiveNotes}
                 pressedNotes={pressedNotes}
-                onToggleNote={() => {}}
-                disabled={true}
+                isInteractiveTraining={true}
+                onPlayNoteVirtual={onVirtualKeyPress}
               />
             </div>
           )}

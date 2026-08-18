@@ -14,12 +14,14 @@ interface SingleNoteViewProps {
   trainer: UseSingleNoteTrainerReturn
   pianoKeys: number[]
   pressedNotes: number[]
+  onVirtualKeyPress?: (note: number) => void
 }
 
 export function SingleNoteView({
   trainer,
   pianoKeys,
-  pressedNotes
+  pressedNotes,
+  onVirtualKeyPress
 }: SingleNoteViewProps): React.ReactElement {
   const weakNotesList = Array.from(trainer.performances.values())
     .filter((p) => p.attempts > 0 && p.accuracyPercentage < 85)
@@ -60,7 +62,6 @@ export function SingleNoteView({
               keys={pianoKeys}
               activeNotes={trainer.activeNotes}
               pressedNotes={pressedNotes}
-              onToggleNote={() => {}}
               performances={trainer.performances}
               showHeatmap={true}
               disabled={true}
@@ -138,16 +139,22 @@ export function SingleNoteView({
             />
           )}
 
+          {/* TECLADO EN VIVO: HACE CLIC EN LA TECLA PARA RESPONDER CON EL MOUSE */}
           {trainer.isSessionActive && (
             <div className="space-y-1.5 mb-3">
+              <div className="text-xs text-zinc-400 flex justify-between items-center">
+                <span>
+                  🎹 Tocá en tu Roland FP-8 o hacé clic en el piano virtual para responder:
+                </span>
+              </div>
               <PianoKeyboard
                 keys={pianoKeys}
                 activeNotes={trainer.activeNotes}
                 pressedNotes={pressedNotes}
-                onToggleNote={() => {}}
+                isInteractiveTraining={true}
+                onPlayNoteVirtual={onVirtualKeyPress}
                 performances={trainer.performances}
                 showHeatmap={true}
-                disabled={true}
               />
             </div>
           )}
