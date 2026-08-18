@@ -3,6 +3,7 @@ import { UseSingleNoteTrainerReturn } from '../../hooks/useSingleNoteTrainer'
 import { EXERCISE_PRESETS } from '../../domain/music/presets'
 import { AVAILABLE_STRATEGIES } from '../../domain/adaptation/adaptiveEngine'
 import { INSTRUMENT_CATALOG } from '../../domain/music/instruments'
+import { ADVANCE_MODE_OPTIONS, AdvanceMode } from '../../domain/exercise/types'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -34,8 +35,8 @@ export function SingleNoteView({
   return (
     <>
       {trainer.isSessionFinished ? (
-        <Card className="border-sky-500/40 bg-zinc-900/90">
-          <div className="flex justify-between items-center mb-4">
+        <Card className="border-sky-500/40 bg-zinc-900/90 space-y-4">
+          <div className="flex justify-between items-center">
             <div>
               <h3 className="text-lg font-bold text-sky-400 m-0">🎉 ¡Sesión Finalizada!</h3>
               <p className="text-xs text-zinc-400 mt-0.5">
@@ -45,19 +46,19 @@ export function SingleNoteView({
             <div className="flex gap-2">
               {weakNotesList.length >= 2 && (
                 <Button variant="danger" onClick={trainer.trainWeakNotesOnly}>
-                  🎯 Entrenar Solo Notas Débiles ({weakNotesList.length})
+                  🎯 Entrenar Notas Débiles ({weakNotesList.length})
                 </Button>
               )}
               <Button variant="primary" onClick={trainer.startSession}>
-                🔄 Repetir Misma Sesión
+                🔄 Repetir Sesión
               </Button>
               <Button variant="secondary" onClick={trainer.resetToConfig}>
-                ⚙️ Configurar Otra Sesión
+                ⚙️ Configurar Otra
               </Button>
             </div>
           </div>
 
-          <div className="space-y-2 mb-4">
+          <div className="space-y-1.5">
             <PianoKeyboard
               keys={pianoKeys}
               activeNotes={trainer.activeNotes}
@@ -90,10 +91,11 @@ export function SingleNoteView({
           )}
         </Card>
       ) : (
-        <Card>
-          <div className="flex justify-between items-center mb-3">
+        <Card className="space-y-3">
+          {/* BARRA SUPERIOR DE ESTADO & CONTROL */}
+          <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
             <div>
-              <h3 className="text-base font-semibold text-zinc-100 m-0">
+              <h3 className="text-sm font-semibold text-zinc-100 m-0">
                 {trainer.isSessionActive
                   ? `Pregunta ${trainer.currentQuestionIndex} / ${
                       trainer.sessionLength === -1
@@ -104,7 +106,7 @@ export function SingleNoteView({
                     }`
                   : 'Configuración: Reconocimiento de Notas'}
               </h3>
-              <div className="text-xs text-zinc-400 mt-0.5">
+              <div className="text-[11px] text-zinc-400 mt-0.5">
                 Timbre:{' '}
                 <strong className="text-emerald-400">{trainer.selectedInstrument.name}</strong> |
                 Motor:{' '}
@@ -121,10 +123,10 @@ export function SingleNoteView({
                 </Button>
               ) : (
                 <>
-                  <Button variant="primary" onClick={trainer.repeatCurrentNote}>
-                    🔊 Repetir Nota
+                  <Button variant="primary" size="sm" onClick={trainer.repeatCurrentNote}>
+                    🔊 Repetir (R)
                   </Button>
-                  <Button variant="danger" onClick={trainer.stopSession}>
+                  <Button variant="danger" size="sm" onClick={trainer.stopSession}>
                     ⏹ Detener y Guardar
                   </Button>
                 </>
@@ -132,35 +134,40 @@ export function SingleNoteView({
             </div>
           </div>
 
+          {/* SLOT FIJO DE FEEDBACK DURANTE EL EJERCICIO */}
           {trainer.isSessionActive && (
             <FeedbackPanel
               isWaitingAnswer={trainer.isWaitingAnswer}
               lastResult={trainer.lastResult}
+              isWaitingManualAdvance={trainer.isWaitingManualAdvance}
+              onAdvanceNext={trainer.advanceToNextQuestion}
             />
           )}
 
-          {/* TECLADO EN VIVO: HACE CLIC EN LA TECLA PARA RESPONDER CON EL MOUSE */}
-          {trainer.isSessionActive && (
-            <div className="space-y-1.5 mb-3">
-              <div className="text-xs text-zinc-400 flex justify-between items-center">
-                <span>
-                  🎹 Tocá en tu Roland FP-8 o hacé clic en el piano virtual para responder:
-                </span>
-              </div>
-              <PianoKeyboard
-                keys={pianoKeys}
-                activeNotes={trainer.activeNotes}
-                pressedNotes={pressedNotes}
-                isInteractiveTraining={true}
-                onPlayNoteVirtual={onVirtualKeyPress}
-                performances={trainer.performances}
-                showHeatmap={true}
-              />
+          {/* TECLADO DE PIANO ESTABLE (SIEMPRE EN LA MISMA COORDENADA) */}
+          <div className="space-y-1.5">
+            <div className="text-xs text-zinc-400 flex justify-between items-center">
+              <span>
+                {trainer.isSessionActive
+                  ? '🎹 Tocá en tu Roland FP-8 o hacé clic en el teclado:'
+                  : `Selección Libre (${trainer.activeNotes.length} notas seleccionadas):`}
+              </span>
             </div>
-          )}
+            <PianoKeyboard
+              keys={pianoKeys}
+              activeNotes={trainer.activeNotes}
+              pressedNotes={pressedNotes}
+              isInteractiveTraining={trainer.isSessionActive}
+              onPlayNoteVirtual={onVirtualKeyPress}
+              onToggleNote={!trainer.isSessionActive ? trainer.toggleNote : undefined}
+              performances={trainer.isSessionActive ? trainer.performances : undefined}
+              showHeatmap={trainer.isSessionActive}
+            />
+          </div>
 
+          {/* CONTROLES PREVIOS DE CONFIGURACIÓN */}
           {!trainer.isSessionActive && (
-            <div className="space-y-3">
+            <div className="space-y-3 pt-2">
               <div>
                 <div className="text-xs text-zinc-400 mb-1.5">Presets Rápidos:</div>
                 <div className="flex flex-wrap gap-1.5">
@@ -184,20 +191,7 @@ export function SingleNoteView({
                 </div>
               </div>
 
-              <div>
-                <div className="text-xs text-zinc-400 mb-1.5">
-                  Selección Libre de Teclas (C3 a C6 - {trainer.activeNotes.length} notas
-                  seleccionadas):
-                </div>
-                <PianoKeyboard
-                  keys={pianoKeys}
-                  activeNotes={trainer.activeNotes}
-                  pressedNotes={pressedNotes}
-                  onToggleNote={trainer.toggleNote}
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 pt-2 border-t border-zinc-800">
+              <div className="grid grid-cols-4 gap-3 pt-2 border-t border-zinc-800">
                 <div>
                   <label className="block text-xs text-zinc-400 mb-1">Timbre / Instrumento:</label>
                   <select
@@ -227,6 +221,21 @@ export function SingleNoteView({
                     {AVAILABLE_STRATEGIES.map((st) => (
                       <option key={st.id} value={st.id}>
                         {st.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Modo de Avance:</label>
+                  <select
+                    value={trainer.advanceMode}
+                    onChange={(e): void => trainer.setAdvanceMode(e.target.value as AdvanceMode)}
+                    className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                  >
+                    {ADVANCE_MODE_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
                       </option>
                     ))}
                   </select>

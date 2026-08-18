@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react'
-import { ExerciseResult, SessionStats } from '../domain/exercise/types'
+import { ExerciseResult, SessionStats, AdvanceMode } from '../domain/exercise/types'
 import { evaluateSingleNoteAnswer, calculateSessionStats } from '../domain/exercise/evaluator'
 import { StrategyId, NotePerformance, SelectionDecision } from '../domain/adaptation/types'
 import { createStrategy } from '../domain/adaptation/adaptiveEngine'
@@ -19,12 +19,15 @@ export interface UseSingleNoteTrainerReturn {
   toggleNote: (note: number) => void
   sessionLength: number
   setSessionLength: (len: number) => void
+  advanceMode: AdvanceMode
+  setAdvanceMode: (mode: AdvanceMode) => void
   selectedStrategyId: StrategyId
   setSelectedStrategyId: (id: StrategyId) => void
   selectedInstrument: InstrumentProfile
   setSelectedInstrumentId: (id: string) => void
   isSessionActive: boolean
   isSessionFinished: boolean
+  isWaitingManualAdvance: boolean
   currentQuestionIndex: number
   isWaitingAnswer: boolean
   lastResult: ExerciseResult | null
@@ -33,6 +36,7 @@ export interface UseSingleNoteTrainerReturn {
   performances: Map<number, NotePerformance>
   startSession: () => void
   stopSession: () => void
+  advanceToNextQuestion: () => void
   repeatCurrentNote: () => void
   handleUserNotePlayed: (playedNoteNumber: number) => void
   trainWeakNotesOnly: () => void
@@ -45,12 +49,14 @@ export function useSingleNoteTrainer({
   onTelemetryLog
 }: TrainerOptions): UseSingleNoteTrainerReturn {
   const [activeNotes, setActiveNotes] = useState<number[]>([60, 62, 64, 65, 67, 69, 71, 72])
-  const [sessionLength, setSessionLength] = useState<number>(10) // -1 = Modo Maestría, 0 = Infinito
+  const [sessionLength, setSessionLength] = useState<number>(10)
+  const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
   const [selectedStrategyId, setSelectedStrategyId] = useState<StrategyId>('adaptive_v1')
   const [selectedInstrumentId, setSelectedInstrumentIdState] =
     useState<string>('acoustic_grand_piano')
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false)
   const [isSessionFinished, setIsSessionFinished] = useState<boolean>(false)
+  const [isWaitingManualAdvance, setIsWaitingManualAdvance] = useState<boolean>(false)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
   const [currentExpectedNote, setCurrentExpectedNote] = useState<number | null>(null)
   const [lastDecision, setLastDecision] = useState<SelectionDecision | null>(null)
@@ -64,6 +70,7 @@ export function useSingleNoteTrainer({
   const sessionIdRef = useRef<string>('')
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<ExerciseResult[]>([])
+  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const selectedInstrument = useMemo(
     () => getInstrumentById(selectedInstrumentId),
@@ -81,6 +88,11 @@ export function useSingleNoteTrainer({
   const triggerNextQuestion = useCallback((): void => {
     if (activeNotes.length < 2) return
 
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current)
+      autoAdvanceTimerRef.current = null
+    }
+
     const decision = strategy.selectNextNote({
       activeNotes,
       history: historyBufferRef.current,
@@ -90,6 +102,7 @@ export function useSingleNoteTrainer({
     setCurrentExpectedNote(decision.selectedNote)
     setLastDecision(decision)
     setLastResult(null)
+    setIsWaitingManualAdvance(false)
     setIsWaitingAnswer(true)
     setStimulusStartTime(Date.now())
 
@@ -113,9 +126,15 @@ export function useSingleNoteTrainer({
   }
 
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current)
+      autoAdvanceTimerRef.current = null
+    }
+
     setIsSessionActive(false)
     setIsSessionFinished(true)
     setIsWaitingAnswer(false)
+    setIsWaitingManualAdvance(false)
 
     const allAnswers = [...answersBufferRef.current]
     if (allAnswers.length === 0) return
@@ -136,6 +155,31 @@ export function useSingleNoteTrainer({
     await saveSessionToDb(sessionRecord, allAnswers)
   }, [selectedStrategyId, selectedInstrument, activeNotes, saveSessionToDb])
 
+  const advanceToNextQuestion = useCallback((): void => {
+    const currentPerformances = strategy.getNotePerformances(activeNotes, historyBufferRef.current)
+    const allMastered = activeNotes.every((note) => {
+      const perf = currentPerformances.get(note)
+      return perf && perf.attempts >= 2 && perf.accuracyPercentage >= 85
+    })
+
+    const isMasteryCompleted = sessionLength === -1 && allMastered
+    const isFixedLengthCompleted = sessionLength > 0 && currentQuestionIndex >= sessionLength
+
+    if (isMasteryCompleted || isFixedLengthCompleted) {
+      finalizeAndSaveSession()
+    } else {
+      setCurrentQuestionIndex((prev) => prev + 1)
+      triggerNextQuestion()
+    }
+  }, [
+    activeNotes,
+    currentQuestionIndex,
+    finalizeAndSaveSession,
+    sessionLength,
+    strategy,
+    triggerNextQuestion
+  ])
+
   const stopSession = useCallback((): void => {
     if (answersBufferRef.current.length > 0) {
       finalizeAndSaveSession()
@@ -143,6 +187,7 @@ export function useSingleNoteTrainer({
       setIsSessionActive(false)
       setIsSessionFinished(false)
       setIsWaitingAnswer(false)
+      setIsWaitingManualAdvance(false)
       setCurrentExpectedNote(null)
     }
   }, [finalizeAndSaveSession])
@@ -151,6 +196,7 @@ export function useSingleNoteTrainer({
     setIsSessionActive(false)
     setIsSessionFinished(false)
     setIsWaitingAnswer(false)
+    setIsWaitingManualAdvance(false)
     setCurrentExpectedNote(null)
   }
 
@@ -195,40 +241,29 @@ export function useSingleNoteTrainer({
         onTelemetryLog('EVAL', evalMsg)
       }
 
-      const currentPerformances = strategy.getNotePerformances(
-        activeNotes,
-        historyBufferRef.current
-      )
-      const allMastered = activeNotes.every((note) => {
-        const perf = currentPerformances.get(note)
-        return perf && perf.attempts >= 2 && perf.accuracyPercentage >= 85
-      })
+      // DETERMINAR SI AVANZA AUTOMÁTICO O ESPERA CLIC / ESPACIO
+      const shouldWaitManual =
+        advanceMode === 'manual' || (advanceMode === 'smart' && !result.correct)
 
-      const isMasteryCompleted = sessionLength === -1 && allMastered
-      const isFixedLengthCompleted = sessionLength > 0 && currentQuestionIndex >= sessionLength
-
-      setTimeout(() => {
-        if (isMasteryCompleted || isFixedLengthCompleted) {
-          finalizeAndSaveSession()
-        } else {
-          setCurrentQuestionIndex((prev) => prev + 1)
-          triggerNextQuestion()
-        }
-      }, 1400)
+      if (shouldWaitManual) {
+        setIsWaitingManualAdvance(true)
+      } else {
+        const delay = advanceMode === 'auto_slow' ? 3500 : 1400
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          advanceToNextQuestion()
+        }, delay)
+      }
     },
     [
       isSessionActive,
       isWaitingAnswer,
       currentExpectedNote,
       stimulusStartTime,
-      sessionLength,
       currentQuestionIndex,
       lastDecision,
       onTelemetryLog,
-      activeNotes,
-      strategy,
-      finalizeAndSaveSession,
-      triggerNextQuestion
+      advanceMode,
+      advanceToNextQuestion
     ]
   )
 
@@ -276,12 +311,15 @@ export function useSingleNoteTrainer({
     toggleNote,
     sessionLength,
     setSessionLength,
+    advanceMode,
+    setAdvanceMode,
     selectedStrategyId,
     setSelectedStrategyId,
     selectedInstrument,
     setSelectedInstrumentId,
     isSessionActive,
     isSessionFinished,
+    isWaitingManualAdvance,
     currentQuestionIndex,
     isWaitingAnswer,
     lastResult,
@@ -290,6 +328,7 @@ export function useSingleNoteTrainer({
     performances,
     startSession,
     stopSession,
+    advanceToNextQuestion,
     repeatCurrentNote,
     handleUserNotePlayed,
     trainWeakNotesOnly,

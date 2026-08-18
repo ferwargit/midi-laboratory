@@ -10,6 +10,7 @@ import {
   IntervalExerciseResult,
   evaluateIntervalAnswer
 } from '../domain/exercise/intervalEvaluator'
+import { AdvanceMode } from '../domain/exercise/types'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
 
@@ -32,8 +33,11 @@ export interface UseIntervalTrainerReturn {
   toggleRootNote: (note: number) => void
   sessionLength: number
   setSessionLength: (len: number) => void
+  advanceMode: AdvanceMode
+  setAdvanceMode: (mode: AdvanceMode) => void
   isSessionActive: boolean
   isSessionFinished: boolean
+  isWaitingManualAdvance: boolean
   currentQuestionIndex: number
   currentStimulus: IntervalExerciseStimulus | null
   waitingNoteStep: 1 | 2
@@ -42,6 +46,7 @@ export interface UseIntervalTrainerReturn {
   sessionHistory: IntervalExerciseResult[]
   startSession: () => void
   stopSession: () => void
+  advanceToNextInterval: () => void
   repeatCurrentInterval: () => void
   handleUserNotePlayed: (noteNumber: number) => void
   trainWeakIntervalsOnly: () => void
@@ -57,8 +62,10 @@ export function useIntervalTrainer({
   const [directionMode, setDirectionMode] = useState<DirectionSelection>('ascending')
   const [rootRangeNotes, setRootRangeNotes] = useState<number[]>([60])
   const [sessionLength, setSessionLength] = useState<number>(10)
+  const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false)
   const [isSessionFinished, setIsSessionFinished] = useState<boolean>(false)
+  const [isWaitingManualAdvance, setIsWaitingManualAdvance] = useState<boolean>(false)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
   const [currentStimulus, setCurrentStimulus] = useState<IntervalExerciseStimulus | null>(null)
   const [waitingNoteStep, setWaitingNoteStep] = useState<1 | 2>(1)
@@ -72,6 +79,7 @@ export function useIntervalTrainer({
   const sessionIdRef = useRef<string>('')
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<IntervalExerciseResult[]>([])
+  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const setSelectedPresetId = (id: string): void => {
     setSelectedPresetIdState(id)
@@ -104,6 +112,11 @@ export function useIntervalTrainer({
   const triggerNextInterval = useCallback((): void => {
     if (activeIntervals.length === 0 || rootRangeNotes.length === 0) return
 
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current)
+      autoAdvanceTimerRef.current = null
+    }
+
     const chosenSemitones = activeIntervals[Math.floor(Math.random() * activeIntervals.length)]
 
     let finalDirection: IntervalDirection = 'ascending'
@@ -128,6 +141,7 @@ export function useIntervalTrainer({
     setWaitingNoteStep(1)
     setFirstNotePlayed(null)
     setLastResult(null)
+    setIsWaitingManualAdvance(false)
     setStimulusStartTime(Date.now())
 
     onPlayInterval(chosenRoot, targetNote, finalDirection)
@@ -154,8 +168,14 @@ export function useIntervalTrainer({
   }
 
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current)
+      autoAdvanceTimerRef.current = null
+    }
+
     setIsSessionActive(false)
     setIsSessionFinished(true)
+    setIsWaitingManualAdvance(false)
     setWaitingNoteStep(1)
     setFirstNotePlayed(null)
 
@@ -183,12 +203,22 @@ export function useIntervalTrainer({
     await saveSessionToDb(sessionRecord, allAnswers)
   }, [activeIntervals.length, saveSessionToDb])
 
+  const advanceToNextInterval = useCallback((): void => {
+    if (sessionLength > 0 && currentQuestionIndex >= sessionLength) {
+      finalizeAndSaveSession()
+    } else {
+      setCurrentQuestionIndex((prev) => prev + 1)
+      triggerNextInterval()
+    }
+  }, [currentQuestionIndex, finalizeAndSaveSession, sessionLength, triggerNextInterval])
+
   const stopSession = useCallback((): void => {
     if (answersBufferRef.current.length > 0) {
       finalizeAndSaveSession()
     } else {
       setIsSessionActive(false)
       setIsSessionFinished(false)
+      setIsWaitingManualAdvance(false)
       setCurrentStimulus(null)
       setFirstNotePlayed(null)
     }
@@ -197,6 +227,7 @@ export function useIntervalTrainer({
   const resetToConfig = (): void => {
     setIsSessionActive(false)
     setIsSessionFinished(false)
+    setIsWaitingManualAdvance(false)
     setCurrentStimulus(null)
     setFirstNotePlayed(null)
   }
@@ -255,14 +286,17 @@ export function useIntervalTrainer({
           onTelemetryLog('EVAL', result.feedbackMessage)
         }
 
-        setTimeout(() => {
-          if (sessionLength > 0 && currentQuestionIndex >= sessionLength) {
-            finalizeAndSaveSession()
-          } else {
-            setCurrentQuestionIndex((prev) => prev + 1)
-            triggerNextInterval()
-          }
-        }, 1600)
+        const shouldWaitManual =
+          advanceMode === 'manual' || (advanceMode === 'smart' && !result.isIntervalCorrect)
+
+        if (shouldWaitManual) {
+          setIsWaitingManualAdvance(true)
+        } else {
+          const delay = advanceMode === 'auto_slow' ? 3500 : 1600
+          autoAdvanceTimerRef.current = setTimeout(() => {
+            advanceToNextInterval()
+          }, delay)
+        }
       }
     },
     [
@@ -271,11 +305,10 @@ export function useIntervalTrainer({
       waitingNoteStep,
       firstNotePlayed,
       stimulusStartTime,
-      sessionLength,
       currentQuestionIndex,
       onTelemetryLog,
-      finalizeAndSaveSession,
-      triggerNextInterval
+      advanceMode,
+      advanceToNextInterval
     ]
   )
 
@@ -321,8 +354,11 @@ export function useIntervalTrainer({
     toggleRootNote,
     sessionLength,
     setSessionLength,
+    advanceMode,
+    setAdvanceMode,
     isSessionActive,
     isSessionFinished,
+    isWaitingManualAdvance,
     currentQuestionIndex,
     currentStimulus,
     waitingNoteStep,
@@ -331,6 +367,7 @@ export function useIntervalTrainer({
     sessionHistory,
     startSession,
     stopSession,
+    advanceToNextInterval,
     repeatCurrentInterval,
     handleUserNotePlayed,
     trainWeakIntervalsOnly,

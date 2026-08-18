@@ -1,40 +1,32 @@
 import React from 'react'
-import { UseIntervalTrainerReturn } from '../../hooks/useIntervalTrainer'
-import { getIntervalDefinition } from '../../domain/music/intervals'
+import { UseSequenceTrainerReturn } from '../../hooks/useSequenceTrainer'
 import { ADVANCE_MODE_OPTIONS, AdvanceMode } from '../../domain/exercise/types'
-import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { PianoKeyboard } from '../trainer/PianoKeyboard'
-import { IntervalFeedbackPanel } from '../trainer/IntervalFeedbackPanel'
-import { IntervalSummaryCard } from '../trainer/IntervalSummaryCard'
+import { SequenceFeedbackPanel } from '../trainer/SequenceFeedbackPanel'
+import { SequenceSummaryCard } from '../trainer/SequenceSummaryCard'
 
-interface IntervalsViewProps {
-  trainer: UseIntervalTrainerReturn
+interface SequencesViewProps {
+  trainer: UseSequenceTrainerReturn
   pianoKeys: number[]
   pressedNotes: number[]
   onVirtualKeyPress?: (note: number) => void
 }
 
-export function IntervalsView({
+export function SequencesView({
   trainer,
   pianoKeys,
   pressedNotes,
   onVirtualKeyPress
-}: IntervalsViewProps): React.ReactElement {
-  const liveActiveNotes = trainer.isSessionActive
-    ? trainer.firstNotePlayed !== null
-      ? [trainer.firstNotePlayed]
-      : trainer.rootRangeNotes
-    : trainer.rootRangeNotes
-
+}: SequencesViewProps): React.ReactElement {
   return (
     <>
       {trainer.isSessionFinished ? (
-        <IntervalSummaryCard
+        <SequenceSummaryCard
           history={trainer.sessionHistory}
           onRepeatSession={trainer.startSession}
-          onTrainWeakOnly={trainer.trainWeakIntervalsOnly}
+          onTrainWeakOnly={trainer.trainWeakMotifsOnly}
           onResetToConfig={trainer.resetToConfig}
         />
       ) : (
@@ -43,20 +35,15 @@ export function IntervalsView({
             <div>
               <h3 className="text-sm font-semibold text-zinc-100 m-0">
                 {trainer.isSessionActive
-                  ? `Pregunta ${trainer.currentQuestionIndex} / ${trainer.sessionLength === 0 ? '∞' : trainer.sessionLength}`
-                  : 'Configuración: Reconocimiento de Intervalos'}
+                  ? `Frase ${trainer.currentQuestionIndex} / ${
+                      trainer.sessionLength === 0 ? '∞' : trainer.sessionLength
+                    }`
+                  : 'Configuración: Memoria Melódica / Secuencias'}
               </h3>
               <div className="text-[11px] text-zinc-400 mt-0.5">
-                Intervalos activos:{' '}
-                <strong className="text-sky-400">{trainer.activeIntervals.length}</strong> |
-                Dirección:{' '}
-                <strong className="text-emerald-400">
-                  {trainer.directionMode === 'ascending'
-                    ? '⬆️ Ascendente'
-                    : trainer.directionMode === 'descending'
-                      ? '⬇️ Descendente'
-                      : '🔀 Mixta'}
-                </strong>
+                Longitud: <strong className="text-sky-400">{trainer.sequenceLength} notas</strong> |
+                Notas activas:{' '}
+                <strong className="text-emerald-400">{trainer.customCandidateNotes.length}</strong>
               </div>
             </div>
 
@@ -67,7 +54,7 @@ export function IntervalsView({
                 </Button>
               ) : (
                 <>
-                  <Button variant="primary" size="sm" onClick={trainer.repeatCurrentInterval}>
+                  <Button variant="primary" size="sm" onClick={trainer.repeatCurrentSequence}>
                     🔊 Repetir (R)
                   </Button>
                   <Button variant="danger" size="sm" onClick={trainer.stopSession}>
@@ -79,32 +66,29 @@ export function IntervalsView({
           </div>
 
           {trainer.isSessionActive && (
-            <IntervalFeedbackPanel
+            <SequenceFeedbackPanel
               isSessionActive={trainer.isSessionActive}
-              stimulus={trainer.currentStimulus}
-              waitingNoteStep={trainer.waitingNoteStep}
-              firstNotePlayed={trainer.firstNotePlayed}
+              expectedLength={trainer.sequenceLength}
+              capturedNotes={trainer.capturedNotes}
               lastResult={trainer.lastResult}
               isWaitingManualAdvance={trainer.isWaitingManualAdvance}
-              onAdvanceNext={trainer.advanceToNextInterval}
+              onAdvanceNext={trainer.advanceToNextSequence}
             />
           )}
 
           <div className="space-y-1.5">
             <div className="text-xs text-zinc-400 font-medium">
               {trainer.isSessionActive
-                ? trainer.waitingNoteStep === 1
-                  ? '🎹 Rango de partida activo (Tocá la 1ª nota en el FP-8 o hacé clic):'
-                  : `🎹 1ª Nota (${midiNoteToName(trainer.firstNotePlayed!)}) fijada. Tocá la 2ª nota:`
-                : `Rango de Notas Base de Partida (${trainer.rootRangeNotes.length} notas):`}
+                ? `🎹 Tocá en tu Roland FP-8 o hacé clic (${trainer.capturedNotes.length}/${trainer.sequenceLength} notas):`
+                : `Selección Libre de Notas Candidatas (${trainer.customCandidateNotes.length} activas):`}
             </div>
             <PianoKeyboard
               keys={pianoKeys}
-              activeNotes={liveActiveNotes}
+              activeNotes={trainer.customCandidateNotes}
               pressedNotes={pressedNotes}
               isInteractiveTraining={trainer.isSessionActive}
               onPlayNoteVirtual={onVirtualKeyPress}
-              onToggleNote={!trainer.isSessionActive ? trainer.toggleRootNote : undefined}
+              onToggleNote={!trainer.isSessionActive ? trainer.toggleCustomNote : undefined}
             />
           </div>
 
@@ -128,55 +112,28 @@ export function IntervalsView({
                         <div className="font-semibold text-xs">{preset.name}</div>
                         <div className="text-[10px] text-zinc-400">{preset.description}</div>
                       </div>
+                      <span className="px-2 py-0.5 rounded bg-zinc-800 text-[10px] font-mono shrink-0 ml-2">
+                        {preset.length} notas
+                      </span>
                     </button>
                   ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs text-zinc-400 mb-1.5">
-                  Selección Libre de Intervalos ({trainer.activeIntervals.length} activos):
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((semitone) => {
-                    const active = trainer.activeIntervals.includes(semitone)
-                    const def = getIntervalDefinition(semitone)
-                    return (
-                      <button
-                        key={semitone}
-                        type="button"
-                        onClick={(): void => trainer.toggleInterval(semitone)}
-                        className={`px-2.5 py-1.5 rounded text-xs font-mono font-bold transition-colors cursor-pointer border ${
-                          active
-                            ? 'bg-sky-600 border-sky-500 text-white shadow-sm'
-                            : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:bg-zinc-800'
-                        }`}
-                        title={`${def.fullName} (${semitone} semitonos)`}
-                      >
-                        {def.shortName} ({semitone}st)
-                      </button>
-                    )
-                  })}
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3 pt-2 border-t border-zinc-800">
                 <div>
                   <label className="block text-xs text-zinc-400 mb-1">
-                    Dirección del Intervalo:
+                    Longitud de la Secuencia:
                   </label>
                   <select
-                    value={trainer.directionMode}
-                    onChange={(e): void =>
-                      trainer.setDirectionMode(
-                        e.target.value as 'ascending' | 'descending' | 'both'
-                      )
-                    }
+                    value={trainer.sequenceLength}
+                    onChange={(e): void => trainer.setSequenceLength(Number(e.target.value))}
                     className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
                   >
-                    <option value="ascending">⬆️ Solo Ascendente (Grave → Aguda)</option>
-                    <option value="descending">⬇️ Solo Descendente (Aguda → Grave)</option>
-                    <option value="both">🔀 Mixta (Ascendente y Descendente)</option>
+                    <option value={3}>3 notas (Motivos cortos)</option>
+                    <option value={4}>4 notas (Frases estándar)</option>
+                    <option value={5}>5 notas (Arpegios y melodías)</option>
+                    <option value={6}>6 notas (Memoria avanzada)</option>
                   </select>
                 </div>
 

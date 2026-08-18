@@ -3,25 +3,26 @@ import { generateMidiRange, midiNoteToName } from './domain/music/noteUtils'
 import { useMidi } from './hooks/useMidi'
 import { useSingleNoteTrainer } from './hooks/useSingleNoteTrainer'
 import { useIntervalTrainer } from './hooks/useIntervalTrainer'
+import { useSequenceTrainer } from './hooks/useSequenceTrainer'
 import { useDatabaseStore } from './stores/useDatabaseStore'
 import { Header } from './components/trainer/Header'
 import { MidiDeviceSelect } from './components/trainer/MidiDeviceSelect'
 import { SingleNoteView } from './components/views/SingleNoteView'
 import { IntervalsView } from './components/views/IntervalsView'
+import { SequencesView } from './components/views/SequencesView'
 import { DatabaseCard } from './components/views/DatabaseCard'
 import { ConfirmModal } from './components/ui/ConfirmModal'
 import { MidiMonitor } from './components/trainer/MidiMonitor'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
 
-type AppMode = 'single_note' | 'intervals'
+type AppMode = 'single_note' | 'intervals' | 'sequences'
 
 export default function App(): React.ReactElement {
   const [appMode, setAppMode] = useState<AppMode>('single_note')
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false)
   const handleNoteRef = useRef<(note: number) => void>(() => {})
 
-  // 1. Inicializar Store de Base de Datos
   const initializeDb = useDatabaseStore((state) => state.initialize)
   const clearDb = useDatabaseStore((state) => state.clearDatabase)
 
@@ -29,13 +30,12 @@ export default function App(): React.ReactElement {
     initializeDb()
   }, [initializeDb])
 
-  // 2. Hook de MIDI
   const midi = useMidi({
     onNoteOn: (note) => handleNoteRef.current(note),
     enableSoftwareThru: true
   })
 
-  // 3. Entrenador de Nota Individual
+  // 1. Modalidad 1: Nota Individual
   const singleNoteTrainer = useSingleNoteTrainer({
     onPlayStimulus: (note, decision) => {
       midi.sendNote(note)
@@ -65,7 +65,7 @@ export default function App(): React.ReactElement {
     }
   })
 
-  // 4. Entrenador de Intervalos (2 Notas)
+  // 2. Modalidad 2: Intervalos (2 Notas)
   const intervalTrainer = useIntervalTrainer({
     onPlayInterval: (root, target) => {
       midi.sendNote(root, 500)
@@ -89,22 +89,71 @@ export default function App(): React.ReactElement {
     }
   })
 
-  // Enrutar pulsaciones físicas del piano FP-8
+  // 3. Modalidad 3: Secuencias (3 a 6 Notas)
+  const sequenceTrainer = useSequenceTrainer({
+    onPlaySequence: (notes) => {
+      const names = notes.map((n) => midiNoteToName(n)).join(' - ')
+      midi.addLog({
+        type: 'OUT',
+        message: `🎼 Secuencia (${notes.length} notas) -> ${names}`
+      })
+
+      notes.forEach((note, idx) => {
+        setTimeout(() => {
+          midi.sendNote(note, 450)
+        }, idx * 500)
+      })
+    },
+    onTelemetryLog: (type, message) => {
+      midi.addLog({ type, message })
+    }
+  })
+
   useEffect(() => {
     if (appMode === 'single_note') {
       handleNoteRef.current = singleNoteTrainer.handleUserNotePlayed
-    } else {
+    } else if (appMode === 'intervals') {
       handleNoteRef.current = intervalTrainer.handleUserNotePlayed
+    } else {
+      handleNoteRef.current = sequenceTrainer.handleUserNotePlayed
     }
-  }, [appMode, singleNoteTrainer.handleUserNotePlayed, intervalTrainer.handleUserNotePlayed])
+  }, [
+    appMode,
+    singleNoteTrainer.handleUserNotePlayed,
+    intervalTrainer.handleUserNotePlayed,
+    sequenceTrainer.handleUserNotePlayed
+  ])
 
-  // Handler unificado para cuando hacés clic en una tecla del piano virtual
+  // ATAJOS DE TECLADO DE COMPUTADORA: Space (Avanzar) / R (Repetir)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.code === 'Space') {
+        e.preventDefault()
+        if (appMode === 'single_note' && singleNoteTrainer.isWaitingManualAdvance) {
+          singleNoteTrainer.advanceToNextQuestion()
+        } else if (appMode === 'intervals' && intervalTrainer.isWaitingManualAdvance) {
+          intervalTrainer.advanceToNextInterval()
+        } else if (appMode === 'sequences' && sequenceTrainer.isWaitingManualAdvance) {
+          sequenceTrainer.advanceToNextSequence()
+        }
+      } else if (e.key === 'r' || e.key === 'R') {
+        if (appMode === 'single_note' && singleNoteTrainer.isSessionActive) {
+          singleNoteTrainer.repeatCurrentNote()
+        } else if (appMode === 'intervals' && intervalTrainer.isSessionActive) {
+          intervalTrainer.repeatCurrentInterval()
+        } else if (appMode === 'sequences' && sequenceTrainer.isSessionActive) {
+          sequenceTrainer.repeatCurrentSequence()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return (): void => window.removeEventListener('keydown', handleKeyDown)
+  }, [appMode, singleNoteTrainer, intervalTrainer, sequenceTrainer])
+
   const handleVirtualKeyPress = useCallback(
     (noteNumber: number): void => {
-      // Reproduce el sonido en el Korg NS5R
       midi.sendNote(noteNumber, 350, 95)
-
-      // Registra en el log
       midi.addLog({
         type: 'IN',
         message: `🖱️ Clic en Piano Virtual -> ${midiNoteToName(noteNumber)} (${noteNumber})`,
@@ -112,17 +161,21 @@ export default function App(): React.ReactElement {
         velocity: 95
       })
 
-      // Envía la nota a la modalidad activa
       if (appMode === 'single_note') {
         singleNoteTrainer.handleUserNotePlayed(noteNumber)
-      } else {
+      } else if (appMode === 'intervals') {
         intervalTrainer.handleUserNotePlayed(noteNumber)
+      } else {
+        sequenceTrainer.handleUserNotePlayed(noteNumber)
       }
     },
-    [midi, appMode, singleNoteTrainer, intervalTrainer]
+    [midi, appMode, singleNoteTrainer, intervalTrainer, sequenceTrainer]
   )
 
-  const isAnySessionActive = singleNoteTrainer.isSessionActive || intervalTrainer.isSessionActive
+  const isAnySessionActive =
+    singleNoteTrainer.isSessionActive ||
+    intervalTrainer.isSessionActive ||
+    sequenceTrainer.isSessionActive
 
   const handleConfirmReset = async (): Promise<void> => {
     await clearDb()
@@ -159,6 +212,18 @@ export default function App(): React.ReactElement {
         >
           📏 Modalidad 2: Intervalos (2 Notas)
         </button>
+        <button
+          type="button"
+          disabled={isAnySessionActive}
+          onClick={(): void => setAppMode('sequences')}
+          className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
+            appMode === 'sequences'
+              ? 'bg-sky-600 text-white shadow-sm'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+          }`}
+        >
+          🎼 Modalidad 3: Secuencias (3 a 6 Notas)
+        </button>
       </div>
 
       <MidiDeviceSelect
@@ -171,17 +236,28 @@ export default function App(): React.ReactElement {
         disabled={isAnySessionActive}
       />
 
-      {/* VISTAS MODULARES CON SOPORTE DE CLIC VIRTUAL */}
-      {appMode === 'single_note' ? (
+      {/* VISTAS MODULARES */}
+      {appMode === 'single_note' && (
         <SingleNoteView
           trainer={singleNoteTrainer}
           pianoKeys={PIANO_KEYS}
           pressedNotes={midi.pressedNotes}
           onVirtualKeyPress={handleVirtualKeyPress}
         />
-      ) : (
+      )}
+
+      {appMode === 'intervals' && (
         <IntervalsView
           trainer={intervalTrainer}
+          pianoKeys={PIANO_KEYS}
+          pressedNotes={midi.pressedNotes}
+          onVirtualKeyPress={handleVirtualKeyPress}
+        />
+      )}
+
+      {appMode === 'sequences' && (
+        <SequencesView
+          trainer={sequenceTrainer}
           pianoKeys={PIANO_KEYS}
           pressedNotes={midi.pressedNotes}
           onVirtualKeyPress={handleVirtualKeyPress}
