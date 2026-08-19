@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { evaluateSingleNoteAnswer, calculateSessionStats } from './evaluator'
 import { ExerciseResult } from './types'
+import { DEFAULT_EVALUATION_POLICY } from './evalPolicy'
 
-describe('evaluator - Motor de evaluación de ejercicios', () => {
+describe('evaluator - Motor de evaluación de ejercicios con política musical', () => {
   describe('evaluateSingleNoteAnswer', () => {
     it('debe marcar como correcto cuando las notas coinciden y distancia 0', () => {
       const result = evaluateSingleNoteAnswer(60, 60, 1200)
@@ -21,6 +22,17 @@ describe('evaluator - Motor de evaluación de ejercicios', () => {
       const result = evaluateSingleNoteAnswer(60, 59, 900) // C4 esperado, B3 tocado
       expect(result.correct).toBe(false)
       expect(result.semitoneDistance).toBe(-1)
+    })
+
+    it('debe respetar una política flexible de octava si se especifica', () => {
+      const flexiblePolicy = { ...DEFAULT_EVALUATION_POLICY, strictOctave: false }
+      const result = evaluateSingleNoteAnswer(60, 72, 1000, flexiblePolicy) // C4 esperado, C5 tocado
+      expect(result.correct).toBe(true)
+    })
+
+    it('debe sanitizar latencias anormales o negativas según la política', () => {
+      const result = evaluateSingleNoteAnswer(60, 60, -200)
+      expect(result.responseTimeMs).toBe(DEFAULT_EVALUATION_POLICY.clampResponseTime.minMs)
     })
   })
 

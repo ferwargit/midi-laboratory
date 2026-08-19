@@ -1,22 +1,30 @@
 import { ExerciseResult, SessionStats } from './types'
+import {
+  DEFAULT_EVALUATION_POLICY,
+  EvaluationPolicy,
+  checkNoteMatch,
+  sanitizeResponseTime
+} from './evalPolicy'
 
 /**
- * Evalúa la respuesta de un usuario frente a una nota esperada.
+ * Evalúa la respuesta de un usuario frente a una nota esperada usando la política musical centralizada.
  */
 export function evaluateSingleNoteAnswer(
   expectedNote: number,
   playedNote: number,
-  responseTimeMs: number
+  rawResponseTimeMs: number,
+  policy: EvaluationPolicy = DEFAULT_EVALUATION_POLICY
 ): ExerciseResult {
-  const correct = expectedNote === playedNote
-  const semitoneDistance = playedNote - expectedNote
+  const correct = checkNoteMatch(expectedNote, playedNote, policy)
+  const semitoneDistance = policy.normalizedDistance(expectedNote, playedNote)
+  const responseTimeMs = sanitizeResponseTime(rawResponseTimeMs, policy)
 
   return {
     expectedNote,
     playedNote,
     correct,
     semitoneDistance,
-    responseTimeMs: Math.max(0, responseTimeMs)
+    responseTimeMs
   }
 }
 

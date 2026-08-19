@@ -45,7 +45,7 @@ export interface UseSingleNoteTrainerReturn {
   sessionElapsedSeconds: number
   stats: SessionStats
   performances: Map<number, NotePerformance>
-  startSession: (overrideNotes?: number[]) => void
+  startSession: (overrideNotes?: unknown) => void
   stopSession: () => void
   advanceToNextQuestion: () => void
   repeatCurrentNote: () => void
@@ -84,13 +84,15 @@ export function useSingleNoteTrainer({
 
   const sessionIdRef = useRef<string>('')
   const sessionStartTimeRef = useRef<number>(0)
+  const questionTokenRef = useRef<string | null>(null)
+  const isAdvancingRef = useRef<boolean>(false)
   const activeNotesBufferRef = useRef<number[]>([60, 62, 64, 65, 67, 69, 71, 72])
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<ExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const isWaitingAnswerRef = useRef<boolean>(false)
 
-  // Sincronizar el buffer de notas activas
   useEffect(() => {
     activeNotesBufferRef.current = activeNotes
   }, [activeNotes])
@@ -118,6 +120,9 @@ export function useSingleNoteTrainer({
         autoAdvanceTimerRef.current = null
       }
 
+      const token = `token_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+      questionTokenRef.current = token
+
       const decision = strategy.selectNextNote({
         activeNotes: currentPool,
         history: historyBufferRef.current,
@@ -128,8 +133,12 @@ export function useSingleNoteTrainer({
       setLastDecision(decision)
       setLastResult(null)
       setIsWaitingManualAdvance(false)
+      isWaitingAnswerRef.current = true
       setIsWaitingAnswer(true)
       setStimulusStartTime(Date.now())
+
+      // Liberar el candado de avance solo cuando el nuevo ejercicio ya está activo
+      isAdvancingRef.current = false
 
       onPlayStimulus(decision.selectedNote, decision)
     },
@@ -145,6 +154,9 @@ export function useSingleNoteTrainer({
       clearInterval(sessionCountdownTimerRef.current)
       sessionCountdownTimerRef.current = null
     }
+
+    questionTokenRef.current = null
+    isAdvancingRef.current = false
 
     const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
     setSessionElapsedSeconds(totalSeconds)
@@ -209,7 +221,6 @@ export function useSingleNoteTrainer({
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
   const startSession = (overrideNotes?: unknown): void => {
-    // Protección contra SyntheticEvent de React
     const validOverride =
       Array.isArray(overrideNotes) && overrideNotes.length > 0 ? (overrideNotes as number[]) : null
     const notesToUse = validOverride || activeNotes
@@ -242,6 +253,15 @@ export function useSingleNoteTrainer({
   }
 
   const advanceToNextQuestion = useCallback((): void => {
+    // Si ya estamos esperando respuesta de la nueva pregunta o no está activa la sesión, ignorar avances espurios
+    if (!isSessionActive || isAdvancingRef.current || isWaitingAnswerRef.current) return
+    isAdvancingRef.current = true
+
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current)
+      autoAdvanceTimerRef.current = null
+    }
+
     const currentPerformances = strategy.getNotePerformances(
       activeNotesBufferRef.current,
       historyBufferRef.current
@@ -262,6 +282,7 @@ export function useSingleNoteTrainer({
       triggerNextQuestion()
     }
   }, [
+    isSessionActive,
     currentQuestionIndex,
     finalizeAndSaveSession,
     sessionLimitType,
@@ -274,6 +295,8 @@ export function useSingleNoteTrainer({
     if (answersBufferRef.current.length > 0) {
       finalizeAndSaveSession()
     } else {
+      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
+      questionTokenRef.current = null
       setIsSessionActive(false)
       setIsSessionFinished(false)
       setIsWaitingAnswer(false)
@@ -283,6 +306,8 @@ export function useSingleNoteTrainer({
   }, [finalizeAndSaveSession])
 
   const resetToConfig = (): void => {
+    if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
+    questionTokenRef.current = null
     setIsSessionActive(false)
     setIsSessionFinished(false)
     setIsWaitingAnswer(false)
@@ -298,7 +323,13 @@ export function useSingleNoteTrainer({
 
   const handleUserNotePlayed = useCallback(
     (playedNoteNumber: number): void => {
-      if (!isSessionActive || !isWaitingAnswer || currentExpectedNote === null) return
+      if (
+        !isSessionActive ||
+        !isWaitingAnswer ||
+        currentExpectedNote === null ||
+        !questionTokenRef.current
+      )
+        return
 
       const responseTimeMs = Date.now() - stimulusStartTime
       const result = evaluateSingleNoteAnswer(currentExpectedNote, playedNoteNumber, responseTimeMs)
@@ -322,6 +353,7 @@ export function useSingleNoteTrainer({
 
       setLastResult(result)
       setSessionHistory([...historyBufferRef.current])
+      isWaitingAnswerRef.current = false
       setIsWaitingAnswer(false)
 
       if (onTelemetryLog) {

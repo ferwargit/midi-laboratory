@@ -17,6 +17,7 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
     expect(result.current.isSessionActive).toBe(false)
     expect(result.current.isSessionFinished).toBe(false)
     expect(result.current.currentQuestionIndex).toBe(0)
+    expect(result.current.sessionLimitType).toBe('questions')
   })
 
   it('debe tolerar que startSession reciba un evento sin lanzar error de iterador', () => {
@@ -30,7 +31,6 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
       })
     )
 
-    // Simulamos que React le pasa un objeto no array
     const fakeEvent = {} as unknown as number[]
     act(() => {
       result.current.startSession(fakeEvent)
@@ -52,7 +52,7 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
       })
     )
 
-    const specificPool = [62, 64, 65] // D4, E4, F4
+    const specificPool = [62, 64, 65]
     act(() => {
       result.current.startSession(specificPool)
     })

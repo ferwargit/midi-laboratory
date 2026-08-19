@@ -34,7 +34,6 @@ describe('useSequenceTrainer - Hook de Entrenamiento de Secuencias Melódicas', 
     expect(result.current.isSessionActive).toBe(true)
     expect(onPlaySequence).toHaveBeenCalledTimes(1)
 
-    // Tocamos las 3 notas
     act(() => {
       result.current.handleUserNotePlayed(60)
     })
@@ -49,7 +48,6 @@ describe('useSequenceTrainer - Hook de Entrenamiento de Secuencias Melódicas', 
       result.current.handleUserNotePlayed(64)
     })
 
-    // Al tocar la 3ra nota se evalúa
     expect(result.current.lastResult).not.toBeNull()
     expect(result.current.sessionHistory.length).toBe(1)
   })

@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { parseMidiData, ParsedMidiMessage } from '../services/midi/midiParser'
+import { MidiInputFilter } from '../services/midi/midiInputFilter'
 
 export interface MidiLogEntry {
   id: number
@@ -24,11 +25,12 @@ export interface UseMidiReturn {
   selectedOutputId: string
   setSelectedInputId: (id: string) => void
   setSelectedOutputId: (id: string) => void
-  pressedNotes: number[] // Notas presionadas físicamente en este milisegundo
+  pressedNotes: number[]
   logs: MidiLogEntry[]
   addLog: (entry: Omit<MidiLogEntry, 'id' | 'time'>) => void
   sendNote: (noteNumber: number, durationMs?: number, velocity?: number) => void
   changeProgram: (programNumber: number, channel?: number) => void
+  clearAllPressedNotes: () => void
 }
 
 export function useMidi({
@@ -49,6 +51,9 @@ export function useMidi({
   )
   const [logs, setLogs] = useState<MidiLogEntry[]>([])
 
+  const filterRef = useRef<MidiInputFilter>(new MidiInputFilter(35))
+  const hungNotesTimersRef = useRef<Map<number, NodeJS.Timeout>>(new Map())
+
   const addLog = useCallback((entry: Omit<MidiLogEntry, 'id' | 'time'>): void => {
     const now = new Date()
     const time = `${now.getHours().toString().padStart(2, '0')}:${now
@@ -60,6 +65,13 @@ export function useMidi({
       .padStart(3, '0')}`
 
     setLogs((prev) => [...prev.slice(-35), { id: Date.now() + Math.random(), time, ...entry }])
+  }, [])
+
+  const clearAllPressedNotes = useCallback((): void => {
+    setPressedNotes([])
+    hungNotesTimersRef.current.forEach((t) => clearTimeout(t))
+    hungNotesTimersRef.current.clear()
+    filterRef.current.clearHistory()
   }, [])
 
   const refreshPorts = useCallback((access: MIDIAccess): void => {
@@ -127,6 +139,24 @@ export function useMidi({
       if (!parsed) return
 
       if (parsed.isNoteOn) {
+        const filtered = filterRef.current.processNoteOn(parsed.noteNumber, parsed.velocity)
+        if (filtered.isDebouncedDuplicate) {
+          return // Ignora rebote físico duplicado
+        }
+
+        // Limpiar timer previo si existía
+        if (hungNotesTimersRef.current.has(parsed.noteNumber)) {
+          clearTimeout(hungNotesTimersRef.current.get(parsed.noteNumber)!)
+        }
+
+        // Watchdog de 6 segundos para evitar notas colgadas (hung notes)
+        const watchdog = setTimeout(() => {
+          setPressedNotes((prev) => prev.filter((n) => n !== parsed.noteNumber))
+          hungNotesTimersRef.current.delete(parsed.noteNumber)
+        }, 6000)
+
+        hungNotesTimersRef.current.set(parsed.noteNumber, watchdog)
+
         setPressedNotes((prev) =>
           prev.includes(parsed.noteNumber) ? prev : [...prev, parsed.noteNumber]
         )
@@ -138,6 +168,10 @@ export function useMidi({
         })
         if (onNoteOn) onNoteOn(parsed.noteNumber, parsed.velocity)
       } else if (parsed.isNoteOff) {
+        if (hungNotesTimersRef.current.has(parsed.noteNumber)) {
+          clearTimeout(hungNotesTimersRef.current.get(parsed.noteNumber)!)
+          hungNotesTimersRef.current.delete(parsed.noteNumber)
+        }
         setPressedNotes((prev) => prev.filter((n) => n !== parsed.noteNumber))
         if (onNoteOff) onNoteOff(parsed.noteNumber)
       }
@@ -196,6 +230,7 @@ export function useMidi({
     logs,
     addLog,
     sendNote,
-    changeProgram
+    changeProgram,
+    clearAllPressedNotes
   }
 }

@@ -48,16 +48,14 @@ describe('useIntervalTrainer - Hook de Entrenamiento de Intervalos (2 Notas)', (
       result.current.startSession()
     })
 
-    // Paso 1: Usuario toca C4 (60)
     act(() => {
       result.current.handleUserNotePlayed(60)
     })
 
     expect(result.current.waitingNoteStep).toBe(2)
     expect(result.current.firstNotePlayed).toBe(60)
-    expect(result.current.lastResult).toBeNull() // Aún no evalúa
+    expect(result.current.lastResult).toBeNull()
 
-    // Paso 2: Usuario toca E4 (64)
     act(() => {
       result.current.handleUserNotePlayed(64)
     })
