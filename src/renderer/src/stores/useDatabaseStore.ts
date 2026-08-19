@@ -1,7 +1,16 @@
 import { create } from 'zustand'
 import { DatabaseEngine } from '../domain/database/databaseEngine'
-import { DatabaseSummary, DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
-import { AnalyticsMetrics, computeAnalyticsMetrics } from '../domain/analytics/historyAnalytics'
+import {
+  DatabaseSummary,
+  DbAnswerRecord,
+  DbSessionRecord,
+  DbAiReportRecord
+} from '../domain/database/types'
+import {
+  AnalyticsMetrics,
+  AnalyticsModeFilter,
+  computeAnalyticsMetrics
+} from '../domain/analytics/historyAnalytics'
 import { LmStudioService } from '../domain/ai/lmStudioService'
 import { AiAnalysisResponse } from '../domain/ai/types'
 import { generateAlgorithmicFallback } from '../domain/ai/fallbackGenerator'
@@ -11,6 +20,9 @@ interface DatabaseState {
   summary: DatabaseSummary
   sessions: DbSessionRecord[]
   answers: DbAnswerRecord[]
+  aiReports: DbAiReportRecord[]
+  modeFilter: AnalyticsModeFilter
+  setModeFilter: (filter: AnalyticsModeFilter) => void
   metrics: AnalyticsMetrics
   aiResponse: AiAnalysisResponse | null
   isLmStudioOnline: boolean
@@ -25,6 +37,7 @@ interface DatabaseState {
 }
 
 const emptyMetrics: AnalyticsMetrics = {
+  modeFilter: 'all',
   totalAnswers: 0,
   totalCorrect: 0,
   overallAccuracy: 0,
@@ -51,11 +64,20 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
   sessions: [],
   answers: [],
+  aiReports: [],
+  modeFilter: 'all',
   metrics: emptyMetrics,
   aiResponse: null,
   isLmStudioOnline: false,
   isAiAnalyzing: false,
   isInitialized: false,
+
+  setModeFilter: (modeFilter: AnalyticsModeFilter): void => {
+    const { sessions, answers } = get()
+    const metrics = computeAnalyticsMetrics(sessions, answers, modeFilter)
+    const fallback = generateAlgorithmicFallback(metrics)
+    set({ modeFilter, metrics, aiResponse: fallback })
+  },
 
   initialize: async (): Promise<void> => {
     if (get().isInitialized) return
@@ -77,26 +99,42 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   reloadAllData: async (): Promise<void> => {
-    const { engine } = get()
+    const { engine, modeFilter } = get()
     if (!engine) return
 
     const summary = await engine.getSummary()
     const sessions = await engine.getAllSessions()
     const answers = await engine.getAllAnswers()
-    const metrics = computeAnalyticsMetrics(sessions, answers)
+    const aiReports = await engine.getAllAiReports()
+    const metrics = computeAnalyticsMetrics(sessions, answers, modeFilter)
     const fallback = generateAlgorithmicFallback(metrics)
 
-    set({ summary, sessions, answers, metrics, aiResponse: fallback })
+    set({ summary, sessions, answers, aiReports, metrics, aiResponse: fallback })
   },
 
   runAiDiagnostic: async (): Promise<void> => {
-    const { metrics } = get()
+    const { metrics, engine, modeFilter } = get()
     set({ isAiAnalyzing: true })
     await get().checkLmStudioStatus()
 
     try {
       const response = await aiService.analyzeAndPrescribe(metrics)
       set({ aiResponse: response, isAiAnalyzing: false })
+
+      // Guardar informe en la base de datos persistente
+      if (engine && response.prescription) {
+        const reportRecord: DbAiReportRecord = {
+          id: `ai_rep_${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          modelName: response.modelName,
+          modeFilter,
+          analysisText: response.analysisText,
+          prescription: response.prescription
+        }
+        await engine.saveAiReport(reportRecord)
+        const updatedReports = await engine.getAllAiReports()
+        set({ aiReports: updatedReports })
+      }
     } catch {
       set({ aiResponse: generateAlgorithmicFallback(metrics), isAiAnalyzing: false })
     }
@@ -122,6 +160,7 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
       },
       sessions: [],
       answers: [],
+      aiReports: [],
       metrics: emptyMetrics,
       aiResponse: generateAlgorithmicFallback(emptyMetrics)
     })

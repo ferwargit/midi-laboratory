@@ -1,6 +1,8 @@
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 import { midiNoteToName } from '../music/noteUtils'
 
+export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences'
+
 export interface ConfusionPair {
   expected: string
   played: string
@@ -8,27 +10,63 @@ export interface ConfusionPair {
 }
 
 export interface AnalyticsMetrics {
+  modeFilter: AnalyticsModeFilter
+  filteredSessionsCount: number
   totalAnswers: number
   totalCorrect: number
   overallAccuracy: number
   avgResponseTimeMs: number
-  fastResponsesCount: number // < 1.2s (Reflejo auditivo)
-  mediumResponsesCount: number // 1.2s a 2.8s (Deducción mental)
-  slowResponsesCount: number // > 2.8s (Incertidumbre)
-  sharpBiasCount: number // Errores por tocar más agudo (+st)
-  flatBiasCount: number // Errores por tocar más grave (-st)
+  fastResponsesCount: number
+  mediumResponsesCount: number
+  slowResponsesCount: number
+  sharpBiasCount: number
+  flatBiasCount: number
   topConfusions: ConfusionPair[]
   mostDifficultNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
   strongestNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
 }
 
+export function filterSessionsByMode(
+  sessions: DbSessionRecord[],
+  modeFilter: AnalyticsModeFilter
+): DbSessionRecord[] {
+  if (modeFilter === 'all') return sessions
+  if (modeFilter === 'single_note') {
+    return sessions.filter(
+      (s) =>
+        s.strategyId === 'random' ||
+        s.strategyId === 'adaptive_v1' ||
+        s.presetName.toLowerCase().includes('notas') ||
+        s.presetName.toLowerCase().includes('maestría')
+    )
+  }
+  if (modeFilter === 'intervals') {
+    return sessions.filter(
+      (s) => s.strategyId.includes('intervals') || s.presetName.toLowerCase().includes('intervalo')
+    )
+  }
+  if (modeFilter === 'sequences') {
+    return sessions.filter(
+      (s) => s.strategyId.includes('sequences') || s.presetName.toLowerCase().includes('secuencia')
+    )
+  }
+  return sessions
+}
+
 export function computeAnalyticsMetrics(
   sessions: DbSessionRecord[],
-  answers: DbAnswerRecord[]
+  answers: DbAnswerRecord[],
+  modeFilter: AnalyticsModeFilter = 'all'
 ): AnalyticsMetrics {
-  const totalAnswers = answers.length
+  const filteredSessions = filterSessionsByMode(sessions, modeFilter)
+  const validSessionIds = new Set(filteredSessions.map((s) => s.id))
+  const filteredAnswers = answers.filter((a) => validSessionIds.has(a.sessionId))
+
+  const totalAnswers = filteredAnswers.length
   if (totalAnswers === 0) {
     return {
+      modeFilter,
+      filteredSessionsCount: filteredSessions.length,
       totalAnswers: 0,
       totalCorrect: 0,
       overallAccuracy: 0,
@@ -55,16 +93,14 @@ export function computeAnalyticsMetrics(
   const noteStatsMap = new Map<number, { attempts: number; correct: number }>()
   const confusionMap = new Map<string, number>()
 
-  for (const ans of answers) {
+  for (const ans of filteredAnswers) {
     if (ans.isCorrect) totalCorrect++
     totalTime += ans.responseTimeMs
 
-    // Categorización de velocidad cognitiva
     if (ans.responseTimeMs < 1200) fastCount++
     else if (ans.responseTimeMs <= 2800) medCount++
     else slowCount++
 
-    // Sesgo de dirección de error
     if (!ans.isCorrect) {
       if (ans.semitoneDistance > 0) sharpBias++
       else if (ans.semitoneDistance < 0) flatBias++
@@ -75,7 +111,6 @@ export function computeAnalyticsMetrics(
       confusionMap.set(key, (confusionMap.get(key) || 0) + 1)
     }
 
-    // Estadísticas por nota esperada
     if (!noteStatsMap.has(ans.expectedNote)) {
       noteStatsMap.set(ans.expectedNote, { attempts: 0, correct: 0 })
     }
@@ -84,7 +119,6 @@ export function computeAnalyticsMetrics(
     if (ans.isCorrect) stat.correct++
   }
 
-  // Top confusiones
   const topConfusions: ConfusionPair[] = Array.from(confusionMap.entries())
     .map(([key, count]) => {
       const [expected, played] = key.split(' ➔ ')
@@ -93,7 +127,6 @@ export function computeAnalyticsMetrics(
     .sort((a, b) => b.count - a.count)
     .slice(0, 5)
 
-  // Desglose de notas más fuertes y débiles (con al menos 2 intentos)
   const notesArray = Array.from(noteStatsMap.entries()).map(([noteNumber, stat]) => ({
     noteName: midiNoteToName(noteNumber),
     accuracy: Math.round((stat.correct / stat.attempts) * 100),
@@ -111,6 +144,8 @@ export function computeAnalyticsMetrics(
     .slice(0, 5)
 
   return {
+    modeFilter,
+    filteredSessionsCount: filteredSessions.length,
     totalAnswers,
     totalCorrect,
     overallAccuracy: Math.round((totalCorrect / totalAnswers) * 100),

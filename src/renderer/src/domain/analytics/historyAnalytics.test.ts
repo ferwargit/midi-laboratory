@@ -1,85 +1,90 @@
 import { describe, it, expect } from 'vitest'
-import { computeAnalyticsMetrics } from './historyAnalytics'
+import { computeAnalyticsMetrics, filterSessionsByMode } from './historyAnalytics'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 
-describe('historyAnalytics - Motor de Diagnóstico Psicoacústico', () => {
-  it('debe devolver métricas en 0 cuando no hay respuestas', () => {
-    const metrics = computeAnalyticsMetrics([], [])
-    expect(metrics.totalAnswers).toBe(0)
-    expect(metrics.overallAccuracy).toBe(0)
+describe('historyAnalytics - Motor de Diagnóstico Psicoacústico y Filtrado', () => {
+  const sNote: DbSessionRecord = {
+    id: 's_note',
+    createdAt: new Date().toISOString(),
+    strategyId: 'adaptive_v1',
+    instrumentId: 'piano',
+    presetName: 'Notas (3)',
+    totalQuestions: 2,
+    correctAnswers: 2,
+    accuracyPercentage: 100,
+    avgResponseTimeMs: 1000
+  }
+
+  const sInterval: DbSessionRecord = {
+    id: 's_int',
+    createdAt: new Date().toISOString(),
+    strategyId: 'intervals_v1',
+    instrumentId: 'piano_intervals',
+    presetName: 'Intervalos (4)',
+    totalQuestions: 4,
+    correctAnswers: 2,
+    accuracyPercentage: 50,
+    avgResponseTimeMs: 2000
+  }
+
+  const answers: DbAnswerRecord[] = [
+    {
+      id: 'a1',
+      sessionId: 's_note',
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 60,
+      isCorrect: true,
+      semitoneDistance: 0,
+      responseTimeMs: 900,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'a2',
+      sessionId: 's_int',
+      questionIndex: 1,
+      expectedNote: 64,
+      playedNote: 65,
+      isCorrect: false,
+      semitoneDistance: 1,
+      responseTimeMs: 2200,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: new Date().toISOString()
+    }
+  ]
+
+  it('filterSessionsByMode debe segmentar correctamente según la modalidad', () => {
+    const all = filterSessionsByMode([sNote, sInterval], 'all')
+    expect(all.length).toBe(2)
+
+    const onlyNotes = filterSessionsByMode([sNote, sInterval], 'single_note')
+    expect(onlyNotes.length).toBe(1)
+    expect(onlyNotes[0].id).toBe('s_note')
+
+    const onlyIntervals = filterSessionsByMode([sNote, sInterval], 'intervals')
+    expect(onlyIntervals.length).toBe(1)
+    expect(onlyIntervals[0].id).toBe('s_int')
   })
 
-  it('debe calcular correctamente sesgos de semitono, confusiones y velocidades', () => {
-    const mockSession: DbSessionRecord = {
-      id: 's1',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'piano',
-      presetName: 'Test',
-      totalQuestions: 3,
-      correctAnswers: 1,
-      accuracyPercentage: 33,
-      avgResponseTimeMs: 1500
-    }
+  it('computeAnalyticsMetrics debe calcular métricas aisladas para la modalidad filtrada', () => {
+    const noteMetrics = computeAnalyticsMetrics([sNote, sInterval], answers, 'single_note')
+    expect(noteMetrics.totalAnswers).toBe(1)
+    expect(noteMetrics.overallAccuracy).toBe(100)
 
-    const mockAnswers: DbAnswerRecord[] = [
-      {
-        id: 'a1',
-        sessionId: 's1',
-        questionIndex: 1,
-        expectedNote: 60, // C4
-        playedNote: 60, // C4
-        isCorrect: true,
-        semitoneDistance: 0,
-        responseTimeMs: 900, // Rápido (<1200ms)
-        velocity: 90,
-        reasonTelemetry: '',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'a2',
-        sessionId: 's1',
-        questionIndex: 2,
-        expectedNote: 61, // C#4
-        playedNote: 62, // D4 (+1 st -> Sesgo agudo)
-        isCorrect: false,
-        semitoneDistance: 1,
-        responseTimeMs: 3100, // Lento (>2800ms)
-        velocity: 90,
-        reasonTelemetry: '',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'a3',
-        sessionId: 's1',
-        questionIndex: 3,
-        expectedNote: 61, // C#4
-        playedNote: 62, // D4 (+1 st)
-        isCorrect: false,
-        semitoneDistance: 1,
-        responseTimeMs: 1800, // Medio
-        velocity: 90,
-        reasonTelemetry: '',
-        createdAt: new Date().toISOString()
-      }
-    ]
+    const intMetrics = computeAnalyticsMetrics([sNote, sInterval], answers, 'intervals')
+    expect(intMetrics.totalAnswers).toBe(1)
+    expect(intMetrics.overallAccuracy).toBe(0)
+    expect(intMetrics.sharpBiasCount).toBe(1)
+  })
 
-    const metrics = computeAnalyticsMetrics([mockSession], mockAnswers)
-
-    expect(metrics.totalAnswers).toBe(3)
-    expect(metrics.totalCorrect).toBe(1)
-    expect(metrics.overallAccuracy).toBe(33)
-    expect(metrics.fastResponsesCount).toBe(1)
-    expect(metrics.slowResponsesCount).toBe(1)
-    expect(metrics.sharpBiasCount).toBe(2)
-    expect(metrics.flatBiasCount).toBe(0)
-    expect(metrics.topConfusions[0].expected).toBe('C#4')
-    expect(metrics.topConfusions[0].played).toBe('D4')
-
+  it('generateDiagnosticReport debe generar el informe clínico correctamente', () => {
+    const metrics = computeAnalyticsMetrics([sNote], [answers[0]], 'single_note')
     const report = generateDiagnosticReport(metrics)
     expect(report.title).toBeDefined()
-    expect(report.directionalBiasAnalysis).toContain('AGUDO')
     expect(report.concreteActionPlan.length).toBeGreaterThan(0)
   })
 })

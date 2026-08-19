@@ -1,3 +1,5 @@
+import { AiExercisePrescription } from '../ai/types'
+
 export interface DbSessionRecord {
   id: string
   createdAt: string
@@ -22,6 +24,15 @@ export interface DbAnswerRecord {
   velocity: number
   reasonTelemetry: string
   createdAt: string
+}
+
+export interface DbAiReportRecord {
+  id: string
+  createdAt: string
+  modelName: string
+  modeFilter: string
+  analysisText: string
+  prescription: AiExercisePrescription
 }
 
 export interface DatabaseSummary {

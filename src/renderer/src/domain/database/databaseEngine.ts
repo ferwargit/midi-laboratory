@@ -1,9 +1,10 @@
-import { DbAnswerRecord, DbSessionRecord, DatabaseSummary } from './types'
+import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord, DatabaseSummary } from './types'
 
 const DB_NAME = 'MusicalEarTrainerDB'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const SESSIONS_STORE = 'sessions'
 const ANSWERS_STORE = 'exercise_answers'
+const AI_REPORTS_STORE = 'ai_diagnostics'
 
 export class DatabaseEngine {
   private db: IDBDatabase | null = null
@@ -23,6 +24,10 @@ export class DatabaseEngine {
           const answersStore = db.createObjectStore(ANSWERS_STORE, { keyPath: 'id' })
           answersStore.createIndex('sessionId', 'sessionId', { unique: false })
           answersStore.createIndex('expectedNote', 'expectedNote', { unique: false })
+        }
+
+        if (!db.objectStoreNames.contains(AI_REPORTS_STORE)) {
+          db.createObjectStore(AI_REPORTS_STORE, { keyPath: 'id' })
         }
       }
 
@@ -56,6 +61,35 @@ export class DatabaseEngine {
     })
   }
 
+  async saveAiReport(report: DbAiReportRecord): Promise<void> {
+    if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(AI_REPORTS_STORE, 'readwrite')
+      const store = tx.objectStore(AI_REPORTS_STORE)
+      store.put(report)
+      tx.oncomplete = (): void => resolve()
+      tx.onerror = (): void => reject(tx.error)
+    })
+  }
+
+  async getAllAiReports(): Promise<DbAiReportRecord[]> {
+    if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(AI_REPORTS_STORE, 'readonly')
+      const store = tx.objectStore(AI_REPORTS_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = (): void => {
+        const reports: DbAiReportRecord[] = request.result || []
+        reports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        resolve(reports)
+      }
+      request.onerror = (): void => reject(request.error)
+    })
+  }
+
   async getAllSessions(): Promise<DbSessionRecord[]> {
     if (!this.db) throw new Error('Base de datos no inicializada.')
 
@@ -66,7 +100,6 @@ export class DatabaseEngine {
 
       request.onsuccess = (): void => {
         const sessions: DbSessionRecord[] = request.result || []
-        // Ordenadas de más reciente a más antigua
         sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         resolve(sessions)
       }
@@ -131,9 +164,13 @@ export class DatabaseEngine {
     if (!this.db) throw new Error('Base de datos no inicializada.')
 
     return new Promise((resolve, reject) => {
-      const tx = this.db!.transaction([SESSIONS_STORE, ANSWERS_STORE], 'readwrite')
+      const tx = this.db!.transaction(
+        [SESSIONS_STORE, ANSWERS_STORE, AI_REPORTS_STORE],
+        'readwrite'
+      )
       tx.objectStore(SESSIONS_STORE).clear()
       tx.objectStore(ANSWERS_STORE).clear()
+      tx.objectStore(AI_REPORTS_STORE).clear()
 
       tx.oncomplete = (): void => resolve()
       tx.onerror = (): void => reject(tx.error)

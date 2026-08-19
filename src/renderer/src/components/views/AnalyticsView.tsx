@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useDatabaseStore } from '../../stores/useDatabaseStore'
+import { AnalyticsModeFilter, filterSessionsByMode } from '../../domain/analytics/historyAnalytics'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { StatCard } from '../ui/StatCard'
@@ -13,9 +14,11 @@ interface AnalyticsViewProps {
 
 export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React.ReactElement {
   const {
-    summary,
     sessions,
     answers,
+    aiReports,
+    modeFilter,
+    setModeFilter,
     metrics,
     aiResponse,
     isLmStudioOnline,
@@ -24,104 +27,150 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     checkLmStudioStatus
   } = useDatabaseStore()
 
-  const [activeTab, setActiveTab] = useState<'ai_report' | 'charts' | 'confusions' | 'sessions'>(
-    'ai_report'
-  )
+  const [activeTab, setActiveTab] = useState<
+    'ai_report' | 'ai_history' | 'charts' | 'confusions' | 'sessions'
+  >('ai_report')
+
+  // Lista de sesiones filtrada estrictamente por la modalidad seleccionada
+  const displayedSessions = filterSessionsByMode(sessions, modeFilter)
 
   return (
     <div className="space-y-4">
-      {/* CABECERA DE MÉTRICAS GLOBALES */}
+      {/* CABECERA DE MÉTRICAS FILTRADAS */}
       <div className="grid grid-cols-4 gap-3">
-        <StatCard title="Total Sesiones" value={summary.totalSessions} />
         <StatCard
-          title="Precisión Histórica"
-          value={`${summary.overallAccuracy}%`}
+          title={modeFilter === 'all' ? 'Total Sesiones' : `Sesiones (${modeFilter})`}
+          value={metrics.filteredSessionsCount}
+        />
+        <StatCard
+          title="Precisión del Filtro"
+          value={`${metrics.overallAccuracy}%`}
           highlightColor={
-            summary.overallAccuracy >= 80
+            metrics.overallAccuracy >= 80
               ? 'text-emerald-400'
-              : summary.overallAccuracy >= 50
+              : metrics.overallAccuracy >= 50
                 ? 'text-amber-400'
                 : 'text-red-400'
           }
         />
-        <StatCard title="Ejercicios Realizados" value={summary.totalExercises} />
-        <StatCard title="Tiempo Medio" value={`${(summary.overallAvgTimeMs / 1000).toFixed(2)}s`} />
+        <StatCard title="Ejercicios Analizados" value={metrics.totalAnswers} />
+        <StatCard
+          title="Tiempo Medio"
+          value={`${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s`}
+        />
       </div>
 
-      {/* PESTAÑAS DE ANALÍTICA & ESTADO LM STUDIO */}
-      <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={(): void => setActiveTab('ai_report')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-              activeTab === 'ai_report'
-                ? 'bg-purple-600 text-white'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            🧠 Diagnóstico & Prescripción con IA
-          </button>
-          <button
-            type="button"
-            onClick={(): void => setActiveTab('charts')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-              activeTab === 'charts'
-                ? 'bg-sky-600 text-white'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            📈 Gráficos & Tendencias
-          </button>
-          <button
-            type="button"
-            onClick={(): void => setActiveTab('confusions')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-              activeTab === 'confusions'
-                ? 'bg-sky-600 text-white'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            📊 Matriz de Confusión
-          </button>
-          <button
-            type="button"
-            onClick={(): void => setActiveTab('sessions')}
-            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-              activeTab === 'sessions'
-                ? 'bg-sky-600 text-white'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            📜 Historial ({sessions.length})
-          </button>
+      {/* BARRA DE FILTRO POR MODALIDAD */}
+      <div className="flex justify-between items-center bg-zinc-900/60 p-2 rounded-lg border border-zinc-800 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-zinc-400 font-semibold">🔍 Filtrar Datos por:</span>
+          {(
+            [
+              ['all', '🌐 Todo Global'],
+              ['single_note', '🎵 Notas'],
+              ['intervals', '📏 Intervalos'],
+              ['sequences', '🎼 Secuencias']
+            ] as [AnalyticsModeFilter, string][]
+          ).map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={(): void => setModeFilter(val)}
+              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer border ${
+                modeFilter === val
+                  ? 'bg-sky-600 border-sky-500 text-white font-bold'
+                  : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={(): void => {
               checkLmStudioStatus()
             }}
-            title="Hacer clic para re-comprobar conexión con LM Studio"
+            title="Re-comprobar conexión"
             className="cursor-pointer text-zinc-400 hover:text-white"
           >
             🔄
           </button>
-          <span className="text-zinc-500">LM Studio Local:</span>
+          <span className="text-zinc-500 text-[11px]">LM Studio:</span>
           <Badge variant={isLmStudioOnline ? 'success' : 'warning'}>
-            {isLmStudioOnline ? '🟢 Conectado (RTX 4060)' : '🟡 Apagado (Usando Motor Local)'}
+            {isLmStudioOnline ? '🟢 Conectado (RTX 4060)' : '🟡 Apagado (Motor Local)'}
           </Badge>
         </div>
       </div>
 
-      {/* 1. INFORME DE IA & PRESCRIPCIÓN EJECUTABLE */}
+      {/* SUB-PESTAÑAS DE ANALÍTICA */}
+      <div className="flex gap-2 border-b border-zinc-800 pb-2">
+        <button
+          type="button"
+          onClick={(): void => setActiveTab('ai_report')}
+          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === 'ai_report'
+              ? 'bg-purple-600 text-white'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+          }`}
+        >
+          🧠 Diagnóstico con IA
+        </button>
+        <button
+          type="button"
+          onClick={(): void => setActiveTab('ai_history')}
+          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === 'ai_history'
+              ? 'bg-purple-600 text-white'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+          }`}
+        >
+          📜 Historial de Informes ({aiReports.length})
+        </button>
+        <button
+          type="button"
+          onClick={(): void => setActiveTab('charts')}
+          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === 'charts'
+              ? 'bg-sky-600 text-white'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+          }`}
+        >
+          📈 Gráficos & Tendencias
+        </button>
+        <button
+          type="button"
+          onClick={(): void => setActiveTab('confusions')}
+          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === 'confusions'
+              ? 'bg-sky-600 text-white'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+          }`}
+        >
+          📊 Matriz de Confusión
+        </button>
+        <button
+          type="button"
+          onClick={(): void => setActiveTab('sessions')}
+          className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === 'sessions'
+              ? 'bg-sky-600 text-white'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+          }`}
+        >
+          📋 Sesiones ({displayedSessions.length})
+        </button>
+      </div>
+
+      {/* 1. INFORME DE IA & PRESCRIPCIÓN */}
       {activeTab === 'ai_report' && (
         <Card className="space-y-4 bg-zinc-900/90 border-purple-900/40">
           <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
             <div>
               <h3 className="text-base font-bold text-purple-400 m-0">
-                ✨ Diagnóstico Asistido por Inteligencia Artificial
+                ✨ Diagnóstico Pedagógico Asistido por IA ({modeFilter})
               </h3>
               <span className="text-[11px] text-zinc-500">
                 Modelo: {aiResponse?.modelName || 'Iniciando...'}
@@ -133,11 +182,25 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               variant="primary"
               disabled={isAiAnalyzing}
               onClick={runAiDiagnostic}
-              className="bg-purple-600 hover:bg-purple-500 font-bold text-xs"
+              className="bg-purple-600 hover:bg-purple-500 font-bold text-xs flex items-center gap-2"
             >
-              {isAiAnalyzing ? '⏳ Analizando en GPU RTX 4060...' : '🔄 Re-analizar con IA'}
+              {isAiAnalyzing ? (
+                <>
+                  <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+                  Pensando en GPU RTX 4060...
+                </>
+              ) : (
+                '🔄 Re-analizar con IA'
+              )}
             </Button>
           </div>
+
+          {metrics.totalAnswers < 10 && (
+            <div className="p-2.5 bg-amber-950/40 border border-amber-800/60 rounded text-[11px] text-amber-300">
+              ℹ️ Se recomienda acumular al menos 10 respuestas en esta modalidad para un diagnóstico
+              estadísticamente óptimo (llevas {metrics.totalAnswers}).
+            </div>
+          )}
 
           <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 text-xs text-zinc-300 leading-relaxed whitespace-pre-line font-sans">
             {aiResponse?.analysisText || 'Generando análisis de rendimiento...'}
@@ -161,7 +224,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                 <Button
                   variant="success"
                   onClick={(): void => onLoadPrescription(aiResponse.prescription)}
-                  className="shrink-0 font-bold text-xs shadow-lg animate-pulse"
+                  className="shrink-0 font-bold text-xs shadow-lg cursor-pointer"
                 >
                   🚀 Cargar y Comenzar Ejercicio
                 </Button>
@@ -183,18 +246,63 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </Card>
       )}
 
-      {/* 2. GRÁFICOS & TENDENCIAS HISTÓRICAS */}
-      {activeTab === 'charts' && <AnalyticsCharts sessions={sessions} answers={answers} />}
+      {/* 2. HISTORIAL DE INFORMES DE IA */}
+      {activeTab === 'ai_history' && (
+        <Card className="space-y-4 bg-zinc-900/90 border-zinc-800">
+          <h3 className="text-base font-bold text-zinc-100 m-0">
+            Historial de Devoluciones y Prescripciones ({aiReports.length})
+          </h3>
+          {aiReports.length === 0 ? (
+            <div className="text-center py-6 text-zinc-600 text-xs italic">
+              No hay informes de IA guardados. Hacé clic en &quot;Re-analizar con IA&quot; para
+              registrar el primero.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {aiReports.map((rep) => (
+                <div
+                  key={rep.id}
+                  className="p-3.5 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2"
+                >
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-purple-400">{rep.prescription.title}</span>
+                    <span className="text-zinc-500 font-mono text-[11px]">
+                      {new Date(rep.createdAt).toLocaleString('es-AR')}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-300 leading-relaxed line-clamp-3 m-0">
+                    {rep.analysisText}
+                  </p>
+                  <div className="flex justify-between items-center pt-2 border-t border-zinc-900">
+                    <span className="text-[10px] text-zinc-500">Modelo: {rep.modelName}</span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={(): void => onLoadPrescription(rep.prescription)}
+                      className="text-xs cursor-pointer"
+                    >
+                      🚀 Re-lanzar esta Prescripción
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
-      {/* 3. MATRIZ DE CONFUSIÓN */}
+      {/* 3. GRÁFICOS FILTRADOS */}
+      {activeTab === 'charts' && <AnalyticsCharts sessions={displayedSessions} answers={answers} />}
+
+      {/* 4. MATRIZ DE CONFUSIÓN FILTRADA */}
       {activeTab === 'confusions' && (
         <Card className="space-y-4 bg-zinc-900/90 border-zinc-800">
           <div>
             <h3 className="text-base font-bold text-zinc-100 m-0">
-              Psicometría de Confusión y Latencia
+              Psicometría de Confusión ({modeFilter})
             </h3>
             <p className="text-xs text-zinc-400 mt-0.5">
-              Desglose analítico de errores y tiempos de respuesta acumulados:
+              Desglose analítico de errores y tiempos de respuesta de esta modalidad:
             </p>
           </div>
 
@@ -205,7 +313,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               </span>
               {metrics.topConfusions.length === 0 ? (
                 <div className="text-zinc-600 text-xs italic">
-                  No hay suficientes errores registrados.
+                  No hay suficientes errores registrados en esta modalidad.
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -288,13 +396,15 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </Card>
       )}
 
-      {/* 4. HISTORIAL DE SESIONES */}
+      {/* 5. HISTORIAL DE SESIONES FILTRADAS */}
       {activeTab === 'sessions' && (
         <Card className="space-y-3 bg-zinc-900/90 border-zinc-800">
-          <h3 className="text-base font-bold text-zinc-100 m-0">Historial Completo de Sesiones</h3>
-          {sessions.length === 0 ? (
+          <h3 className="text-base font-bold text-zinc-100 m-0">
+            Historial de Sesiones ({modeFilter})
+          </h3>
+          {displayedSessions.length === 0 ? (
             <div className="text-center py-6 text-zinc-600 text-xs italic">
-              No hay sesiones registradas en la base de datos local.
+              No hay sesiones registradas en la modalidad seleccionada ({modeFilter}).
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -309,7 +419,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 font-mono">
-                  {sessions.map((s) => (
+                  {displayedSessions.map((s) => (
                     <tr key={s.id} className="hover:bg-zinc-950/40">
                       <td className="py-2.5 text-zinc-400 font-sans text-[11px]">
                         {new Date(s.createdAt).toLocaleString('es-AR', {

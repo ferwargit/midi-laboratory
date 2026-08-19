@@ -6,14 +6,17 @@ export function generateAlgorithmicFallback(metrics: AnalyticsMetrics): AiAnalys
   const report = generateDiagnosticReport(metrics)
 
   let targetMode: 'single_note' | 'intervals' | 'sequences' = 'single_note'
-  const recommendedNotes = [60, 62, 64, 65, 67]
+  let recommendedNotes = [60, 62, 64, 65, 67]
   const recommendedIntervals: number[] = [2, 4, 5, 7]
 
-  if (metrics.mostDifficultNotes.length >= 2) {
-    // Aislar las notas débiles
-    targetMode = 'single_note'
-  } else if (metrics.overallAccuracy >= 80) {
+  if (metrics.modeFilter === 'intervals') {
     targetMode = 'intervals'
+  } else if (metrics.modeFilter === 'sequences') {
+    targetMode = 'sequences'
+  } else if (metrics.mostDifficultNotes.length >= 2) {
+    targetMode = 'single_note'
+    // Mapear nombres a números MIDI si es posible
+    recommendedNotes = [60, 62, 64]
   }
 
   const prescription: AiExercisePrescription = {
@@ -28,7 +31,8 @@ export function generateAlgorithmicFallback(metrics: AnalyticsMetrics): AiAnalys
     limitType: 'questions',
     questionsCount: 10,
     durationMinutes: 5,
-    advanceMode: 'smart'
+    advanceMode: 'smart',
+    noteDurationMs: 500
   }
 
   const fullText = `### ${report.executiveSummary}\n\n**Diagnóstico:** ${report.perceptualDiagnosis}\n\n**Latencia:** ${report.cognitiveLatencyAnalysis}\n\n**Sesgo:** ${report.directionalBiasAnalysis}`
