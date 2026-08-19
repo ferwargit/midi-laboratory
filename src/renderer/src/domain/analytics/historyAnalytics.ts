@@ -9,12 +9,25 @@ export interface ConfusionPair {
   count: number
 }
 
+export interface SessionPsychometrics {
+  sessionId: string
+  poolSize: number
+  entropyBits: number
+  chanceBaseline: number
+  rawAccuracy: number
+  normalizedAccuracy: number
+  durationSeconds: number
+  responsesPerMinute: number
+}
+
 export interface AnalyticsMetrics {
   modeFilter: AnalyticsModeFilter
   filteredSessionsCount: number
   totalAnswers: number
   totalCorrect: number
   overallAccuracy: number
+  normalizedOverallAccuracy: number // Corregida por probabilidad de azar
+  avgEntropyBits: number // Incertidumbre promedio del contexto
   avgResponseTimeMs: number
   fastResponsesCount: number
   mediumResponsesCount: number
@@ -24,6 +37,7 @@ export interface AnalyticsMetrics {
   topConfusions: ConfusionPair[]
   mostDifficultNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
   strongestNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
+  sessionPsychometricsList: SessionPsychometrics[]
 }
 
 export function filterSessionsByMode(
@@ -70,6 +84,8 @@ export function computeAnalyticsMetrics(
       totalAnswers: 0,
       totalCorrect: 0,
       overallAccuracy: 0,
+      normalizedOverallAccuracy: 0,
+      avgEntropyBits: 0,
       avgResponseTimeMs: 0,
       fastResponsesCount: 0,
       mediumResponsesCount: 0,
@@ -78,7 +94,8 @@ export function computeAnalyticsMetrics(
       flatBiasCount: 0,
       topConfusions: [],
       mostDifficultNotes: [],
-      strongestNotes: []
+      strongestNotes: [],
+      sessionPsychometricsList: []
     }
   }
 
@@ -92,6 +109,36 @@ export function computeAnalyticsMetrics(
 
   const noteStatsMap = new Map<number, { attempts: number; correct: number }>()
   const confusionMap = new Map<string, number>()
+
+  // Psicometría por sesión individual
+  const sessionPsychometricsList: SessionPsychometrics[] = filteredSessions.map((session) => {
+    const sAnswers = filteredAnswers.filter((a) => a.sessionId === session.id)
+    const uniqueExpected = new Set(sAnswers.map((a) => a.expectedNote))
+    const poolSize = Math.max(2, uniqueExpected.size)
+    const chanceBaseline = 1 / poolSize
+    const entropyBits = Number(Math.log2(poolSize).toFixed(2))
+
+    const rawAccuracy = session.accuracyPercentage
+    const accDec = rawAccuracy / 100
+    const normalizedAccuracy =
+      accDec <= chanceBaseline
+        ? 0
+        : Math.round(((accDec - chanceBaseline) / (1 - chanceBaseline)) * 100)
+
+    const durSec = session.durationSeconds || 1
+    const responsesPerMinute = Number(((session.totalQuestions / durSec) * 60).toFixed(1))
+
+    return {
+      sessionId: session.id,
+      poolSize,
+      entropyBits,
+      chanceBaseline: Math.round(chanceBaseline * 100),
+      rawAccuracy,
+      normalizedAccuracy,
+      durationSeconds: durSec,
+      responsesPerMinute
+    }
+  })
 
   for (const ans of filteredAnswers) {
     if (ans.isCorrect) totalCorrect++
@@ -143,12 +190,32 @@ export function computeAnalyticsMetrics(
     .sort((a, b) => b.accuracy - a.accuracy)
     .slice(0, 5)
 
+  const avgEntropy =
+    sessionPsychometricsList.length > 0
+      ? Number(
+          (
+            sessionPsychometricsList.reduce((acc, s) => acc + s.entropyBits, 0) /
+            sessionPsychometricsList.length
+          ).toFixed(2)
+        )
+      : 0
+
+  const avgNormalized =
+    sessionPsychometricsList.length > 0
+      ? Math.round(
+          sessionPsychometricsList.reduce((acc, s) => acc + s.normalizedAccuracy, 0) /
+            sessionPsychometricsList.length
+        )
+      : 0
+
   return {
     modeFilter,
     filteredSessionsCount: filteredSessions.length,
     totalAnswers,
     totalCorrect,
     overallAccuracy: Math.round((totalCorrect / totalAnswers) * 100),
+    normalizedOverallAccuracy: avgNormalized,
+    avgEntropyBits: avgEntropy,
     avgResponseTimeMs: Math.round(totalTime / totalAnswers),
     fastResponsesCount: fastCount,
     mediumResponsesCount: medCount,
@@ -157,6 +224,7 @@ export function computeAnalyticsMetrics(
     flatBiasCount: flatBias,
     topConfusions,
     mostDifficultNotes,
-    strongestNotes
+    strongestNotes,
+    sessionPsychometricsList
   }
 }

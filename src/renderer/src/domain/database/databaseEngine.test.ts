@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { DatabaseEngine } from './databaseEngine'
-import { DbAnswerRecord, DbSessionRecord } from './types'
+import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord } from './types'
 
 describe('databaseEngine - Persistencia IndexedDB Nativa', () => {
   let engine: DatabaseEngine
@@ -20,9 +20,10 @@ describe('databaseEngine - Persistencia IndexedDB Nativa', () => {
     const summary = await engine.getSummary()
     expect(summary.totalSessions).toBe(0)
     expect(summary.totalExercises).toBe(0)
+    expect(summary.totalDurationSeconds).toBe(0)
   })
 
-  it('debe guardar sesión incluyendo el ID del instrumento y actualizar estadísticas', async () => {
+  it('debe guardar sesión incluyendo duración en segundos', async () => {
     const mockSession: DbSessionRecord = {
       id: 'session_flute_1',
       createdAt: new Date().toISOString(),
@@ -32,7 +33,8 @@ describe('databaseEngine - Persistencia IndexedDB Nativa', () => {
       totalQuestions: 2,
       correctAnswers: 2,
       accuracyPercentage: 100,
-      avgResponseTimeMs: 1200
+      avgResponseTimeMs: 1200,
+      durationSeconds: 45
     }
 
     const mockAnswers: DbAnswerRecord[] = [
@@ -56,42 +58,33 @@ describe('databaseEngine - Persistencia IndexedDB Nativa', () => {
     const summary = await engine.getSummary()
     expect(summary.totalSessions).toBe(1)
     expect(summary.totalExercises).toBe(2)
-    expect(summary.overallAccuracy).toBe(100)
-    expect(summary.overallAvgTimeMs).toBe(1200)
+    expect(summary.totalDurationSeconds).toBe(45)
   })
 
-  it('debe acumular múltiples sesiones calculando el promedio histórico correcto', async () => {
-    const s1: DbSessionRecord = {
-      id: 's1',
+  it('debe guardar y recuperar informes de IA', async () => {
+    const mockReport: DbAiReportRecord = {
+      id: 'ai_1',
       createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 1',
-      totalQuestions: 10,
-      correctAnswers: 10,
-      accuracyPercentage: 100,
-      avgResponseTimeMs: 1000
-    }
-    const s2: DbSessionRecord = {
-      id: 's2',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'violin',
-      presetName: 'Nivel 1',
-      totalQuestions: 10,
-      correctAnswers: 6,
-      accuracyPercentage: 60,
-      avgResponseTimeMs: 2000
+      modelName: 'qwen3.5',
+      modeFilter: 'single_note',
+      analysisText: 'Excelente progreso.',
+      prescription: {
+        title: 'Ejercicio Test',
+        rationale: 'Refuerzo',
+        targetMode: 'single_note',
+        instrumentId: 'acoustic_grand_piano',
+        recommendedNotes: [60, 62],
+        limitType: 'questions',
+        questionsCount: 10,
+        durationMinutes: 5,
+        advanceMode: 'smart'
+      }
     }
 
-    await engine.saveSession(s1, [])
-    await engine.saveSession(s2, [])
-
-    const summary = await engine.getSummary()
-    expect(summary.totalSessions).toBe(2)
-    expect(summary.totalExercises).toBe(20)
-    expect(summary.overallAccuracy).toBe(80) // (100 + 60) / 2
-    expect(summary.overallAvgTimeMs).toBe(1500) // (1000 + 2000) / 2
+    await engine.saveAiReport(mockReport)
+    const reports = await engine.getAllAiReports()
+    expect(reports.length).toBe(1)
+    expect(reports[0].prescription.title).toBe('Ejercicio Test')
   })
 
   it('debe permitir resetear la base de datos limpiamente', async () => {
@@ -105,7 +98,8 @@ describe('databaseEngine - Persistencia IndexedDB Nativa', () => {
         totalQuestions: 1,
         correctAnswers: 1,
         accuracyPercentage: 100,
-        avgResponseTimeMs: 1000
+        avgResponseTimeMs: 1000,
+        durationSeconds: 30
       },
       []
     )

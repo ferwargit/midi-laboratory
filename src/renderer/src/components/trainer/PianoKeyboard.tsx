@@ -4,19 +4,19 @@ import { NotePerformance } from '../../domain/adaptation/types'
 
 interface PianoKeyboardProps {
   keys: number[]
-  activeNotes: number[]
-  pressedNotes?: number[] // Teclas pulsadas por MIDI físico
-  onToggleNote?: (note: number) => void // Para modo configuración
-  onPlayNoteVirtual?: (note: number) => void // Para responder haciendo clic en el piano virtual
+  activeNotes?: number[]
+  pressedNotes?: number[]
+  onToggleNote?: (note: number) => void
+  onPlayNoteVirtual?: (note: number) => void
   performances?: Map<number, NotePerformance>
   showHeatmap?: boolean
-  isInteractiveTraining?: boolean // Si es true, el clic responde el ejercicio
+  isInteractiveTraining?: boolean
   disabled?: boolean
 }
 
 export function PianoKeyboard({
-  keys,
-  activeNotes,
+  keys = [],
+  activeNotes = [],
   pressedNotes = [],
   onToggleNote,
   onPlayNoteVirtual,
@@ -31,7 +31,6 @@ export function PianoKeyboard({
   const handleKeyInteraction = (note: number): void => {
     if (disabled) return
 
-    // Si estamos en sesión de entrenamiento activa y se permite responder por clic
     if (isInteractiveTraining && onPlayNoteVirtual) {
       setClickedNote(note)
       onPlayNoteVirtual(note)
@@ -39,7 +38,6 @@ export function PianoKeyboard({
       return
     }
 
-    // Modo configuración previa: alternar selección
     if (onToggleNote) {
       onToggleNote(note)
     }
@@ -49,27 +47,31 @@ export function PianoKeyboard({
     note: number,
     black: boolean
   ): { bg: string; text: string; dot?: boolean } => {
-    const isPhysicallyPressed = pressedNotes.includes(note)
+    const isPhysicallyPressed = Array.isArray(pressedNotes) && pressedNotes.includes(note)
     const isVirtualClicked = clickedNote === note
     const isCurrentlyActive = isPhysicallyPressed || isVirtualClicked
 
-    // 1. PRIORIDAD MÁXIMA: Tecla presionada físicamente o por clic virtual en vivo
+    // 1. Tecla pulsada físicamente o por clic virtual en vivo (Ámbar brillante)
     if (isCurrentlyActive) {
       return {
         bg: black
-          ? 'bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.9)] brightness-125'
-          : 'bg-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.9)] brightness-125',
+          ? 'bg-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.9)] brightness-125'
+          : 'bg-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.9)] brightness-125',
         text: 'text-black font-extrabold'
       }
     }
 
-    // 2. MODO HEATMAP (Diagnóstico final o en vivo)
+    const isNoteActive = Array.isArray(activeNotes) && activeNotes.includes(note)
+
+    // 2. MODO HEATMAP (Durante la sesión o en el Resumen Final)
     if (showHeatmap) {
       const perf = performances?.get(note)
-      const hasAttempts = perf && perf.attempts > 0
+      const attempts = perf?.attempts ?? 0
+      const accuracy = perf?.accuracyPercentage ?? 0
 
-      if (hasAttempts) {
-        if (perf.accuracyPercentage >= 85) {
+      // A. Tecla evaluada con respuestas reales
+      if (attempts > 0) {
+        if (accuracy >= 85) {
           return {
             bg: black
               ? 'bg-emerald-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.4)]'
@@ -77,7 +79,7 @@ export function PianoKeyboard({
             text: 'text-white'
           }
         }
-        if (perf.accuracyPercentage >= 50) {
+        if (accuracy >= 50) {
           return {
             bg: black
               ? 'bg-amber-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.4)]'
@@ -93,22 +95,28 @@ export function PianoKeyboard({
         }
       }
 
-      if (activeNotes.includes(note)) {
+      // B. Tecla activa de la sesión que aún no fue preguntada (Color natural nítido con punto)
+      if (isNoteActive) {
         return {
-          bg: black ? 'bg-zinc-800' : 'bg-zinc-100',
-          text: black ? 'text-zinc-400' : 'text-zinc-700',
+          bg: black
+            ? 'bg-gradient-to-b from-zinc-800 to-zinc-950 shadow-[0_4px_6px_rgba(0,0,0,0.6)]'
+            : 'bg-gradient-to-b from-white via-zinc-50 to-zinc-200 shadow-[inset_0_-4px_4px_rgba(0,0,0,0.1)]',
+          text: black ? 'text-zinc-400' : 'text-zinc-800',
           dot: true
         }
       }
 
+      // C. TECLA FUERA DEL EJERCICIO: SOMBREADO OSCURO ATENUADO (SOMBRA MARCADA)
       return {
-        bg: black ? 'bg-zinc-900 opacity-60' : 'bg-zinc-200 opacity-60',
-        text: black ? 'text-zinc-600' : 'text-zinc-400'
+        bg: black
+          ? 'bg-zinc-800/70 border-zinc-800/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]'
+          : 'bg-zinc-300/40 border-zinc-700/40 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.08)]',
+        text: black ? 'text-zinc-500 font-medium' : 'text-zinc-400 font-medium'
       }
     }
 
-    // 3. MODO CONFIGURACIÓN O EN SESIÓN
-    if (activeNotes.includes(note)) {
+    // 3. MODO CONFIGURACIÓN PREVIA (Selección de notas activas)
+    if (isNoteActive) {
       return {
         bg: black
           ? 'bg-sky-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.5)]'
@@ -134,7 +142,7 @@ export function PianoKeyboard({
     const prevWhiteIndex = whiteKeys.indexOf(blackNote - 1)
     if (prevWhiteIndex === -1) return null
 
-    const totalWhiteKeys = whiteKeys.length
+    const totalWhiteKeys = Math.max(1, whiteKeys.length)
     const whiteKeyWidthPercent = 100 / totalWhiteKeys
 
     return (prevWhiteIndex + 1) * whiteKeyWidthPercent - whiteKeyWidthPercent * 0.32
@@ -175,7 +183,7 @@ export function PianoKeyboard({
             if (leftPercent === null) return null
 
             const style = getKeyStyle(note, true)
-            const totalWhiteKeys = whiteKeys.length
+            const totalWhiteKeys = Math.max(1, whiteKeys.length)
             const blackKeyWidthPercent = (100 / totalWhiteKeys) * 0.64
 
             return (

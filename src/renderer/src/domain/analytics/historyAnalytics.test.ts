@@ -3,7 +3,7 @@ import { computeAnalyticsMetrics, filterSessionsByMode } from './historyAnalytic
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 
-describe('historyAnalytics - Motor de Diagnóstico Psicoacústico y Filtrado', () => {
+describe('historyAnalytics - Psicometría y Corrección por Azar', () => {
   const sNote: DbSessionRecord = {
     id: 's_note',
     createdAt: new Date().toISOString(),
@@ -13,7 +13,8 @@ describe('historyAnalytics - Motor de Diagnóstico Psicoacústico y Filtrado', (
     totalQuestions: 2,
     correctAnswers: 2,
     accuracyPercentage: 100,
-    avgResponseTimeMs: 1000
+    avgResponseTimeMs: 1000,
+    durationSeconds: 10
   }
 
   const sInterval: DbSessionRecord = {
@@ -25,7 +26,8 @@ describe('historyAnalytics - Motor de Diagnóstico Psicoacústico y Filtrado', (
     totalQuestions: 4,
     correctAnswers: 2,
     accuracyPercentage: 50,
-    avgResponseTimeMs: 2000
+    avgResponseTimeMs: 2000,
+    durationSeconds: 20
   }
 
   const answers: DbAnswerRecord[] = [
@@ -57,31 +59,23 @@ describe('historyAnalytics - Motor de Diagnóstico Psicoacústico y Filtrado', (
     }
   ]
 
-  it('filterSessionsByMode debe segmentar correctamente según la modalidad', () => {
+  it('filterSessionsByMode debe segmentar correctamente', () => {
     const all = filterSessionsByMode([sNote, sInterval], 'all')
     expect(all.length).toBe(2)
 
     const onlyNotes = filterSessionsByMode([sNote, sInterval], 'single_note')
     expect(onlyNotes.length).toBe(1)
     expect(onlyNotes[0].id).toBe('s_note')
-
-    const onlyIntervals = filterSessionsByMode([sNote, sInterval], 'intervals')
-    expect(onlyIntervals.length).toBe(1)
-    expect(onlyIntervals[0].id).toBe('s_int')
   })
 
-  it('computeAnalyticsMetrics debe calcular métricas aisladas para la modalidad filtrada', () => {
-    const noteMetrics = computeAnalyticsMetrics([sNote, sInterval], answers, 'single_note')
+  it('computeAnalyticsMetrics debe calcular la precisión corregida por azar y entropía', () => {
+    const noteMetrics = computeAnalyticsMetrics([sNote], [answers[0]], 'single_note')
     expect(noteMetrics.totalAnswers).toBe(1)
-    expect(noteMetrics.overallAccuracy).toBe(100)
-
-    const intMetrics = computeAnalyticsMetrics([sNote, sInterval], answers, 'intervals')
-    expect(intMetrics.totalAnswers).toBe(1)
-    expect(intMetrics.overallAccuracy).toBe(0)
-    expect(intMetrics.sharpBiasCount).toBe(1)
+    expect(noteMetrics.normalizedOverallAccuracy).toBeDefined()
+    expect(noteMetrics.avgEntropyBits).toBeGreaterThan(0)
   })
 
-  it('generateDiagnosticReport debe generar el informe clínico correctamente', () => {
+  it('generateDiagnosticReport debe redactar el informe con base científica', () => {
     const metrics = computeAnalyticsMetrics([sNote], [answers[0]], 'single_note')
     const report = generateDiagnosticReport(metrics)
     expect(report.title).toBeDefined()

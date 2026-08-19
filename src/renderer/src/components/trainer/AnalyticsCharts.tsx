@@ -1,16 +1,21 @@
 import React from 'react'
 import { DbSessionRecord, DbAnswerRecord } from '../../domain/database/types'
+import { SessionPsychometrics } from '../../domain/analytics/historyAnalytics'
 
 interface AnalyticsChartsProps {
   sessions: DbSessionRecord[]
   answers: DbAnswerRecord[]
+  psychometrics?: SessionPsychometrics[]
 }
 
-export function AnalyticsCharts({ sessions, answers }: AnalyticsChartsProps): React.ReactElement {
-  // Últimas 10 sesiones ordenadas cronológicamente
+export function AnalyticsCharts({
+  sessions,
+  answers,
+  psychometrics = []
+}: AnalyticsChartsProps): React.ReactElement {
   const recentSessions = [...sessions].slice(0, 10).reverse()
+  const recentPsychometrics = [...psychometrics].slice(0, 10).reverse()
 
-  // Distribución de errores por distancia en semitonos (-3 a +3)
   const biasDistribution: Record<number, number> = {
     '-3': 0,
     '-2': 0,
@@ -30,18 +35,22 @@ export function AnalyticsCharts({ sessions, answers }: AnalyticsChartsProps): Re
 
   return (
     <div className="space-y-4">
-      {/* 1. GRÁFICO DE CURVA DE EVOLUCIÓN HISTÓRICA */}
+      {/* 1. CURVA TEMPORAL: PRECISIÓN CRUDA VS PRECISIÓN CORREGIDA POR AZAR */}
       <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
         <div className="flex justify-between items-center text-xs">
           <span className="font-bold text-sky-400">
-            📈 Curva de Precisión en las Últimas Sesiones:
+            📈 Precisión Cruda vs. Corregida por Azar (Últimas Sesiones):
           </span>
-          <span className="text-zinc-500 font-mono text-[10px]">Meta: &ge; 85%</span>
+          <div className="flex gap-3 text-[10px] font-mono">
+            <span className="text-sky-400">● Cruda</span>
+            <span className="text-purple-400">● Corregida (Azar)</span>
+            <span className="text-emerald-500">--- Meta (85%)</span>
+          </div>
         </div>
 
         {recentSessions.length < 2 ? (
           <div className="h-32 flex items-center justify-center text-xs text-zinc-600 italic">
-            Completa al menos 2 sesiones para visualizar la curva de aprendizaje.
+            Completa al menos 2 sesiones para visualizar la curva psicométrica.
           </div>
         ) : (
           <div className="h-36 w-full relative pt-2">
@@ -50,7 +59,6 @@ export function AnalyticsCharts({ sessions, answers }: AnalyticsChartsProps): Re
               viewBox="0 0 500 100"
               preserveAspectRatio="none"
             >
-              {/* Línea de Meta 85% */}
               <line
                 x1="0"
                 y1="15"
@@ -62,53 +70,48 @@ export function AnalyticsCharts({ sessions, answers }: AnalyticsChartsProps): Re
                 opacity="0.6"
               />
 
-              {/* Área y Línea de Precisión */}
               {(() => {
-                const points = recentSessions.map((s, idx) => {
+                const pointsRaw = recentSessions.map((s, idx) => {
                   const x = (idx / (recentSessions.length - 1)) * 500
                   const y = 100 - (s.accuracyPercentage / 100) * 100
-                  return {
-                    x,
-                    y,
-                    acc: s.accuracyPercentage,
-                    time: (s.avgResponseTimeMs / 1000).toFixed(1)
-                  }
+                  return { x, y, acc: s.accuracyPercentage }
                 })
-                const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-                const areaD = `${pathD} L 500 100 L 0 100 Z`
+                const pointsNorm = recentPsychometrics.map((p, idx) => {
+                  const x = (idx / Math.max(1, recentPsychometrics.length - 1)) * 500
+                  const y = 100 - (p.normalizedAccuracy / 100) * 100
+                  return { x, y, acc: p.normalizedAccuracy }
+                })
+
+                const pathRaw = pointsRaw
+                  .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+                  .join(' ')
+                const pathNorm = pointsNorm
+                  .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+                  .join(' ')
 
                 return (
                   <>
-                    <path d={areaD} fill="url(#accuracyGradient)" opacity="0.25" />
-                    <path d={pathD} fill="none" stroke="#38bdf8" strokeWidth="2.5" />
-                    {points.map((p, i) => (
-                      <g key={i}>
-                        <circle
-                          cx={p.x}
-                          cy={p.y}
-                          r="4"
-                          fill="#0284c7"
-                          stroke="#38bdf8"
-                          strokeWidth="1.5"
-                        />
-                        <text
-                          x={p.x}
-                          y={p.y - 8}
-                          fill="#e0f2fe"
-                          fontSize="8"
-                          fontWeight="bold"
-                          textAnchor="middle"
-                        >
-                          {p.acc}%
-                        </text>
-                      </g>
+                    {/* Línea Normalizada (Púrpura) */}
+                    <path
+                      d={pathNorm}
+                      fill="none"
+                      stroke="#c084fc"
+                      strokeWidth="2"
+                      strokeDasharray="3 3"
+                    />
+                    {/* Línea Cruda (Azul) */}
+                    <path d={pathRaw} fill="none" stroke="#38bdf8" strokeWidth="2.5" />
+                    {pointsRaw.map((p, i) => (
+                      <circle
+                        key={i}
+                        cx={p.x}
+                        cy={p.y}
+                        r="3.5"
+                        fill="#0284c7"
+                        stroke="#38bdf8"
+                        strokeWidth="1.5"
+                      />
                     ))}
-                    <defs>
-                      <linearGradient id="accuracyGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#38bdf8" />
-                        <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
                   </>
                 )
               })()}
@@ -117,21 +120,16 @@ export function AnalyticsCharts({ sessions, answers }: AnalyticsChartsProps): Re
         )}
       </div>
 
-      {/* 2. DISTRIBUCIÓN DE SESGO DE SEMITONOS (HISTOGRAMA) */}
-      <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
-        <div className="flex justify-between items-center text-xs">
-          <span className="font-bold text-amber-400">
-            🎯 Distribución de Errores por Distancia en Semitonos:
-          </span>
-          <span className="text-zinc-500 text-[10px]">Centro = Nota Exacta (0 st)</span>
-        </div>
-
-        {answers.length === 0 ? (
-          <div className="h-28 flex items-center justify-center text-xs text-zinc-600 italic">
-            Sin respuestas registradas.
+      {/* 2. DOS COLUMNAS: HISTOGRAMA DE SESGOS + ENTROPÍA POR POOL */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Histograma de Sesgos de Semitono */}
+        <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
+          <div className="flex justify-between items-center text-xs">
+            <span className="font-bold text-amber-400">🎯 Sesgo de Semitono (-3st a +3st):</span>
+            <span className="text-zinc-500 text-[10px]">0st = Exacto</span>
           </div>
-        ) : (
-          <div className="flex items-end justify-between h-28 pt-4 gap-2">
+
+          <div className="flex items-end justify-between h-28 pt-4 gap-1.5">
             {[-3, -2, -1, 0, 1, 2, 3].map((st) => {
               const count = biasDistribution[st] || 0
               const heightPercent = (count / maxBiasCount) * 100
@@ -165,7 +163,33 @@ export function AnalyticsCharts({ sessions, answers }: AnalyticsChartsProps): Re
               )
             })}
           </div>
-        )}
+        </div>
+
+        {/* Resistencia a la Entropía (Tamaño del Pool) */}
+        <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2 text-xs">
+          <div className="flex justify-between items-center">
+            <span className="font-bold text-emerald-400">🧠 Resistencia a la Entropía (Pool):</span>
+            <span className="text-zinc-500 text-[10px]">Incertidumbre Contextual</span>
+          </div>
+
+          <div className="space-y-2.5 pt-1 font-mono text-[11px]">
+            {recentPsychometrics.slice(0, 4).map((p, idx) => (
+              <div key={idx} className="p-2 bg-zinc-900 rounded border border-zinc-800 space-y-1">
+                <div className="flex justify-between text-zinc-300">
+                  <span>
+                    Pool: {p.poolSize} notas ({p.entropyBits} bits)
+                  </span>
+                  <span className="text-sky-400 font-bold">{p.rawAccuracy}% acierto</span>
+                </div>
+                <div className="flex justify-between text-[10px] text-zinc-500">
+                  <span>Azar base: {p.chanceBaseline}%</span>
+                  <span className="text-purple-400">Oído Real: {p.normalizedAccuracy}%</span>
+                  <span>Vel: {p.responsesPerMinute} RPM</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )

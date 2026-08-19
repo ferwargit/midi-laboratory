@@ -79,6 +79,7 @@ export function useSequenceTrainer({
   const saveSessionToDb = useDatabaseStore((state) => state.saveSession)
 
   const sessionIdRef = useRef<string>('')
+  const sessionStartTimeRef = useRef<number>(0)
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<SequenceExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -137,6 +138,8 @@ export function useSequenceTrainer({
       sessionCountdownTimerRef.current = null
     }
 
+    const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
+
     setIsSessionActive(false)
     setIsSessionFinished(true)
     setIsWaitingManualAdvance(false)
@@ -168,7 +171,8 @@ export function useSequenceTrainer({
       totalQuestions: allAnswers.length,
       correctAnswers: exactCount,
       accuracyPercentage: avgScore,
-      avgResponseTimeMs: avgTime
+      avgResponseTimeMs: avgTime,
+      durationSeconds: totalSeconds
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
@@ -196,12 +200,13 @@ export function useSequenceTrainer({
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
   const startSession = (): void => {
-    if (customCandidateNotes.length < 2) {
+    if (!Array.isArray(customCandidateNotes) || customCandidateNotes.length < 2) {
       alert('Debes seleccionar al menos 2 notas candidatas en el teclado.')
       return
     }
 
     sessionIdRef.current = `session_seq_${Date.now()}`
+    sessionStartTimeRef.current = Date.now()
     answersBufferRef.current = []
     historyBufferRef.current = []
     setSessionHistory([])
@@ -341,6 +346,7 @@ export function useSequenceTrainer({
 
     setCustomCandidateNotes(weakPool.sort((a, b) => a - b))
     sessionIdRef.current = `session_seq_${Date.now()}`
+    sessionStartTimeRef.current = Date.now()
     answersBufferRef.current = []
     historyBufferRef.current = []
     setSessionHistory([])

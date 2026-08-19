@@ -19,7 +19,7 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
     expect(result.current.currentQuestionIndex).toBe(0)
   })
 
-  it('debe activar la sesión y emitir el primer estímulo al llamar a startSession', () => {
+  it('debe tolerar que startSession reciba un evento sin lanzar error de iterador', () => {
     const onPlayStimulus = vi.fn()
     const onInstrumentChanged = vi.fn()
 
@@ -30,14 +30,40 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
       })
     )
 
+    // Simulamos que React le pasa un objeto no array
+    const fakeEvent = {} as unknown as number[]
     act(() => {
-      result.current.startSession()
+      result.current.startSession(fakeEvent)
+    })
+
+    expect(result.current.isSessionActive).toBe(true)
+    expect(result.current.isWaitingAnswer).toBe(true)
+    expect(onPlayStimulus).toHaveBeenCalledTimes(1)
+  })
+
+  it('debe activar la sesión y emitir una nota perteneciente al pool exacto', () => {
+    const onPlayStimulus = vi.fn()
+    const onInstrumentChanged = vi.fn()
+
+    const { result } = renderHook(() =>
+      useSingleNoteTrainer({
+        onPlayStimulus,
+        onInstrumentChanged
+      })
+    )
+
+    const specificPool = [62, 64, 65] // D4, E4, F4
+    act(() => {
+      result.current.startSession(specificPool)
     })
 
     expect(result.current.isSessionActive).toBe(true)
     expect(result.current.currentQuestionIndex).toBe(1)
     expect(result.current.isWaitingAnswer).toBe(true)
     expect(onPlayStimulus).toHaveBeenCalledTimes(1)
+
+    const noteCalled = onPlayStimulus.mock.calls[0][0]
+    expect(specificPool).toContain(noteCalled)
   })
 
   it('debe evaluar correctamente la respuesta del usuario y registrar acierto/fallo', () => {
@@ -52,11 +78,9 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
     )
 
     act(() => {
-      result.current.setActiveNotes([60, 62]) // C4 y D4
-      result.current.startSession()
+      result.current.startSession([60, 62])
     })
 
-    // Simulamos que el usuario responde la nota 60
     act(() => {
       result.current.handleUserNotePlayed(60)
     })

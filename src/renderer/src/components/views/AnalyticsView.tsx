@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useDatabaseStore } from '../../stores/useDatabaseStore'
 import { AnalyticsModeFilter, filterSessionsByMode } from '../../domain/analytics/historyAnalytics'
+import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { StatCard } from '../ui/StatCard'
@@ -10,6 +11,13 @@ import { AiExercisePrescription } from '../../domain/ai/types'
 
 interface AnalyticsViewProps {
   onLoadPrescription: (prescription: AiExercisePrescription) => void
+}
+
+function formatDuration(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const mins = Math.floor(totalSeconds / 60)
+  const secs = totalSeconds % 60
+  return `${mins}m ${secs}s`
 }
 
 export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React.ReactElement {
@@ -31,37 +39,36 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     'ai_report' | 'ai_history' | 'charts' | 'confusions' | 'sessions'
   >('ai_report')
 
-  // Lista de sesiones filtrada estrictamente por la modalidad seleccionada
   const displayedSessions = filterSessionsByMode(sessions, modeFilter)
 
   return (
     <div className="space-y-4">
-      {/* CABECERA DE MÉTRICAS FILTRADAS */}
+      {/* CABECERA CON PSICOMETRÍA NORMALIZADA */}
       <div className="grid grid-cols-4 gap-3">
         <StatCard
           title={modeFilter === 'all' ? 'Total Sesiones' : `Sesiones (${modeFilter})`}
           value={metrics.filteredSessionsCount}
         />
         <StatCard
-          title="Precisión del Filtro"
-          value={`${metrics.overallAccuracy}%`}
+          title="Precisión Corregida (Oído Real)"
+          value={`${metrics.normalizedOverallAccuracy}%`}
           highlightColor={
-            metrics.overallAccuracy >= 80
+            metrics.normalizedOverallAccuracy >= 80
               ? 'text-emerald-400'
-              : metrics.overallAccuracy >= 50
+              : metrics.normalizedOverallAccuracy >= 50
                 ? 'text-amber-400'
                 : 'text-red-400'
           }
         />
-        <StatCard title="Ejercicios Analizados" value={metrics.totalAnswers} />
+        <StatCard title="Entropía Media del Contexto" value={`${metrics.avgEntropyBits} bits`} />
         <StatCard
-          title="Tiempo Medio"
+          title="Tiempo Medio de Reacción"
           value={`${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s`}
         />
       </div>
 
-      {/* BARRA DE FILTRO POR MODALIDAD */}
-      <div className="flex justify-between items-center bg-zinc-900/60 p-2 rounded-lg border border-zinc-800 text-xs">
+      {/* BARRA DE FILTRO */}
+      <div className="flex justify-between items-center bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800 text-xs">
         <div className="flex items-center gap-2">
           <span className="text-zinc-400 font-semibold">🔍 Filtrar Datos por:</span>
           {(
@@ -76,9 +83,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               key={val}
               type="button"
               onClick={(): void => setModeFilter(val)}
-              className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer border ${
+              className={`px-3 py-1 rounded text-xs transition-colors cursor-pointer border ${
                 modeFilter === val
-                  ? 'bg-sky-600 border-sky-500 text-white font-bold'
+                  ? 'bg-sky-600 border-sky-500 text-white font-bold shadow-sm'
                   : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
               }`}
             >
@@ -98,21 +105,21 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           >
             🔄
           </button>
-          <span className="text-zinc-500 text-[11px]">LM Studio:</span>
+          <span className="text-zinc-500 text-[11px]">LM Studio Local:</span>
           <Badge variant={isLmStudioOnline ? 'success' : 'warning'}>
             {isLmStudioOnline ? '🟢 Conectado (RTX 4060)' : '🟡 Apagado (Motor Local)'}
           </Badge>
         </div>
       </div>
 
-      {/* SUB-PESTAÑAS DE ANALÍTICA */}
+      {/* PESTAÑAS */}
       <div className="flex gap-2 border-b border-zinc-800 pb-2">
         <button
           type="button"
           onClick={(): void => setActiveTab('ai_report')}
           className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
             activeTab === 'ai_report'
-              ? 'bg-purple-600 text-white'
+              ? 'bg-purple-600 text-white shadow-sm'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
@@ -123,7 +130,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           onClick={(): void => setActiveTab('ai_history')}
           className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
             activeTab === 'ai_history'
-              ? 'bg-purple-600 text-white'
+              ? 'bg-purple-600 text-white shadow-sm'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
@@ -134,7 +141,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           onClick={(): void => setActiveTab('charts')}
           className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
             activeTab === 'charts'
-              ? 'bg-sky-600 text-white'
+              ? 'bg-sky-600 text-white shadow-sm'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
@@ -145,7 +152,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           onClick={(): void => setActiveTab('confusions')}
           className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
             activeTab === 'confusions'
-              ? 'bg-sky-600 text-white'
+              ? 'bg-sky-600 text-white shadow-sm'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
@@ -156,7 +163,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           onClick={(): void => setActiveTab('sessions')}
           className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
             activeTab === 'sessions'
-              ? 'bg-sky-600 text-white'
+              ? 'bg-sky-600 text-white shadow-sm'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
@@ -164,7 +171,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </button>
       </div>
 
-      {/* 1. INFORME DE IA & PRESCRIPCIÓN */}
+      {/* 1. INFORME DE IA CON CONSULTAS ESPECIALIZADAS */}
       {activeTab === 'ai_report' && (
         <Card className="space-y-4 bg-zinc-900/90 border-purple-900/40">
           <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
@@ -177,33 +184,29 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               </span>
             </div>
 
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={isAiAnalyzing}
-              onClick={runAiDiagnostic}
-              className="bg-purple-600 hover:bg-purple-500 font-bold text-xs flex items-center gap-2"
-            >
-              {isAiAnalyzing ? (
-                <>
-                  <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
-                  Pensando en GPU RTX 4060...
-                </>
-              ) : (
-                '🔄 Re-analizar con IA'
-              )}
-            </Button>
+            {/* ACCIONES DE CONSULTA A LA IA */}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={isAiAnalyzing}
+                onClick={runAiDiagnostic}
+                className="bg-purple-600 hover:bg-purple-500 font-bold text-xs flex items-center gap-2"
+              >
+                {isAiAnalyzing ? (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+                    Pensando en GPU...
+                  </>
+                ) : (
+                  '🔄 Diagnóstico & Prescripción'
+                )}
+              </Button>
+            </div>
           </div>
 
-          {metrics.totalAnswers < 10 && (
-            <div className="p-2.5 bg-amber-950/40 border border-amber-800/60 rounded text-[11px] text-amber-300">
-              ℹ️ Se recomienda acumular al menos 10 respuestas en esta modalidad para un diagnóstico
-              estadísticamente óptimo (llevas {metrics.totalAnswers}).
-            </div>
-          )}
-
           <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 text-xs text-zinc-300 leading-relaxed whitespace-pre-line font-sans">
-            {aiResponse?.analysisText || 'Generando análisis de rendimiento...'}
+            {aiResponse?.analysisText || 'Generando análisis psicométrico...'}
           </div>
 
           {aiResponse?.prescription && (
@@ -213,7 +216,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                   <span className="text-[10px] text-purple-400 font-mono uppercase tracking-wider font-bold">
                     🎯 Prescripción Pedagógica Diseñada por la IA:
                   </span>
-                  <h4 className="text-sm font-bold text-zinc-100 mt-0.5 m-0">
+                  <h4 className="text-base font-bold text-zinc-100 mt-0.5 m-0">
                     {aiResponse.prescription.title}
                   </h4>
                   <p className="text-xs text-zinc-400 mt-1 leading-normal">
@@ -230,23 +233,50 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                 </Button>
               </div>
 
-              <div className="flex gap-2 text-[11px] font-mono text-zinc-300 pt-1 border-t border-purple-900/40">
-                <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
-                  Modalidad: {aiResponse.prescription.targetMode}
+              <div className="flex flex-wrap gap-2 text-[11px] font-mono text-zinc-300 pt-2 border-t border-purple-900/40">
+                <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
+                  Modalidad:{' '}
+                  <strong className="text-sky-300">{aiResponse.prescription.targetMode}</strong>
                 </span>
-                <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
-                  Timbre: {aiResponse.prescription.instrumentId}
+                <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
+                  Timbre:{' '}
+                  <strong className="text-emerald-300">
+                    {aiResponse.prescription.instrumentId}
+                  </strong>
                 </span>
-                <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
-                  Criterio: {aiResponse.prescription.limitType}
+                <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
+                  Criterio:{' '}
+                  <strong className="text-amber-300">{aiResponse.prescription.limitType}</strong>
                 </span>
+                <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
+                  Avance:{' '}
+                  <strong className="text-purple-300">{aiResponse.prescription.advanceMode}</strong>
+                </span>
+                <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
+                  Notas:{' '}
+                  <strong className="text-white">
+                    {aiResponse.prescription.recommendedNotes
+                      .map((n) => midiNoteToName(n))
+                      .join(', ')}
+                  </strong>
+                </span>
+                {aiResponse.prescription.recommendedIntervals && (
+                  <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
+                    Intervalos:{' '}
+                    <strong className="text-sky-400">
+                      {aiResponse.prescription.recommendedIntervals
+                        .map((st) => `${st}st`)
+                        .join(', ')}
+                    </strong>
+                  </span>
+                )}
               </div>
             </div>
           )}
         </Card>
       )}
 
-      {/* 2. HISTORIAL DE INFORMES DE IA */}
+      {/* 2. HISTORIAL DE INFORMES */}
       {activeTab === 'ai_history' && (
         <Card className="space-y-4 bg-zinc-900/90 border-zinc-800">
           <h3 className="text-base font-bold text-zinc-100 m-0">
@@ -254,8 +284,8 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           </h3>
           {aiReports.length === 0 ? (
             <div className="text-center py-6 text-zinc-600 text-xs italic">
-              No hay informes de IA guardados. Hacé clic en &quot;Re-analizar con IA&quot; para
-              registrar el primero.
+              No hay informes de IA guardados. Hacé clic en &quot;Diagnóstico & Prescripción&quot;
+              para registrar el primero.
             </div>
           ) : (
             <div className="space-y-3">
@@ -291,10 +321,16 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </Card>
       )}
 
-      {/* 3. GRÁFICOS FILTRADOS */}
-      {activeTab === 'charts' && <AnalyticsCharts sessions={displayedSessions} answers={answers} />}
+      {/* 3. GRÁFICOS */}
+      {activeTab === 'charts' && (
+        <AnalyticsCharts
+          sessions={displayedSessions}
+          answers={answers}
+          psychometrics={metrics.sessionPsychometricsList}
+        />
+      )}
 
-      {/* 4. MATRIZ DE CONFUSIÓN FILTRADA */}
+      {/* 4. MATRIZ DE CONFUSIÓN */}
       {activeTab === 'confusions' && (
         <Card className="space-y-4 bg-zinc-900/90 border-zinc-800">
           <div>
@@ -396,11 +432,11 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </Card>
       )}
 
-      {/* 5. HISTORIAL DE SESIONES FILTRADAS */}
+      {/* 5. TABLA DE SESIONES ENRIQUECIDA CON PSICOMETRÍA */}
       {activeTab === 'sessions' && (
         <Card className="space-y-3 bg-zinc-900/90 border-zinc-800">
           <h3 className="text-base font-bold text-zinc-100 m-0">
-            Historial de Sesiones ({modeFilter})
+            Historial Psicométrico ({modeFilter})
           </h3>
           {displayedSessions.length === 0 ? (
             <div className="text-center py-6 text-zinc-600 text-xs italic">
@@ -412,46 +448,59 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-400 text-[11px]">
                     <th className="pb-2">Fecha y Hora</th>
-                    <th className="pb-2">Modalidad / Preset</th>
+                    <th className="pb-2">Preset / Modalidad</th>
                     <th className="pb-2 text-center">Preguntas</th>
-                    <th className="pb-2 text-center">Precisión</th>
+                    <th className="pb-2 text-center">Duración</th>
+                    <th className="pb-2 text-center">Precisión Cruda</th>
+                    <th className="pb-2 text-center">Oído Real (Corregido)</th>
                     <th className="pb-2 text-right">Tiempo Medio</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 font-mono">
-                  {displayedSessions.map((s) => (
-                    <tr key={s.id} className="hover:bg-zinc-950/40">
-                      <td className="py-2.5 text-zinc-400 font-sans text-[11px]">
-                        {new Date(s.createdAt).toLocaleString('es-AR', {
-                          day: '2-digit',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </td>
-                      <td className="py-2.5 font-sans font-medium text-zinc-200">{s.presetName}</td>
-                      <td className="py-2.5 text-center">
-                        <span className="text-emerald-400 font-bold">{s.correctAnswers}</span> /{' '}
-                        <span className="text-zinc-400">{s.totalQuestions}</span>
-                      </td>
-                      <td className="py-2.5 text-center">
-                        <span
-                          className={`font-bold ${
-                            s.accuracyPercentage >= 80
-                              ? 'text-emerald-400'
-                              : s.accuracyPercentage >= 50
-                                ? 'text-amber-400'
-                                : 'text-red-400'
-                          }`}
-                        >
+                  {displayedSessions.map((s) => {
+                    const psych = metrics.sessionPsychometricsList.find((p) => p.sessionId === s.id)
+                    return (
+                      <tr key={s.id} className="hover:bg-zinc-950/40">
+                        <td className="py-2.5 text-zinc-400 font-sans text-[11px]">
+                          {new Date(s.createdAt).toLocaleString('es-AR', {
+                            day: '2-digit',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </td>
+                        <td className="py-2.5 font-sans font-medium text-zinc-200">
+                          {s.presetName}
+                        </td>
+                        <td className="py-2.5 text-center">
+                          <span className="text-emerald-400 font-bold">{s.correctAnswers}</span> /{' '}
+                          <span className="text-zinc-400">{s.totalQuestions}</span>
+                        </td>
+                        <td className="py-2.5 text-center text-zinc-400 font-sans text-[11px]">
+                          {formatDuration(s.durationSeconds || 0)}
+                        </td>
+                        <td className="py-2.5 text-center text-zinc-300">
                           {s.accuracyPercentage}%
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-right text-zinc-300">
-                        {(s.avgResponseTimeMs / 1000).toFixed(2)}s
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-2.5 text-center">
+                          <span
+                            className={`font-bold ${
+                              (psych?.normalizedAccuracy || s.accuracyPercentage) >= 80
+                                ? 'text-emerald-400'
+                                : (psych?.normalizedAccuracy || s.accuracyPercentage) >= 50
+                                  ? 'text-amber-400'
+                                  : 'text-red-400'
+                            }`}
+                          >
+                            {psych ? `${psych.normalizedAccuracy}%` : `${s.accuracyPercentage}%`}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-right text-zinc-300">
+                          {(s.avgResponseTimeMs / 1000).toFixed(2)}s
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

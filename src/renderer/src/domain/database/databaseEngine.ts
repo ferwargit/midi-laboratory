@@ -1,7 +1,7 @@
 import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord, DatabaseSummary } from './types'
 
 const DB_NAME = 'MusicalEarTrainerDB'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const SESSIONS_STORE = 'sessions'
 const ANSWERS_STORE = 'exercise_answers'
 const AI_REPORTS_STORE = 'ai_diagnostics'
@@ -139,7 +139,8 @@ export class DatabaseEngine {
             totalSessions: 0,
             totalExercises: 0,
             overallAccuracy: 0,
-            overallAvgTimeMs: 0
+            overallAvgTimeMs: 0,
+            totalDurationSeconds: 0
           })
           return
         }
@@ -147,12 +148,14 @@ export class DatabaseEngine {
         const totalExercises = sessions.reduce((acc, s) => acc + s.totalQuestions, 0)
         const totalAccuracy = sessions.reduce((acc, s) => acc + s.accuracyPercentage, 0)
         const totalTime = sessions.reduce((acc, s) => acc + s.avgResponseTimeMs, 0)
+        const totalDuration = sessions.reduce((acc, s) => acc + (s.durationSeconds || 0), 0)
 
         resolve({
           totalSessions,
           totalExercises,
           overallAccuracy: Math.round(totalAccuracy / totalSessions),
-          overallAvgTimeMs: Math.round(totalTime / totalSessions)
+          overallAvgTimeMs: Math.round(totalTime / totalSessions),
+          totalDurationSeconds: totalDuration
         })
       }
 

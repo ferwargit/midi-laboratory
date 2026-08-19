@@ -42,9 +42,10 @@ export interface UseSingleNoteTrainerReturn {
   isWaitingAnswer: boolean
   lastResult: ExerciseResult | null
   sessionHistory: ExerciseResult[]
+  sessionElapsedSeconds: number
   stats: SessionStats
   performances: Map<number, NotePerformance>
-  startSession: () => void
+  startSession: (overrideNotes?: number[]) => void
   stopSession: () => void
   advanceToNextQuestion: () => void
   repeatCurrentNote: () => void
@@ -63,6 +64,7 @@ export function useSingleNoteTrainer({
   const [sessionQuestionsCount, setSessionQuestionsCount] = useState<number>(10)
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState<number>(5)
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(300)
+  const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState<number>(0)
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
   const [selectedStrategyId, setSelectedStrategyId] = useState<StrategyId>('adaptive_v1')
   const [selectedInstrumentId, setSelectedInstrumentIdState] =
@@ -81,10 +83,17 @@ export function useSingleNoteTrainer({
   const saveSessionToDb = useDatabaseStore((state) => state.saveSession)
 
   const sessionIdRef = useRef<string>('')
+  const sessionStartTimeRef = useRef<number>(0)
+  const activeNotesBufferRef = useRef<number[]>([60, 62, 64, 65, 67, 69, 71, 72])
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<ExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Sincronizar el buffer de notas activas
+  useEffect(() => {
+    activeNotesBufferRef.current = activeNotes
+  }, [activeNotes])
 
   const selectedInstrument = useMemo(
     () => getInstrumentById(selectedInstrumentId),
@@ -99,29 +108,33 @@ export function useSingleNoteTrainer({
 
   const strategy = useMemo(() => createStrategy(selectedStrategyId), [selectedStrategyId])
 
-  const triggerNextQuestion = useCallback((): void => {
-    if (activeNotes.length < 2) return
+  const triggerNextQuestion = useCallback(
+    (notesPool?: number[]): void => {
+      const currentPool = notesPool || activeNotesBufferRef.current
+      if (currentPool.length < 2) return
 
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current)
+        autoAdvanceTimerRef.current = null
+      }
 
-    const decision = strategy.selectNextNote({
-      activeNotes,
-      history: historyBufferRef.current,
-      lastPlayedNote: currentExpectedNote
-    })
+      const decision = strategy.selectNextNote({
+        activeNotes: currentPool,
+        history: historyBufferRef.current,
+        lastPlayedNote: currentExpectedNote
+      })
 
-    setCurrentExpectedNote(decision.selectedNote)
-    setLastDecision(decision)
-    setLastResult(null)
-    setIsWaitingManualAdvance(false)
-    setIsWaitingAnswer(true)
-    setStimulusStartTime(Date.now())
+      setCurrentExpectedNote(decision.selectedNote)
+      setLastDecision(decision)
+      setLastResult(null)
+      setIsWaitingManualAdvance(false)
+      setIsWaitingAnswer(true)
+      setStimulusStartTime(Date.now())
 
-    onPlayStimulus(decision.selectedNote, decision)
-  }, [activeNotes, currentExpectedNote, strategy, onPlayStimulus])
+      onPlayStimulus(decision.selectedNote, decision)
+    },
+    [currentExpectedNote, strategy, onPlayStimulus]
+  )
 
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
     if (autoAdvanceTimerRef.current) {
@@ -132,6 +145,9 @@ export function useSingleNoteTrainer({
       clearInterval(sessionCountdownTimerRef.current)
       sessionCountdownTimerRef.current = null
     }
+
+    const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
+    setSessionElapsedSeconds(totalSeconds)
 
     setIsSessionActive(false)
     setIsSessionFinished(true)
@@ -147,7 +163,7 @@ export function useSingleNoteTrainer({
         ? `Tiempo (${sessionDurationMinutes}m)`
         : sessionLimitType === 'mastery'
           ? 'Maestría'
-          : `Notas (${activeNotes.length})`
+          : `Notas (${activeNotesBufferRef.current.length})`
 
     const sessionRecord: DbSessionRecord = {
       id: sessionIdRef.current,
@@ -158,20 +174,19 @@ export function useSingleNoteTrainer({
       totalQuestions: allAnswers.length,
       correctAnswers: finalStats.correctAnswers,
       accuracyPercentage: finalStats.accuracyPercentage,
-      avgResponseTimeMs: finalStats.avgResponseTimeMs
+      avgResponseTimeMs: finalStats.avgResponseTimeMs,
+      durationSeconds: totalSeconds
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
   }, [
     sessionLimitType,
     sessionDurationMinutes,
-    activeNotes.length,
     selectedStrategyId,
     selectedInstrument.id,
     saveSessionToDb
   ])
 
-  // Temporizador regresivo para sesiones por tiempo
   useEffect(() => {
     if (isSessionActive && sessionLimitType === 'time') {
       sessionCountdownTimerRef.current = setInterval(() => {
@@ -193,12 +208,24 @@ export function useSingleNoteTrainer({
     }
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
-  const startSession = (): void => {
-    if (activeNotes.length < 2) {
+  const startSession = (overrideNotes?: unknown): void => {
+    // Protección contra SyntheticEvent de React
+    const validOverride =
+      Array.isArray(overrideNotes) && overrideNotes.length > 0 ? (overrideNotes as number[]) : null
+    const notesToUse = validOverride || activeNotes
+
+    if (notesToUse.length < 2) {
       alert('Debes seleccionar al menos 2 notas para entrenar.')
       return
     }
+
+    if (validOverride) {
+      setActiveNotes(validOverride)
+      activeNotesBufferRef.current = validOverride
+    }
+
     sessionIdRef.current = `session_${Date.now()}`
+    sessionStartTimeRef.current = Date.now()
     answersBufferRef.current = []
     historyBufferRef.current = []
     setSessionHistory([])
@@ -211,12 +238,15 @@ export function useSingleNoteTrainer({
     }
 
     onInstrumentChanged(selectedInstrument.programNumber)
-    triggerNextQuestion()
+    triggerNextQuestion(notesToUse)
   }
 
   const advanceToNextQuestion = useCallback((): void => {
-    const currentPerformances = strategy.getNotePerformances(activeNotes, historyBufferRef.current)
-    const allMastered = activeNotes.every((note) => {
+    const currentPerformances = strategy.getNotePerformances(
+      activeNotesBufferRef.current,
+      historyBufferRef.current
+    )
+    const allMastered = activeNotesBufferRef.current.every((note) => {
       const perf = currentPerformances.get(note)
       return perf && perf.attempts >= 2 && perf.accuracyPercentage >= 85
     })
@@ -232,7 +262,6 @@ export function useSingleNoteTrainer({
       triggerNextQuestion()
     }
   }, [
-    activeNotes,
     currentQuestionIndex,
     finalizeAndSaveSession,
     sessionLimitType,
@@ -354,15 +383,7 @@ export function useSingleNoteTrainer({
       return
     }
 
-    setActiveNotes(weakNotes.sort((a, b) => a - b))
-    sessionIdRef.current = `session_${Date.now()}`
-    answersBufferRef.current = []
-    historyBufferRef.current = []
-    setSessionHistory([])
-    setCurrentQuestionIndex(1)
-    setIsSessionFinished(false)
-    setIsSessionActive(true)
-    triggerNextQuestion()
+    startSession(weakNotes.sort((a, b) => a - b))
   }
 
   return {
@@ -389,6 +410,7 @@ export function useSingleNoteTrainer({
     isWaitingAnswer,
     lastResult,
     sessionHistory,
+    sessionElapsedSeconds,
     stats,
     performances,
     startSession,

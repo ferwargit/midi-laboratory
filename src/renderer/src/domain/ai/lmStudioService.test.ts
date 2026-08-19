@@ -6,9 +6,13 @@ import { LmStudioService } from './lmStudioService'
 
 describe('ai - Servicios de IA y Prescripción Pedagógica', () => {
   const mockMetrics: AnalyticsMetrics = {
+    modeFilter: 'single_note',
+    filteredSessionsCount: 2,
     totalAnswers: 10,
     totalCorrect: 8,
     overallAccuracy: 80,
+    normalizedOverallAccuracy: 75,
+    avgEntropyBits: 2.32,
     avgResponseTimeMs: 1400,
     fastResponsesCount: 6,
     mediumResponsesCount: 3,
@@ -17,15 +21,20 @@ describe('ai - Servicios de IA y Prescripción Pedagógica', () => {
     flatBiasCount: 1,
     topConfusions: [{ expected: 'C#4', played: 'D4', count: 1 }],
     mostDifficultNotes: [{ noteName: 'C#4', accuracy: 50, attempts: 2 }],
-    strongestNotes: [{ noteName: 'C4', accuracy: 100, attempts: 4 }]
+    strongestNotes: [{ noteName: 'C4', accuracy: 100, attempts: 4 }],
+    sessionPsychometricsList: []
   }
 
-  it('buildSystemPrompt y buildUserPrompt deben generar prompts válidos', () => {
+  it('buildSystemPrompt y buildUserPrompt deben generar prompts válidos con el catálogo completo', () => {
     const sys = buildSystemPrompt()
     const user = buildUserPrompt(mockMetrics)
 
     expect(sys).toContain('Profesor de Oído Musical')
-    expect(user).toContain('"overallAccuracy": 80')
+    expect(sys).toContain('CATÁLOGO FORMAL DE PARÁMETROS DISPONIBLES')
+    expect(sys).toContain('recommendedNotes')
+    expect(sys).toContain('recommendedIntervals')
+    expect(user).toContain('Precisión Cruda Global: 80%')
+    expect(user).toContain('Entropía Media del Contexto')
   })
 
   it('generateAlgorithmicFallback debe generar un análisis y prescripción válida sin conexión', () => {

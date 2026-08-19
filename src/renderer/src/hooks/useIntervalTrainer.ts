@@ -85,6 +85,7 @@ export function useIntervalTrainer({
   const saveSessionToDb = useDatabaseStore((state) => state.saveSession)
 
   const sessionIdRef = useRef<string>('')
+  const sessionStartTimeRef = useRef<number>(0)
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<IntervalExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -166,6 +167,8 @@ export function useIntervalTrainer({
       sessionCountdownTimerRef.current = null
     }
 
+    const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
+
     setIsSessionActive(false)
     setIsSessionFinished(true)
     setIsWaitingManualAdvance(false)
@@ -195,7 +198,8 @@ export function useIntervalTrainer({
       totalQuestions: allAnswers.length,
       correctAnswers: correctCount,
       accuracyPercentage: accPercent,
-      avgResponseTimeMs: avgTime
+      avgResponseTimeMs: avgTime,
+      durationSeconds: totalSeconds
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
@@ -223,16 +227,17 @@ export function useIntervalTrainer({
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
   const startSession = (): void => {
-    if (activeIntervals.length === 0) {
+    if (!Array.isArray(activeIntervals) || activeIntervals.length === 0) {
       alert('Debes seleccionar al menos 1 intervalo.')
       return
     }
-    if (rootRangeNotes.length === 0) {
+    if (!Array.isArray(rootRangeNotes) || rootRangeNotes.length === 0) {
       alert('Debes seleccionar al menos 1 nota raíz en el teclado.')
       return
     }
 
     sessionIdRef.current = `session_int_${Date.now()}`
+    sessionStartTimeRef.current = Date.now()
     answersBufferRef.current = []
     historyBufferRef.current = []
     setSessionHistory([])
@@ -384,6 +389,7 @@ export function useIntervalTrainer({
 
     setActiveIntervals(weakIntervals)
     sessionIdRef.current = `session_int_${Date.now()}`
+    sessionStartTimeRef.current = Date.now()
     answersBufferRef.current = []
     historyBufferRef.current = []
     setSessionHistory([])

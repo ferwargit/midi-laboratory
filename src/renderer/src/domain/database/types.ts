@@ -10,6 +10,7 @@ export interface DbSessionRecord {
   correctAnswers: number
   accuracyPercentage: number
   avgResponseTimeMs: number
+  durationSeconds: number // Duración real total de la sesión en segundos
 }
 
 export interface DbAnswerRecord {
@@ -40,4 +41,5 @@ export interface DatabaseSummary {
   totalExercises: number
   overallAccuracy: number
   overallAvgTimeMs: number
+  totalDurationSeconds: number
 }

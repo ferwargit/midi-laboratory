@@ -174,25 +174,27 @@ export default function App(): React.ReactElement {
     [midi, appMode, singleNoteTrainer, intervalTrainer, sequenceTrainer]
   )
 
-  // Cargar y ejecutar la prescripción diseñada por la IA
+  // Cargar y ejecutar la prescripción diseñada por la IA con sincronización garantizada
   const handleLoadPrescription = (p: AiExercisePrescription): void => {
     if (p.targetMode === 'single_note') {
       setAppMode('single_note')
-      singleNoteTrainer.setActiveNotes(p.recommendedNotes)
       singleNoteTrainer.setSelectedInstrumentId(p.instrumentId)
       singleNoteTrainer.setSessionLimitType(p.limitType)
       singleNoteTrainer.setSessionQuestionsCount(p.questionsCount)
       singleNoteTrainer.setSessionDurationMinutes(p.durationMinutes)
       singleNoteTrainer.setAdvanceMode(p.advanceMode)
-      setTimeout(() => singleNoteTrainer.startSession(), 200)
+      // Iniciamos pasando las notas directamente para evitar el lag de React
+      singleNoteTrainer.startSession(p.recommendedNotes)
     } else if (p.targetMode === 'intervals') {
       setAppMode('intervals')
-      if (p.recommendedIntervals) intervalTrainer.setActiveIntervals(p.recommendedIntervals)
+      if (p.recommendedIntervals && p.recommendedIntervals.length > 0) {
+        intervalTrainer.setActiveIntervals(p.recommendedIntervals)
+      }
       intervalTrainer.setSessionLimitType(p.limitType)
       intervalTrainer.setSessionQuestionsCount(p.questionsCount)
       intervalTrainer.setSessionDurationMinutes(p.durationMinutes)
       intervalTrainer.setAdvanceMode(p.advanceMode)
-      setTimeout(() => intervalTrainer.startSession(), 200)
+      intervalTrainer.startSession()
     } else {
       setAppMode('sequences')
       sequenceTrainer.setCustomCandidateNotes(p.recommendedNotes)
@@ -201,7 +203,7 @@ export default function App(): React.ReactElement {
       sequenceTrainer.setSessionQuestionsCount(p.questionsCount)
       sequenceTrainer.setSessionDurationMinutes(p.durationMinutes)
       sequenceTrainer.setAdvanceMode(p.advanceMode)
-      setTimeout(() => sequenceTrainer.startSession(), 200)
+      sequenceTrainer.startSession()
     }
   }
 
@@ -216,7 +218,7 @@ export default function App(): React.ReactElement {
   }
 
   return (
-    <div className="p-5 max-w-5xl mx-auto space-y-4">
+    <div className="p-5 max-w-7xl mx-auto space-y-4">
       <Header status={midi.status} />
 
       {/* SELECTOR PRINCIPAL */}
