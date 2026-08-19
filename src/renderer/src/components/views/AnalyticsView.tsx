@@ -4,6 +4,7 @@ import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { StatCard } from '../ui/StatCard'
 import { Badge } from '../ui/Badge'
+import { AnalyticsCharts } from '../trainer/AnalyticsCharts'
 import { AiExercisePrescription } from '../../domain/ai/types'
 
 interface AnalyticsViewProps {
@@ -14,17 +15,22 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const {
     summary,
     sessions,
+    answers,
     metrics,
     aiResponse,
     isLmStudioOnline,
     isAiAnalyzing,
-    runAiDiagnostic
+    runAiDiagnostic,
+    checkLmStudioStatus
   } = useDatabaseStore()
-  const [activeTab, setActiveTab] = useState<'ai_report' | 'confusions' | 'sessions'>('ai_report')
+
+  const [activeTab, setActiveTab] = useState<'ai_report' | 'charts' | 'confusions' | 'sessions'>(
+    'ai_report'
+  )
 
   return (
     <div className="space-y-4">
-      {/* MÉTRICAS GLOBALES */}
+      {/* CABECERA DE MÉTRICAS GLOBALES */}
       <div className="grid grid-cols-4 gap-3">
         <StatCard title="Total Sesiones" value={summary.totalSessions} />
         <StatCard
@@ -42,7 +48,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         <StatCard title="Tiempo Medio" value={`${(summary.overallAvgTimeMs / 1000).toFixed(2)}s`} />
       </div>
 
-      {/* PESTAÑAS DE ANALÍTICA */}
+      {/* PESTAÑAS DE ANALÍTICA & ESTADO LM STUDIO */}
       <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
         <div className="flex gap-2">
           <button
@@ -58,6 +64,17 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           </button>
           <button
             type="button"
+            onClick={(): void => setActiveTab('charts')}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+              activeTab === 'charts'
+                ? 'bg-sky-600 text-white'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            📈 Gráficos & Tendencias
+          </button>
+          <button
+            type="button"
             onClick={(): void => setActiveTab('confusions')}
             className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
               activeTab === 'confusions'
@@ -65,7 +82,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
             }`}
           >
-            📊 Matriz de Confusión & Sesgos
+            📊 Matriz de Confusión
           </button>
           <button
             type="button"
@@ -80,8 +97,17 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           </button>
         </div>
 
-        {/* ESTADO DE CONEXIÓN CON LM STUDIO (LOCAL) */}
         <div className="flex items-center gap-2 text-xs">
+          <button
+            type="button"
+            onClick={(): void => {
+              checkLmStudioStatus()
+            }}
+            title="Hacer clic para re-comprobar conexión con LM Studio"
+            className="cursor-pointer text-zinc-400 hover:text-white"
+          >
+            🔄
+          </button>
           <span className="text-zinc-500">LM Studio Local:</span>
           <Badge variant={isLmStudioOnline ? 'success' : 'warning'}>
             {isLmStudioOnline ? '🟢 Conectado (RTX 4060)' : '🟡 Apagado (Usando Motor Local)'}
@@ -109,16 +135,14 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               onClick={runAiDiagnostic}
               className="bg-purple-600 hover:bg-purple-500 font-bold text-xs"
             >
-              {isAiAnalyzing ? '⏳ Analizando en GPU...' : '🔄 Re-analizar con IA'}
+              {isAiAnalyzing ? '⏳ Analizando en GPU RTX 4060...' : '🔄 Re-analizar con IA'}
             </Button>
           </div>
 
-          {/* CUERPO DEL ANÁLISIS ESCRITO */}
-          <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 text-xs text-zinc-300 leading-relaxed whitespace-pre-line">
+          <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 text-xs text-zinc-300 leading-relaxed whitespace-pre-line font-sans">
             {aiResponse?.analysisText || 'Generando análisis de rendimiento...'}
           </div>
 
-          {/* TARJETA DE PRESCRIPCIÓN DE EJERCICIO DISEÑADO POR LA IA */}
           {aiResponse?.prescription && (
             <div className="p-4 bg-purple-950/30 border border-purple-800/60 rounded-xl space-y-3">
               <div className="flex justify-between items-start">
@@ -159,7 +183,10 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </Card>
       )}
 
-      {/* 2. MATRIZ DE CONFUSIÓN */}
+      {/* 2. GRÁFICOS & TENDENCIAS HISTÓRICAS */}
+      {activeTab === 'charts' && <AnalyticsCharts sessions={sessions} answers={answers} />}
+
+      {/* 3. MATRIZ DE CONFUSIÓN */}
       {activeTab === 'confusions' && (
         <Card className="space-y-4 bg-zinc-900/90 border-zinc-800">
           <div>
@@ -261,7 +288,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </Card>
       )}
 
-      {/* 3. HISTORIAL DE SESIONES */}
+      {/* 4. HISTORIAL DE SESIONES */}
       {activeTab === 'sessions' && (
         <Card className="space-y-3 bg-zinc-900/90 border-zinc-800">
           <h3 className="text-base font-bold text-zinc-100 m-0">Historial Completo de Sesiones</h3>

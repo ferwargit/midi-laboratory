@@ -35,6 +35,53 @@ function createWindow(): void {
   }
 }
 
+// HANDLERS IPC PARA COMUNICACIÓN NATIVA CON LM STUDIO (SIN CORS)
+ipcMain.handle('lm-studio:check-models', async () => {
+  try {
+    const res = await fetch('http://127.0.0.1:1234/v1/models', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (data.data && data.data.length > 0) {
+      return data.data[0].id as string
+    }
+    return null
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle(
+  'lm-studio:chat-completion',
+  async (_, payload: { model: string; messages: unknown[] }) => {
+    try {
+      const response = await fetch('http://127.0.0.1:1234/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: payload.model,
+          messages: payload.messages,
+          temperature: 0.3
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        return { success: false, error: errorText }
+      }
+
+      const data = await response.json()
+      const content = data.choices[0]?.message?.content || ''
+      return { success: true, content, model: data.model || payload.model }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      return { success: false, error: message }
+    }
+  }
+)
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
