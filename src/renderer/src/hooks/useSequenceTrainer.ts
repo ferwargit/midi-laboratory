@@ -82,6 +82,7 @@ export function useSequenceTrainer({
   const sessionStartTimeRef = useRef<number>(0)
   const questionTokenRef = useRef<string | null>(null)
   const isAdvancingRef = useRef<boolean>(false)
+  const isWaitingAnswerRef = useRef<boolean>(false)
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<SequenceExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -112,7 +113,6 @@ export function useSequenceTrainer({
 
     const token = `token_seq_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
     questionTokenRef.current = token
-    isAdvancingRef.current = false
 
     const preset = SEQUENCE_PRESETS.find((p) => p.id === selectedPresetId)
     const maxJump = preset ? preset.maxJumpSemitones : 12
@@ -129,9 +129,10 @@ export function useSequenceTrainer({
     setCapturedNotes([])
     setLastResult(null)
     setIsWaitingManualAdvance(false)
+    isWaitingAnswerRef.current = true
     setStimulusStartTime(Date.now())
 
-    isAdvancingRef.current = false // Liberar candado aquí
+    isAdvancingRef.current = false
 
     onPlaySequence(sequence)
   }, [customCandidateNotes, selectedPresetId, sequenceLength, onPlaySequence])
@@ -148,6 +149,7 @@ export function useSequenceTrainer({
 
     questionTokenRef.current = null
     isAdvancingRef.current = false
+    isWaitingAnswerRef.current = false
 
     const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
 
@@ -233,7 +235,7 @@ export function useSequenceTrainer({
   }
 
   const advanceToNextSequence = useCallback((): void => {
-    if (!isSessionActive || isAdvancingRef.current) return
+    if (!isSessionActive || isAdvancingRef.current || isWaitingAnswerRef.current) return
     isAdvancingRef.current = true
 
     if (autoAdvanceTimerRef.current) {
@@ -251,9 +253,9 @@ export function useSequenceTrainer({
       triggerNextSequence()
     }
   }, [
-    isSessionActive,
     currentQuestionIndex,
     finalizeAndSaveSession,
+    isSessionActive,
     sessionLimitType,
     sessionQuestionsCount,
     triggerNextSequence
@@ -265,6 +267,7 @@ export function useSequenceTrainer({
     } else {
       if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
       questionTokenRef.current = null
+      isWaitingAnswerRef.current = false
       setIsSessionActive(false)
       setIsSessionFinished(false)
       setIsWaitingManualAdvance(false)
@@ -276,6 +279,7 @@ export function useSequenceTrainer({
   const resetToConfig = (): void => {
     if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
     questionTokenRef.current = null
+    isWaitingAnswerRef.current = false
     setIsSessionActive(false)
     setIsSessionFinished(false)
     setIsWaitingManualAdvance(false)
@@ -326,6 +330,7 @@ export function useSequenceTrainer({
 
         setLastResult(result)
         setSessionHistory([...historyBufferRef.current])
+        isWaitingAnswerRef.current = false
 
         if (onTelemetryLog) {
           onTelemetryLog('EVAL', result.feedbackMessage)

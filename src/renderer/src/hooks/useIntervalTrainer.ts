@@ -88,6 +88,7 @@ export function useIntervalTrainer({
   const sessionStartTimeRef = useRef<number>(0)
   const questionTokenRef = useRef<string | null>(null)
   const isAdvancingRef = useRef<boolean>(false)
+  const isWaitingAnswerRef = useRef<boolean>(false)
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<IntervalExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -131,7 +132,6 @@ export function useIntervalTrainer({
 
     const token = `token_int_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
     questionTokenRef.current = token
-    isAdvancingRef.current = false
 
     const chosenSemitones = activeIntervals[Math.floor(Math.random() * activeIntervals.length)]
 
@@ -158,9 +158,10 @@ export function useIntervalTrainer({
     setFirstNotePlayed(null)
     setLastResult(null)
     setIsWaitingManualAdvance(false)
+    isWaitingAnswerRef.current = true
     setStimulusStartTime(Date.now())
 
-    isAdvancingRef.current = false // Liberar candado aquí
+    isAdvancingRef.current = false
 
     onPlayInterval(chosenRoot, targetNote, finalDirection)
   }, [activeIntervals, directionMode, rootRangeNotes, onPlayInterval])
@@ -177,6 +178,7 @@ export function useIntervalTrainer({
 
     questionTokenRef.current = null
     isAdvancingRef.current = false
+    isWaitingAnswerRef.current = false
 
     const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
 
@@ -264,7 +266,7 @@ export function useIntervalTrainer({
   }
 
   const advanceToNextInterval = useCallback((): void => {
-    if (!isSessionActive || isAdvancingRef.current) return
+    if (!isSessionActive || isAdvancingRef.current || isWaitingAnswerRef.current) return
     isAdvancingRef.current = true
 
     if (autoAdvanceTimerRef.current) {
@@ -282,9 +284,9 @@ export function useIntervalTrainer({
       triggerNextInterval()
     }
   }, [
-    isSessionActive,
     currentQuestionIndex,
     finalizeAndSaveSession,
+    isSessionActive,
     sessionLimitType,
     sessionQuestionsCount,
     triggerNextInterval
@@ -296,6 +298,7 @@ export function useIntervalTrainer({
     } else {
       if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
       questionTokenRef.current = null
+      isWaitingAnswerRef.current = false
       setIsSessionActive(false)
       setIsSessionFinished(false)
       setIsWaitingManualAdvance(false)
@@ -307,6 +310,7 @@ export function useIntervalTrainer({
   const resetToConfig = (): void => {
     if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
     questionTokenRef.current = null
+    isWaitingAnswerRef.current = false
     setIsSessionActive(false)
     setIsSessionFinished(false)
     setIsWaitingManualAdvance(false)
@@ -361,6 +365,7 @@ export function useIntervalTrainer({
 
         setLastResult(result)
         setSessionHistory([...historyBufferRef.current])
+        isWaitingAnswerRef.current = false
         setWaitingNoteStep(1)
         setFirstNotePlayed(null)
 

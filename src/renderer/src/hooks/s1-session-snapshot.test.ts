@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useSingleNoteTrainer } from './useSingleNoteTrainer'
+import { useIntervalTrainer } from './useIntervalTrainer'
 
 describe('s1-session-snapshot - Aislamiento de Sesión y Control Concurrente', () => {
   it('inactive session ignored: notas MIDI recibidas con sesión inactiva deben ser descartadas sin evaluar', () => {
@@ -48,6 +49,38 @@ describe('s1-session-snapshot - Aislamiento de Sesión y Control Concurrente', (
     })
 
     expect(result.current.isWaitingAnswer).toBe(false)
+  })
+
+  it('stale session discarded after mode change: cambiar de modalidad descarta respuestas huérfanas', () => {
+    const onPlayStimulus = vi.fn()
+    const onInstrumentChanged = vi.fn()
+    const onPlayInterval = vi.fn()
+
+    const noteTrainerHook = renderHook(() =>
+      useSingleNoteTrainer({ onPlayStimulus, onInstrumentChanged })
+    )
+    const intervalTrainerHook = renderHook(() => useIntervalTrainer({ onPlayInterval }))
+
+    // Iniciamos sesión de notas
+    act(() => {
+      noteTrainerHook.result.current.startSession()
+    })
+    expect(noteTrainerHook.result.current.isSessionActive).toBe(true)
+
+    // Detenemos notas e iniciamos intervalos (simulando cambio de pestaña en App.tsx)
+    act(() => {
+      noteTrainerHook.result.current.stopSession()
+      intervalTrainerHook.result.current.startSession()
+    })
+
+    // Entra una nota del ejercicio viejo de notas
+    act(() => {
+      noteTrainerHook.result.current.handleUserNotePlayed(60)
+    })
+
+    // La sesión vieja de notas NO debe haber evaluado ni sumado historial
+    expect(noteTrainerHook.result.current.isSessionActive).toBe(false)
+    expect(intervalTrainerHook.result.current.isSessionActive).toBe(true)
   })
 
   it('manual and auto advance cannot overlap: invocar avance manual repetido no dispara doble pregunta', () => {
