@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import 'fake-indexeddb/auto'
-import { DatabaseEngine } from './databaseEngine'
+import { DatabaseEngine, DB_VERSION } from './databaseEngine'
 import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord } from './types'
 
-describe('databaseEngine - Persistencia IndexedDB Nativa', () => {
+describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
   let engine: DatabaseEngine
 
   beforeEach(async () => {
@@ -16,7 +16,8 @@ describe('databaseEngine - Persistencia IndexedDB Nativa', () => {
     engine.close()
   })
 
-  it('debe inicializarse y devolver resumen en 0', async () => {
+  it('debe inicializarse con la versión canónica y resumen en 0', async () => {
+    expect(engine.getVersion()).toBe(DB_VERSION)
     const summary = await engine.getSummary()
     expect(summary.totalSessions).toBe(0)
     expect(summary.totalExercises).toBe(0)
@@ -47,6 +48,19 @@ describe('databaseEngine - Persistencia IndexedDB Nativa', () => {
         isCorrect: true,
         semitoneDistance: 0,
         responseTimeMs: 1100,
+        velocity: 90,
+        reasonTelemetry: 'Exploración',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'ans_2',
+        sessionId: 'session_flute_1',
+        questionIndex: 2,
+        expectedNote: 64,
+        playedNote: 64,
+        isCorrect: true,
+        semitoneDistance: 0,
+        responseTimeMs: 1300,
         velocity: 90,
         reasonTelemetry: 'Exploración',
         createdAt: new Date().toISOString()

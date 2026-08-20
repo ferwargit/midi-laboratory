@@ -1,10 +1,11 @@
 import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord, DatabaseSummary } from './types'
+import { isValidSessionRecord, isValidAnswerRecord, isValidAiReportRecord } from './recordValidator'
 
-const DB_NAME = 'MusicalEarTrainerDB'
-const DB_VERSION = 3
-const SESSIONS_STORE = 'sessions'
-const ANSWERS_STORE = 'exercise_answers'
-const AI_REPORTS_STORE = 'ai_diagnostics'
+export const DB_NAME = 'MusicalEarTrainerDB'
+export const DB_VERSION = 3
+export const SESSIONS_STORE = 'sessions'
+export const ANSWERS_STORE = 'exercise_answers'
+export const AI_REPORTS_STORE = 'ai_diagnostics'
 
 export class DatabaseEngine {
   private db: IDBDatabase | null = null
@@ -42,8 +43,23 @@ export class DatabaseEngine {
     })
   }
 
+  getVersion(): number {
+    return this.db ? this.db.version : 0
+  }
+
   async saveSession(session: DbSessionRecord, answers: DbAnswerRecord[]): Promise<void> {
     if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    if (!isValidSessionRecord(session)) {
+      throw new Error('Registro de sesión inválido o corrupto.')
+    }
+
+    for (let i = 0; i < answers.length; i++) {
+      const currentAns = answers[i]
+      if (!isValidAnswerRecord(currentAns)) {
+        throw new Error(`Registro de respuesta inválido o corrupto en el índice ${i + 1}.`)
+      }
+    }
 
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction([SESSIONS_STORE, ANSWERS_STORE], 'readwrite')
@@ -63,6 +79,10 @@ export class DatabaseEngine {
 
   async saveAiReport(report: DbAiReportRecord): Promise<void> {
     if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    if (!isValidAiReportRecord(report)) {
+      throw new Error('Registro de informe de IA inválido o corrupto.')
+    }
 
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(AI_REPORTS_STORE, 'readwrite')
