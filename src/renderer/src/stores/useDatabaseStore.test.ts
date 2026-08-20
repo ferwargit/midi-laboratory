@@ -1,63 +1,68 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { useDatabaseStore } from './useDatabaseStore'
-import { DbSessionRecord } from '../domain/database/types'
+import { DbSessionRecord, DbAiReportRecord } from '../domain/database/types'
 
-describe('useDatabaseStore - Store Global de Persistencia con Zustand', () => {
+describe('useDatabaseStore - Store de Persistencia IndexedDB', () => {
   beforeEach(async () => {
-    // Resetear el estado del store antes de cada test
     await useDatabaseStore.getState().initialize()
     await useDatabaseStore.getState().clearDatabase()
   })
 
-  it('debe inicializarse con contadores en 0', () => {
-    const summary = useDatabaseStore.getState().summary
-    expect(summary.totalSessions).toBe(0)
-    expect(summary.totalExercises).toBe(0)
+  it('debe inicializarse con contadores en 0 y arrays vacíos', () => {
+    const state = useDatabaseStore.getState()
+    expect(state.summary.totalSessions).toBe(0)
+    expect(state.sessions).toEqual([])
+    expect(state.answers).toEqual([])
+    expect(state.aiReports).toEqual([])
   })
 
-  it('debe actualizar el resumen global de forma reactiva al guardar una sesión', async () => {
+  it('debe guardar y recargar sesiones en el estado reactivo', async () => {
     const mockSession: DbSessionRecord = {
-      id: 'session_zustand_test',
+      id: 'session_db_test',
       createdAt: new Date().toISOString(),
       strategyId: 'adaptive_v1',
       instrumentId: 'piano',
-      presetName: 'Nivel 1',
+      presetName: 'Notas (3)',
       totalQuestions: 5,
       correctAnswers: 4,
       accuracyPercentage: 80,
-      avgResponseTimeMs: 1400
+      avgResponseTimeMs: 1400,
+      durationSeconds: 30
     }
 
     await useDatabaseStore.getState().saveSession(mockSession, [])
 
-    const summary = useDatabaseStore.getState().summary
-    expect(summary.totalSessions).toBe(1)
-    expect(summary.totalExercises).toBe(5)
-    expect(summary.overallAccuracy).toBe(80)
+    const state = useDatabaseStore.getState()
+    expect(state.summary.totalSessions).toBe(1)
+    expect(state.sessions.length).toBe(1)
+    expect(state.sessions[0].id).toBe('session_db_test')
   })
 
-  it('debe resetear de forma atómica e inmediata a 0 al llamar a clearDatabase', async () => {
-    const mockSession: DbSessionRecord = {
-      id: 'session_temp',
+  it('debe guardar y recuperar informes de IA en la colección persistente', async () => {
+    const mockReport: DbAiReportRecord = {
+      id: 'ai_rep_1',
       createdAt: new Date().toISOString(),
-      strategyId: 'random',
-      instrumentId: 'piano',
-      presetName: 'Test',
-      totalQuestions: 10,
-      correctAnswers: 10,
-      accuracyPercentage: 100,
-      avgResponseTimeMs: 1000
+      modelName: 'qwen3.5-9b',
+      modeFilter: 'single_note',
+      analysisText: 'Diagnóstico guardado en store.',
+      prescription: {
+        title: 'Prescripción de Prueba',
+        rationale: 'Aislamiento',
+        targetMode: 'single_note',
+        instrumentId: 'acoustic_grand_piano',
+        recommendedNotes: [60, 62],
+        limitType: 'questions',
+        questionsCount: 10,
+        durationMinutes: 5,
+        advanceMode: 'smart'
+      }
     }
 
-    await useDatabaseStore.getState().saveSession(mockSession, [])
-    expect(useDatabaseStore.getState().summary.totalSessions).toBe(1)
+    await useDatabaseStore.getState().saveAiReport(mockReport)
 
-    await useDatabaseStore.getState().clearDatabase()
-
-    const summary = useDatabaseStore.getState().summary
-    expect(summary.totalSessions).toBe(0)
-    expect(summary.totalExercises).toBe(0)
-    expect(summary.overallAccuracy).toBe(0)
+    const state = useDatabaseStore.getState()
+    expect(state.aiReports.length).toBe(1)
+    expect(state.aiReports[0].modelName).toBe('qwen3.5-9b')
   })
 })
