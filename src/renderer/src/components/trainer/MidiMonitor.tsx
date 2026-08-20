@@ -1,11 +1,11 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, memo } from 'react'
 import { MidiLogEntry } from '../../hooks/useMidi'
 
 interface MidiMonitorProps {
   logs: MidiLogEntry[]
 }
 
-export function MidiMonitor({ logs }: MidiMonitorProps): React.ReactElement {
+function MidiMonitorComponent({ logs }: MidiMonitorProps): React.ReactElement {
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -28,14 +28,14 @@ export function MidiMonitor({ logs }: MidiMonitorProps): React.ReactElement {
   }
 
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3">
+    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 select-none">
       <div className="flex justify-between items-center mb-2">
         <span className="text-xs text-zinc-400 font-medium">
           📡 Telemetría en Tiempo Real (MIDI + Motor Adaptativo):
         </span>
         <span className="text-[10px] text-zinc-500 font-mono">Últimos {logs.length} eventos</span>
       </div>
-      <div className="h-44 overflow-y-auto font-mono text-xs space-y-1 bg-zinc-950 p-2.5 rounded border border-zinc-900">
+      <div className="h-40 overflow-y-auto font-mono text-xs space-y-1 bg-zinc-950 p-2.5 rounded border border-zinc-900">
         {logs.length === 0 ? (
           <div className="text-zinc-600 italic">Esperando inicio de sesión...</div>
         ) : (
@@ -52,3 +52,5 @@ export function MidiMonitor({ logs }: MidiMonitorProps): React.ReactElement {
     </div>
   )
 }
+
+export const MidiMonitor = memo(MidiMonitorComponent)

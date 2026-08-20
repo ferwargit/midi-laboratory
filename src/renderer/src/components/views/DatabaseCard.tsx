@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { memo } from 'react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { useDatabaseStore } from '../../stores/useDatabaseStore'
@@ -7,11 +7,11 @@ interface DatabaseCardProps {
   onOpenResetModal: () => void
 }
 
-export function DatabaseCard({ onOpenResetModal }: DatabaseCardProps): React.ReactElement {
+function DatabaseCardComponent({ onOpenResetModal }: DatabaseCardProps): React.ReactElement {
   const summary = useDatabaseStore((state) => state.summary)
 
   return (
-    <Card className="bg-zinc-900/60 border-zinc-800/80">
+    <Card className="bg-zinc-900/60 border-zinc-800/80 select-none">
       <div className="flex justify-between items-center mb-2">
         <span className="text-xs text-zinc-400 font-medium">
           💾 Memoria a Largo Plazo (Base de Datos Persistente con Zustand):
@@ -48,3 +48,5 @@ export function DatabaseCard({ onOpenResetModal }: DatabaseCardProps): React.Rea
     </Card>
   )
 }
+
+export const DatabaseCard = memo(DatabaseCardComponent)

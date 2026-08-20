@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, memo } from 'react'
 import { isBlackKey, midiNoteToName } from '../../domain/music/noteUtils'
 import { NotePerformance } from '../../domain/adaptation/types'
 
@@ -14,7 +14,7 @@ interface PianoKeyboardProps {
   disabled?: boolean
 }
 
-export function PianoKeyboard({
+function PianoKeyboardComponent({
   keys = [],
   activeNotes = [],
   pressedNotes = [],
@@ -51,7 +51,6 @@ export function PianoKeyboard({
     const isVirtualClicked = clickedNote === note
     const isCurrentlyActive = isPhysicallyPressed || isVirtualClicked
 
-    // 1. Tecla pulsada físicamente o por clic virtual en vivo (Ámbar brillante)
     if (isCurrentlyActive) {
       return {
         bg: black
@@ -63,13 +62,11 @@ export function PianoKeyboard({
 
     const isNoteActive = Array.isArray(activeNotes) && activeNotes.includes(note)
 
-    // 2. MODO HEATMAP (Durante la sesión o en el Resumen Final)
     if (showHeatmap) {
       const perf = performances?.get(note)
       const attempts = perf?.attempts ?? 0
       const accuracy = perf?.accuracyPercentage ?? 0
 
-      // A. Tecla evaluada con respuestas reales
       if (attempts > 0) {
         if (accuracy >= 85) {
           return {
@@ -95,7 +92,6 @@ export function PianoKeyboard({
         }
       }
 
-      // B. Tecla activa de la sesión que aún no fue preguntada (Color natural nítido con punto)
       if (isNoteActive) {
         return {
           bg: black
@@ -106,7 +102,6 @@ export function PianoKeyboard({
         }
       }
 
-      // C. TECLA FUERA DEL EJERCICIO: SOMBREADO OSCURO ATENUADO (SOMBRA MARCADA)
       return {
         bg: black
           ? 'bg-zinc-800/70 border-zinc-800/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]'
@@ -115,7 +110,6 @@ export function PianoKeyboard({
       }
     }
 
-    // 3. MODO CONFIGURACIÓN PREVIA (Selección de notas activas)
     if (isNoteActive) {
       return {
         bg: black
@@ -151,7 +145,6 @@ export function PianoKeyboard({
   return (
     <div className="w-full bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 shadow-2xl overflow-hidden select-none">
       <div className="relative w-full h-24 md:h-28 flex">
-        {/* TECLAS BLANCAS */}
         {whiteKeys.map((note) => {
           const style = getKeyStyle(note, false)
           return (
@@ -175,7 +168,6 @@ export function PianoKeyboard({
           )
         })}
 
-        {/* TECLAS NEGRAS */}
         {keys
           .filter((k) => isBlackKey(k))
           .map((note) => {
@@ -212,3 +204,5 @@ export function PianoKeyboard({
     </div>
   )
 }
+
+export const PianoKeyboard = memo(PianoKeyboardComponent)
