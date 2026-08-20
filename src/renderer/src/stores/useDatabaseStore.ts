@@ -6,6 +6,7 @@ import {
   DbSessionRecord,
   DbAiReportRecord
 } from '../domain/database/types'
+import { useAiStore } from './useAiStore'
 
 interface DatabaseState {
   engine: DatabaseEngine | null
@@ -78,6 +79,8 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
     const { engine } = get()
     if (!engine) return
     await engine.clearDatabase()
+
+    // 1. Limpia el estado de la base de datos
     set({
       summary: {
         totalSessions: 0,
@@ -90,5 +93,8 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
       answers: [],
       aiReports: []
     })
+
+    // 2. Purga inmediatamente la memoria residual del store de IA
+    useAiStore.getState().resetAiMemory()
   }
 }))

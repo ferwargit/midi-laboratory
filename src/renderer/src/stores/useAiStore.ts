@@ -1,48 +1,79 @@
 import { create } from 'zustand'
 import { LmStudioService } from '../domain/ai/lmStudioService'
 import { AiAnalysisResponse } from '../domain/ai/types'
-import { AnalyticsMetrics } from '../domain/analytics/historyAnalytics'
+import { AnalyticsMetrics, AnalyticsModeFilter } from '../domain/analytics/historyAnalytics'
 import { generateAlgorithmicFallback } from '../domain/ai/fallbackGenerator'
 import { DbAiReportRecord } from '../domain/database/types'
 
 interface AiState {
-  aiResponse: AiAnalysisResponse | null
+  aiResponsesByMode: Record<AnalyticsModeFilter, AiAnalysisResponse | null>
   isLmStudioOnline: boolean
   isAiAnalyzing: boolean
   checkLmStudioStatus: () => Promise<void>
-  hydrateLatestReport: (reports: DbAiReportRecord[], metrics: AnalyticsMetrics) => void
+  hydrateReportsByMode: (reports: DbAiReportRecord[], metrics: AnalyticsMetrics) => void
   runAiDiagnostic: (
     metrics: AnalyticsMetrics,
     saveReportCallback?: (report: DbAiReportRecord) => Promise<void>
   ) => Promise<void>
-  setAiResponse: (response: AiAnalysisResponse) => void
+  setAiResponseForMode: (mode: AnalyticsModeFilter, response: AiAnalysisResponse) => void
+  resetAiMemory: () => void
 }
 
 const aiService = new LmStudioService()
 
+const initialResponses: Record<AnalyticsModeFilter, AiAnalysisResponse | null> = {
+  all: null,
+  single_note: null,
+  intervals: null,
+  sequences: null
+}
+
 export const useAiStore = create<AiState>((set, get) => ({
-  aiResponse: null,
+  aiResponsesByMode: initialResponses,
   isLmStudioOnline: false,
   isAiAnalyzing: false,
 
-  setAiResponse: (aiResponse: AiAnalysisResponse): void => set({ aiResponse }),
+  setAiResponseForMode: (mode: AnalyticsModeFilter, response: AiAnalysisResponse): void => {
+    set((state) => ({
+      aiResponsesByMode: {
+        ...state.aiResponsesByMode,
+        [mode]: response
+      }
+    }))
+  },
 
-  hydrateLatestReport: (reports: DbAiReportRecord[], metrics: AnalyticsMetrics): void => {
-    if (get().aiResponse !== null) return
+  resetAiMemory: (): void => {
+    set({ aiResponsesByMode: initialResponses, isAiAnalyzing: false })
+  },
 
-    if (reports && reports.length > 0) {
-      const latest = reports[0]
-      set({
-        aiResponse: {
-          source: 'lm_studio_ai',
-          modelName: latest.modelName,
-          analysisText: latest.analysisText,
-          prescription: latest.prescription
-        }
-      })
-    } else {
-      set({ aiResponse: generateAlgorithmicFallback(metrics) })
+  hydrateReportsByMode: (reports: DbAiReportRecord[], metrics: AnalyticsMetrics): void => {
+    const currentMap: Record<AnalyticsModeFilter, AiAnalysisResponse | null> = {
+      all: null,
+      single_note: null,
+      intervals: null,
+      sequences: null
     }
+    const modes: AnalyticsModeFilter[] = ['all', 'single_note', 'intervals', 'sequences']
+
+    modes.forEach((mode) => {
+      // 1. Si existe un reporte guardado en DB para esta modalidad, lo carga
+      const match = reports.find((r) => r.modeFilter === mode)
+      if (match) {
+        currentMap[mode] = {
+          source: 'lm_studio_ai',
+          modelName: match.modelName,
+          analysisText: match.analysisText,
+          prescription: match.prescription
+        }
+      } else {
+        // 2. Si no hay reporte guardado (ej: tras un reset o antes de correr IA),
+        // calcula el informe algorítmico basado en las métricas ACTUALES de la sesión
+        const modeMetrics = { ...metrics, modeFilter: mode }
+        currentMap[mode] = generateAlgorithmicFallback(modeMetrics)
+      }
+    })
+
+    set({ aiResponsesByMode: currentMap })
   },
 
   checkLmStudioStatus: async (): Promise<void> => {
@@ -57,16 +88,19 @@ export const useAiStore = create<AiState>((set, get) => ({
     set({ isAiAnalyzing: true })
     await get().checkLmStudioStatus()
 
+    const currentMode = metrics.modeFilter
+
     try {
       const response = await aiService.analyzeAndPrescribe(metrics)
-      set({ aiResponse: response, isAiAnalyzing: false })
+      get().setAiResponseForMode(currentMode, response)
+      set({ isAiAnalyzing: false })
 
       if (saveReportCallback && response.prescription) {
         const reportRecord: DbAiReportRecord = {
           id: `ai_rep_${Date.now()}`,
           createdAt: new Date().toISOString(),
           modelName: response.modelName,
-          modeFilter: metrics.modeFilter,
+          modeFilter: currentMode,
           analysisText: response.analysisText,
           prescription: response.prescription
         }
@@ -74,7 +108,8 @@ export const useAiStore = create<AiState>((set, get) => ({
       }
     } catch {
       const fallback = generateAlgorithmicFallback(metrics)
-      set({ aiResponse: fallback, isAiAnalyzing: false })
+      get().setAiResponseForMode(currentMode, fallback)
+      set({ isAiAnalyzing: false })
     }
   }
 }))

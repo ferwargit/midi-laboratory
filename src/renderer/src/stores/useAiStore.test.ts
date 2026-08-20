@@ -3,7 +3,7 @@ import { useAiStore } from './useAiStore'
 import { DbAiReportRecord } from '../domain/database/types'
 import { AnalyticsMetrics } from '../domain/analytics/historyAnalytics'
 
-describe('useAiStore - Store del Asistente de IA Local', () => {
+describe('useAiStore - Store del Asistente de IA Local Segregado por Modalidad', () => {
   const mockMetrics: AnalyticsMetrics = {
     modeFilter: 'single_note',
     filteredSessionsCount: 1,
@@ -26,24 +26,20 @@ describe('useAiStore - Store del Asistente de IA Local', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    useAiStore.setState({
-      aiResponse: null,
-      isAiAnalyzing: false,
-      isLmStudioOnline: false
-    })
+    useAiStore.getState().resetAiMemory()
   })
 
-  it('hydrateLatestReport debe cargar el informe más reciente si existe en la base de datos', () => {
+  it('hydrateReportsByMode debe cargar el informe correspondiente a cada modalidad de forma segregada', () => {
     const mockReports: DbAiReportRecord[] = [
       {
-        id: 'rep_1',
+        id: 'rep_note',
         createdAt: new Date().toISOString(),
         modelName: 'qwen3.5-9b',
         modeFilter: 'single_note',
-        analysisText: 'Informe histórico hidratado exitosamente.',
+        analysisText: 'Diagnóstico exclusivo de Notas.',
         prescription: {
-          title: 'Prescripción Hidratada',
-          rationale: 'Prueba',
+          title: 'Prescripción de Notas',
+          rationale: 'Foco en semitonos',
           targetMode: 'single_note',
           instrumentId: 'acoustic_grand_piano',
           recommendedNotes: [60, 62],
@@ -52,28 +48,44 @@ describe('useAiStore - Store del Asistente de IA Local', () => {
           durationMinutes: 5,
           advanceMode: 'smart'
         }
+      },
+      {
+        id: 'rep_int',
+        createdAt: new Date().toISOString(),
+        modelName: 'qwen3.5-9b',
+        modeFilter: 'intervals',
+        analysisText: 'Diagnóstico exclusivo de Intervalos.',
+        prescription: {
+          title: 'Prescripción de Intervalos',
+          rationale: 'Foco en 3as',
+          targetMode: 'intervals',
+          instrumentId: 'acoustic_grand_piano',
+          recommendedNotes: [60],
+          recommendedIntervals: [3, 4],
+          limitType: 'questions',
+          questionsCount: 10,
+          durationMinutes: 5,
+          advanceMode: 'smart'
+        }
       }
     ]
 
-    useAiStore.getState().hydrateLatestReport(mockReports, mockMetrics)
+    useAiStore.getState().hydrateReportsByMode(mockReports, mockMetrics)
 
-    const response = useAiStore.getState().aiResponse
-    expect(response).not.toBeNull()
-    expect(response?.analysisText).toBe('Informe histórico hidratado exitosamente.')
-    expect(response?.prescription.title).toBe('Prescripción Hidratada')
+    const responses = useAiStore.getState().aiResponsesByMode
+
+    expect(responses.single_note?.analysisText).toBe('Diagnóstico exclusivo de Notas.')
+    expect(responses.intervals?.analysisText).toBe('Diagnóstico exclusivo de Intervalos.')
   })
 
-  it('runAiDiagnostic debe gestionar el estado isAiAnalyzing y persistir el reporte si se pasa el callback', async () => {
-    const saveCallback = vi.fn().mockResolvedValue(undefined)
-
-    // Inyectamos una respuesta inmediata mockeada para test unitario
-    useAiStore.getState().setAiResponse({
-      source: 'algorithmic_fallback',
-      modelName: 'TestModel',
-      analysisText: 'Análisis de prueba unitaria.',
+  it('resetAiMemory debe purgar las respuestas cacheadas en memoria', () => {
+    useAiStore.getState().setAiResponseForMode('single_note', {
+      source: 'lm_studio_ai',
+      modelName: 'Qwen',
+      analysisText: 'Texto temporal',
       prescription: {
-        title: 'Prescripción Test',
-        rationale: 'Validación de store',
+        title: 'T',
+        rationale: 'R',
         targetMode: 'single_note',
         instrumentId: 'acoustic_grand_piano',
         recommendedNotes: [60, 62],
@@ -84,29 +96,9 @@ describe('useAiStore - Store del Asistente de IA Local', () => {
       }
     })
 
-    const reportRecord: DbAiReportRecord = {
-      id: 'ai_rep_test',
-      createdAt: new Date().toISOString(),
-      modelName: 'TestModel',
-      modeFilter: 'single_note',
-      analysisText: 'Análisis de prueba unitaria.',
-      prescription: {
-        title: 'Prescripción Test',
-        rationale: 'Validación de store',
-        targetMode: 'single_note',
-        instrumentId: 'acoustic_grand_piano',
-        recommendedNotes: [60, 62],
-        limitType: 'questions',
-        questionsCount: 10,
-        durationMinutes: 5,
-        advanceMode: 'smart'
-      }
-    }
+    expect(useAiStore.getState().aiResponsesByMode.single_note).not.toBeNull()
 
-    await saveCallback(reportRecord)
-
-    expect(useAiStore.getState().isAiAnalyzing).toBe(false)
-    expect(useAiStore.getState().aiResponse).not.toBeNull()
-    expect(saveCallback).toHaveBeenCalledWith(reportRecord)
+    useAiStore.getState().resetAiMemory()
+    expect(useAiStore.getState().aiResponsesByMode.single_note).toBeNull()
   })
 })

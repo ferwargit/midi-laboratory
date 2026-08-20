@@ -23,7 +23,7 @@ function formatDuration(totalSeconds: number): string {
 }
 
 export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React.ReactElement {
-  // Store 1: Base de Datos Cruda
+  // Store 1: Base de Datos
   const sessions = useDatabaseStore((state) => state.sessions)
   const answers = useDatabaseStore((state) => state.answers)
   const aiReports = useDatabaseStore((state) => state.aiReports)
@@ -35,20 +35,18 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const setModeFilter = useAnalyticsStore((state) => state.setModeFilter)
   const recomputeMetrics = useAnalyticsStore((state) => state.recomputeMetrics)
 
-  // Store 3: Asistente IA Local
-  const aiResponse = useAiStore((state) => state.aiResponse)
+  // Store 3: Asistente IA Local Segregado por Modalidad
+  const aiResponsesByMode = useAiStore((state) => state.aiResponsesByMode)
   const isLmStudioOnline = useAiStore((state) => state.isLmStudioOnline)
   const isAiAnalyzing = useAiStore((state) => state.isAiAnalyzing)
   const runAiDiagnostic = useAiStore((state) => state.runAiDiagnostic)
   const checkLmStudioStatus = useAiStore((state) => state.checkLmStudioStatus)
+  const hydrateReportsByMode = useAiStore((state) => state.hydrateReportsByMode)
 
   const [activeTab, setActiveTab] = useState<
     'ai_report' | 'ai_history' | 'charts' | 'confusions' | 'sessions'
   >('ai_report')
 
-  const hydrateLatestReport = useAiStore((state) => state.hydrateLatestReport)
-
-  // Sincronizar métricas cuando cambian los datos de la base de datos
   useEffect(() => {
     recomputeMetrics(sessions, answers)
   }, [sessions, answers, recomputeMetrics])
@@ -57,16 +55,20 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     checkLmStudioStatus()
   }, [checkLmStudioStatus])
 
-  // Carga el último informe guardado o el fallback determinista inmediatamente
   useEffect(() => {
-    hydrateLatestReport(aiReports, metrics)
-  }, [aiReports, metrics, hydrateLatestReport])
+    hydrateReportsByMode(aiReports, metrics)
+  }, [aiReports, metrics, hydrateReportsByMode])
 
+  // Obtener el informe específico de la modalidad activa
+  const currentAiResponse = aiResponsesByMode[modeFilter]
   const displayedSessions = filterSessionsByMode(sessions, modeFilter)
+  const filteredReports = aiReports.filter(
+    (r) => modeFilter === 'all' || r.modeFilter === modeFilter
+  )
 
   return (
     <div className="space-y-4">
-      {/* CABECERA CON PSICOMETRÍA */}
+      {/* CABECERA CON PSICOMETRÍA NORMALIZADA */}
       <div className="grid grid-cols-4 gap-3">
         <StatCard
           title={modeFilter === 'all' ? 'Total Sesiones' : `Sesiones (${modeFilter})`}
@@ -146,7 +148,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          🧠 Diagnóstico con IA
+          🧠 Diagnóstico con IA ({modeFilter})
         </button>
         <button
           type="button"
@@ -157,7 +159,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
           }`}
         >
-          📜 Historial de Informes ({aiReports.length})
+          📜 Historial de Informes ({filteredReports.length})
         </button>
         <button
           type="button"
@@ -194,7 +196,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </button>
       </div>
 
-      {/* 1. INFORME DE IA & PRESCRIPCIÓN */}
+      {/* 1. INFORME SEGREGADO POR MODALIDAD */}
       {activeTab === 'ai_report' && (
         <Card className="space-y-4 bg-zinc-900/90 border-purple-900/40">
           <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
@@ -203,7 +205,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                 ✨ Diagnóstico Pedagógico Asistido por IA ({modeFilter})
               </h3>
               <span className="text-[11px] text-zinc-500">
-                Modelo: {aiResponse?.modelName || 'Iniciando...'}
+                Modelo: {currentAiResponse?.modelName || 'Iniciando...'}
               </span>
             </div>
 
@@ -227,11 +229,20 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
             </Button>
           </div>
 
+          {metrics.totalAnswers < 10 && (
+            <div className="p-2.5 bg-amber-950/40 border border-amber-800/60 rounded text-[11px] text-amber-300">
+              ℹ️ Se recomienda acumular al menos 10 respuestas en esta modalidad para un diagnóstico
+              estadísticamente óptimo (llevas {metrics.totalAnswers}).
+            </div>
+          )}
+
+          {/* TEXTO DE DIAGNÓSTICO ESPECÍFICO DE LA MODALIDAD ACTIVA */}
           <div className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 text-xs text-zinc-300 leading-relaxed whitespace-pre-line font-sans">
-            {aiResponse?.analysisText || 'Generando análisis psicométrico...'}
+            {currentAiResponse?.analysisText || 'Generando análisis psicométrico...'}
           </div>
 
-          {aiResponse?.prescription && (
+          {/* PRESCRIPCIÓN ESPECÍFICA */}
+          {currentAiResponse?.prescription && (
             <div className="p-4 bg-purple-950/30 border border-purple-800/60 rounded-xl space-y-3">
               <div className="flex justify-between items-start">
                 <div>
@@ -239,16 +250,16 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                     🎯 Prescripción Pedagógica Diseñada por la IA:
                   </span>
                   <h4 className="text-base font-bold text-zinc-100 mt-0.5 m-0">
-                    {aiResponse.prescription.title}
+                    {currentAiResponse.prescription.title}
                   </h4>
                   <p className="text-xs text-zinc-400 mt-1 leading-normal">
-                    {aiResponse.prescription.rationale}
+                    {currentAiResponse.prescription.rationale}
                   </p>
                 </div>
 
                 <Button
                   variant="success"
-                  onClick={(): void => onLoadPrescription(aiResponse.prescription)}
+                  onClick={(): void => onLoadPrescription(currentAiResponse.prescription)}
                   className="shrink-0 font-bold text-xs shadow-lg cursor-pointer"
                 >
                   🚀 Cargar y Comenzar Ejercicio
@@ -258,36 +269,42 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               <div className="flex flex-wrap gap-2 text-[11px] font-mono text-zinc-300 pt-2 border-t border-purple-900/40">
                 <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
                   Modalidad:{' '}
-                  <strong className="text-sky-300">{aiResponse.prescription.targetMode}</strong>
+                  <strong className="text-sky-300">
+                    {currentAiResponse.prescription.targetMode}
+                  </strong>
                 </span>
                 <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
                   Timbre:{' '}
                   <strong className="text-emerald-300">
-                    {aiResponse.prescription.instrumentId}
+                    {currentAiResponse.prescription.instrumentId}
                   </strong>
                 </span>
                 <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
                   Criterio:{' '}
-                  <strong className="text-amber-300">{aiResponse.prescription.limitType}</strong>
+                  <strong className="text-amber-300">
+                    {currentAiResponse.prescription.limitType}
+                  </strong>
                 </span>
                 <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
                   Avance:{' '}
-                  <strong className="text-purple-300">{aiResponse.prescription.advanceMode}</strong>
+                  <strong className="text-purple-300">
+                    {currentAiResponse.prescription.advanceMode}
+                  </strong>
                 </span>
                 <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
                   Notas:{' '}
                   <strong className="text-white">
-                    {aiResponse.prescription.recommendedNotes
+                    {currentAiResponse.prescription.recommendedNotes
                       .map((n) => midiNoteToName(n))
                       .join(', ')}
                   </strong>
                 </span>
-                {aiResponse.prescription.targetMode === 'intervals' &&
-                  aiResponse.prescription.recommendedIntervals && (
+                {currentAiResponse.prescription.targetMode === 'intervals' &&
+                  currentAiResponse.prescription.recommendedIntervals && (
                     <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800">
                       Intervalos:{' '}
                       <strong className="text-sky-400">
-                        {aiResponse.prescription.recommendedIntervals
+                        {currentAiResponse.prescription.recommendedIntervals
                           .map((st) => `${st}st`)
                           .join(', ')}
                       </strong>
@@ -299,19 +316,19 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </Card>
       )}
 
-      {/* 2. HISTORIAL DE INFORMES */}
+      {/* 2. HISTORIAL DE INFORMES FILTRADO POR MODALIDAD */}
       {activeTab === 'ai_history' && (
         <Card className="space-y-4 bg-zinc-900/90 border-zinc-800">
           <h3 className="text-base font-bold text-zinc-100 m-0">
-            Historial de Devoluciones y Prescripciones ({aiReports.length})
+            Historial de Devoluciones de IA ({modeFilter}: {filteredReports.length})
           </h3>
-          {aiReports.length === 0 ? (
+          {filteredReports.length === 0 ? (
             <div className="text-center py-6 text-zinc-600 text-xs italic">
-              No hay informes de IA guardados.
+              No hay informes de IA guardados para la modalidad seleccionada ({modeFilter}).
             </div>
           ) : (
             <div className="space-y-3">
-              {aiReports.map((rep) => (
+              {filteredReports.map((rep) => (
                 <div
                   key={rep.id}
                   className="p-3.5 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2"
@@ -326,7 +343,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                     {rep.analysisText}
                   </p>
                   <div className="flex justify-between items-center pt-2 border-t border-zinc-900">
-                    <span className="text-[10px] text-zinc-500">Modelo: {rep.modelName}</span>
+                    <span className="text-[10px] text-zinc-500">
+                      Modalidad: {rep.modeFilter} | Modelo: {rep.modelName}
+                    </span>
                     <Button
                       size="sm"
                       variant="secondary"
@@ -371,7 +390,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               </span>
               {metrics.topConfusions.length === 0 ? (
                 <div className="text-zinc-600 text-xs italic">
-                  No hay suficientes errores registrados.
+                  No hay suficientes errores registrados en esta modalidad.
                 </div>
               ) : (
                 <div className="space-y-1.5">

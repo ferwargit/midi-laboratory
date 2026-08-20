@@ -38,16 +38,24 @@ describe('s3-store-segmentation - Segmentación de Responsabilidades en Stores',
   beforeEach(async () => {
     await useDatabaseStore.getState().initialize()
     await useDatabaseStore.getState().clearDatabase()
+    useAiStore.setState({
+      aiResponsesByMode: {
+        all: null,
+        single_note: null,
+        intervals: null,
+        sequences: null
+      },
+      isAiAnalyzing: false,
+      isLmStudioOnline: false
+    })
   })
 
   it('analytics store recomputes on data change: el store analítico recalcula métricas al recibir nuevos datos', () => {
     const analyticsStore = useAnalyticsStore.getState()
 
-    // Inicialmente vacío
     analyticsStore.recomputeMetrics([], [])
     expect(analyticsStore.metrics.totalAnswers).toBe(0)
 
-    // Al llegar nuevos datos de sesión
     analyticsStore.recomputeMetrics([mockSession], mockAnswers)
     const updated = useAnalyticsStore.getState().metrics
 
@@ -59,10 +67,10 @@ describe('s3-store-segmentation - Segmentación de Responsabilidades en Stores',
     const aiStore = useAiStore.getState()
 
     expect(aiStore.isAiAnalyzing).toBe(false)
-    expect(aiStore.aiResponse).toBeNull()
+    expect(aiStore.aiResponsesByMode.single_note).toBeNull()
 
-    // Modificar estado de IA no altera la base de datos
-    aiStore.setAiResponse({
+    // Modificar estado de IA no altera la base de datos ni los contadores
+    aiStore.setAiResponseForMode('single_note', {
       source: 'algorithmic_fallback',
       modelName: 'MockModel',
       analysisText: 'Análisis aislado',
@@ -79,7 +87,7 @@ describe('s3-store-segmentation - Segmentación de Responsabilidades en Stores',
       }
     })
 
-    expect(useAiStore.getState().aiResponse?.modelName).toBe('MockModel')
-    expect(useDatabaseStore.getState().summary.totalSessions).toBe(0) // DB permanece virgen
+    expect(useAiStore.getState().aiResponsesByMode.single_note?.modelName).toBe('MockModel')
+    expect(useDatabaseStore.getState().summary.totalSessions).toBe(0) // DB permanece intacta en 0
   })
 })
