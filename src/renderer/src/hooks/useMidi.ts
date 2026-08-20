@@ -14,6 +14,8 @@ export interface MidiLogEntry {
 interface UseMidiOptions {
   onNoteOn?: (noteNumber: number, velocity: number) => void
   onNoteOff?: (noteNumber: number) => void
+  onDeviceDisconnected?: () => void
+  onDeviceReconnected?: () => void
   enableSoftwareThru?: boolean
 }
 
@@ -23,6 +25,7 @@ export interface UseMidiReturn {
   outputs: MIDIOutput[]
   selectedInputId: string
   selectedOutputId: string
+  isDeviceDisconnected: boolean
   setSelectedInputId: (id: string) => void
   setSelectedOutputId: (id: string) => void
   pressedNotes: number[]
@@ -36,6 +39,8 @@ export interface UseMidiReturn {
 export function useMidi({
   onNoteOn,
   onNoteOff,
+  onDeviceDisconnected,
+  onDeviceReconnected,
   enableSoftwareThru = true
 }: UseMidiOptions = {}): UseMidiReturn {
   const [midiAccess, setMidiAccess] = useState<MIDIAccess | null>(null)
@@ -43,6 +48,7 @@ export function useMidi({
   const [outputs, setOutputs] = useState<MIDIOutput[]>([])
   const [selectedInputId, setSelectedInputId] = useState<string>('')
   const [selectedOutputId, setSelectedOutputId] = useState<string>('')
+  const [isDeviceDisconnected, setIsDeviceDisconnected] = useState<boolean>(false)
   const [pressedNotes, setPressedNotes] = useState<number[]>([])
   const [status, setStatus] = useState<string>(() =>
     typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator
@@ -53,6 +59,21 @@ export function useMidi({
 
   const filterRef = useRef<MidiInputFilter>(new MidiInputFilter(35))
   const hungNotesTimersRef = useRef<Map<number, NodeJS.Timeout>>(new Map())
+  const lastKnownInputNameRef = useRef<string>('UM-ONE')
+  const previousConnectionStateRef = useRef<boolean | null>(null) // null = inicio, true = conectado, false = desconectado
+
+  // Guardamos los callbacks en refs para evitar re-creación de refreshPorts
+  const onNoteOnRef = useRef(onNoteOn)
+  const onNoteOffRef = useRef(onNoteOff)
+  const onDisconnectedRef = useRef(onDeviceDisconnected)
+  const onReconnectedRef = useRef(onDeviceReconnected)
+
+  useEffect(() => {
+    onNoteOnRef.current = onNoteOn
+    onNoteOffRef.current = onNoteOff
+    onDisconnectedRef.current = onDeviceDisconnected
+    onReconnectedRef.current = onDeviceReconnected
+  })
 
   const addLog = useCallback((entry: Omit<MidiLogEntry, 'id' | 'time'>): void => {
     const now = new Date()
@@ -74,26 +95,58 @@ export function useMidi({
     filterRef.current.clearHistory()
   }, [])
 
-  const refreshPorts = useCallback((access: MIDIAccess): void => {
-    const inPorts: MIDIInput[] = []
-    const outPorts: MIDIOutput[] = []
+  const refreshPorts = useCallback(
+    (access: MIDIAccess): void => {
+      const inPorts: MIDIInput[] = []
+      const outPorts: MIDIOutput[] = []
 
-    access.inputs.forEach((port) => inPorts.push(port))
-    access.outputs.forEach((port) => outPorts.push(port))
+      access.inputs.forEach((port) => inPorts.push(port))
+      access.outputs.forEach((port) => outPorts.push(port))
 
-    setInputs(inPorts)
-    setOutputs(outPorts)
+      setInputs(inPorts)
+      setOutputs(outPorts)
 
-    if (inPorts.length > 0) {
-      const umOneIn = inPorts.find((p) => p.name?.toUpperCase().includes('UM-ONE'))
-      setSelectedInputId(umOneIn ? umOneIn.id : inPorts[0].id)
-    }
+      // CASO 1: Desconexión de dispositivos
+      if (inPorts.length === 0) {
+        setIsDeviceDisconnected(true)
+        setStatus('⚠️ Dispositivo MIDI desconectado')
+        if (previousConnectionStateRef.current !== false) {
+          previousConnectionStateRef.current = false
+          if (onDisconnectedRef.current) onDisconnectedRef.current()
+        }
+        return
+      }
 
-    if (outPorts.length > 0) {
-      const umOneOut = outPorts.find((p) => p.name?.toUpperCase().includes('UM-ONE'))
-      setSelectedOutputId(umOneOut ? umOneOut.id : outPorts[0].id)
-    }
-  }, [])
+      // CASO 2: Dispositivos presentes / Conectados
+      const preferredIn =
+        inPorts.find((p) =>
+          p.name?.toUpperCase().includes(lastKnownInputNameRef.current.toUpperCase())
+        ) || inPorts[0]
+
+      const preferredOut =
+        outPorts.find((p) =>
+          p.name?.toUpperCase().includes(lastKnownInputNameRef.current.toUpperCase())
+        ) || outPorts[0]
+
+      if (preferredIn) {
+        setSelectedInputId(preferredIn.id)
+        if (preferredIn.name) lastKnownInputNameRef.current = preferredIn.name
+      }
+      if (preferredOut) {
+        setSelectedOutputId(preferredOut.id)
+      }
+
+      setIsDeviceDisconnected(false)
+      setStatus('Web MIDI conectado.')
+
+      // Solo disparar evento de reconexión si PREVIAMENTE estaba desconectado (evita bucle al iniciar)
+      if (previousConnectionStateRef.current === false) {
+        if (onReconnectedRef.current) onReconnectedRef.current()
+      }
+      previousConnectionStateRef.current = true
+    },
+    [] // Array de dependencias vacío y estable
+  )
 
   useEffect(() => {
     if (!navigator.requestMIDIAccess) return
@@ -121,7 +174,7 @@ export function useMidi({
   }, [refreshPorts])
 
   useEffect(() => {
-    if (!midiAccess || !selectedInputId) return
+    if (!midiAccess || !selectedInputId || isDeviceDisconnected) return
 
     const inputPort = midiAccess.inputs.get(selectedInputId)
     if (!inputPort) return
@@ -141,15 +194,13 @@ export function useMidi({
       if (parsed.isNoteOn) {
         const filtered = filterRef.current.processNoteOn(parsed.noteNumber, parsed.velocity)
         if (filtered.isDebouncedDuplicate) {
-          return // Ignora rebote físico duplicado
+          return
         }
 
-        // Limpiar timer previo si existía
         if (hungNotesTimersRef.current.has(parsed.noteNumber)) {
           clearTimeout(hungNotesTimersRef.current.get(parsed.noteNumber)!)
         }
 
-        // Watchdog de 6 segundos para evitar notas colgadas (hung notes)
         const watchdog = setTimeout(() => {
           setPressedNotes((prev) => prev.filter((n) => n !== parsed.noteNumber))
           hungNotesTimersRef.current.delete(parsed.noteNumber)
@@ -166,14 +217,14 @@ export function useMidi({
           noteNumber: parsed.noteNumber,
           velocity: parsed.velocity
         })
-        if (onNoteOn) onNoteOn(parsed.noteNumber, parsed.velocity)
+        if (onNoteOnRef.current) onNoteOnRef.current(parsed.noteNumber, parsed.velocity)
       } else if (parsed.isNoteOff) {
         if (hungNotesTimersRef.current.has(parsed.noteNumber)) {
           clearTimeout(hungNotesTimersRef.current.get(parsed.noteNumber)!)
           hungNotesTimersRef.current.delete(parsed.noteNumber)
         }
         setPressedNotes((prev) => prev.filter((n) => n !== parsed.noteNumber))
-        if (onNoteOff) onNoteOff(parsed.noteNumber)
+        if (onNoteOffRef.current) onNoteOffRef.current(parsed.noteNumber)
       }
     }
 
@@ -185,27 +236,26 @@ export function useMidi({
     midiAccess,
     selectedInputId,
     selectedOutputId,
+    isDeviceDisconnected,
     enableSoftwareThru,
-    onNoteOn,
-    onNoteOff,
     addLog
   ])
 
   const changeProgram = useCallback(
     (programNumber: number, channel = 1): void => {
-      if (!midiAccess || !selectedOutputId) return
+      if (!midiAccess || !selectedOutputId || isDeviceDisconnected) return
       const outputPort = midiAccess.outputs.get(selectedOutputId)
       if (!outputPort) return
 
       const statusByte = 0xc0 | ((channel - 1) & 0x0f)
       outputPort.send([statusByte, programNumber])
     },
-    [midiAccess, selectedOutputId]
+    [midiAccess, selectedOutputId, isDeviceDisconnected]
   )
 
   const sendNote = useCallback(
     (noteNumber: number, durationMs = 600, velocity = 100): void => {
-      if (!midiAccess || !selectedOutputId) return
+      if (!midiAccess || !selectedOutputId || isDeviceDisconnected) return
       const outputPort = midiAccess.outputs.get(selectedOutputId)
       if (!outputPort) return
 
@@ -215,7 +265,7 @@ export function useMidi({
         outputPort.send([0x80, noteNumber, 0])
       }, durationMs)
     },
-    [midiAccess, selectedOutputId]
+    [midiAccess, selectedOutputId, isDeviceDisconnected]
   )
 
   return {
@@ -224,6 +274,7 @@ export function useMidi({
     outputs,
     selectedInputId,
     selectedOutputId,
+    isDeviceDisconnected,
     setSelectedInputId,
     setSelectedOutputId,
     pressedNotes,

@@ -7,11 +7,19 @@ describe('useMidi - Hook de Gestión y Filtrado MIDI', () => {
     vi.clearAllMocks()
   })
 
-  it('debe inicializarse en estado de espera sin errores si Web MIDI no está listo', () => {
-    const { result } = renderHook(() => useMidi())
+  it('debe inicializarse con estado por defecto y sin bucles de eventos', () => {
+    const onDeviceReconnected = vi.fn()
+    const { result } = renderHook(() =>
+      useMidi({
+        onDeviceReconnected
+      })
+    )
+
     expect(result.current.pressedNotes).toEqual([])
     expect(result.current.inputs).toEqual([])
     expect(result.current.outputs).toEqual([])
+    // Al inicializar sin cambio de desconexión previo no debe disparar reconexión falsa
+    expect(onDeviceReconnected).not.toHaveBeenCalled()
   })
 
   it('clearAllPressedNotes debe vaciar el array de teclas presionadas de forma inmediata', () => {
@@ -24,7 +32,7 @@ describe('useMidi - Hook de Gestión y Filtrado MIDI', () => {
     expect(result.current.pressedNotes).toEqual([])
   })
 
-  it('changeProgram y sendNote no deben fallar si no hay un puerto de salida seleccionado', () => {
+  it('changeProgram y sendNote no deben lanzar error si el dispositivo está desconectado o no hay puerto', () => {
     const { result } = renderHook(() => useMidi())
 
     expect(() => {
@@ -33,5 +41,19 @@ describe('useMidi - Hook de Gestión y Filtrado MIDI', () => {
         result.current.sendNote(60, 500)
       })
     }).not.toThrow()
+  })
+
+  it('debe aceptar callbacks opcionales de desconexión y reconexión sin fallar', () => {
+    const onDeviceDisconnected = vi.fn()
+    const onDeviceReconnected = vi.fn()
+
+    const { result } = renderHook(() =>
+      useMidi({
+        onDeviceDisconnected,
+        onDeviceReconnected
+      })
+    )
+
+    expect(result.current).toBeDefined()
   })
 })

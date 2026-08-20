@@ -7,6 +7,7 @@ import { useSequenceTrainer } from './hooks/useSequenceTrainer'
 import { useDatabaseStore } from './stores/useDatabaseStore'
 import { Header } from './components/trainer/Header'
 import { MidiDeviceSelect } from './components/trainer/MidiDeviceSelect'
+import { MidiDisconnectAlert } from './components/trainer/MidiDisconnectAlert'
 import { SingleNoteView } from './components/views/SingleNoteView'
 import { IntervalsView } from './components/views/IntervalsView'
 import { SequencesView } from './components/views/SequencesView'
@@ -32,8 +33,15 @@ export default function App(): React.ReactElement {
     initializeDb()
   }, [initializeDb])
 
+  // Hook de MIDI con auto-recuperación ante desconexión
   const midi = useMidi({
     onNoteOn: (note) => handleNoteRef.current(note),
+    onDeviceDisconnected: () => {
+      midi.addLog({ type: 'EVAL', message: '⚠️ Hardware MIDI desconectado en caliente.' })
+    },
+    onDeviceReconnected: () => {
+      midi.addLog({ type: 'EVAL', message: '✅ Hardware MIDI re-conectado y re-vinculado.' })
+    },
     enableSoftwareThru: true
   })
 
@@ -116,7 +124,7 @@ export default function App(): React.ReactElement {
       handleNoteRef.current = singleNoteTrainer.handleUserNotePlayed
     } else if (appMode === 'intervals') {
       handleNoteRef.current = intervalTrainer.handleUserNotePlayed
-    } else if (appMode === 'sequences') {
+    } else {
       handleNoteRef.current = sequenceTrainer.handleUserNotePlayed
     }
   }, [
@@ -174,7 +182,6 @@ export default function App(): React.ReactElement {
     [midi, appMode, singleNoteTrainer, intervalTrainer, sequenceTrainer]
   )
 
-  // Cargar y ejecutar la prescripción diseñada por la IA con sincronización garantizada
   const handleLoadPrescription = (p: AiExercisePrescription): void => {
     if (p.targetMode === 'single_note') {
       setAppMode('single_note')
@@ -183,7 +190,6 @@ export default function App(): React.ReactElement {
       singleNoteTrainer.setSessionQuestionsCount(p.questionsCount)
       singleNoteTrainer.setSessionDurationMinutes(p.durationMinutes)
       singleNoteTrainer.setAdvanceMode(p.advanceMode)
-      // Iniciamos pasando las notas directamente para evitar el lag de React
       singleNoteTrainer.startSession(p.recommendedNotes)
     } else if (p.targetMode === 'intervals') {
       setAppMode('intervals')
@@ -220,6 +226,9 @@ export default function App(): React.ReactElement {
   return (
     <div className="p-5 max-w-7xl mx-auto space-y-4">
       <Header status={midi.status} />
+
+      {/* ALERTA DE DESCONEXIÓN MIDI EN CALIENTE */}
+      <MidiDisconnectAlert isDisconnected={midi.isDeviceDisconnected} />
 
       {/* SELECTOR PRINCIPAL */}
       <div className="flex gap-2 bg-zinc-900/90 border border-zinc-800 p-1.5 rounded-lg">
