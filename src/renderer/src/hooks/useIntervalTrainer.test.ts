@@ -17,7 +17,7 @@ describe('useIntervalTrainer - Hook de Entrenamiento de Intervalos (2 Notas)', (
     expect(result.current.firstNotePlayed).toBeNull()
   })
 
-  it('debe emitir las 2 notas al iniciar la sesión', () => {
+  it('debe emitir 2 notas válidas y acotadas al iniciar la sesión', () => {
     const onPlayInterval = vi.fn()
 
     const { result } = renderHook(() =>
@@ -27,12 +27,17 @@ describe('useIntervalTrainer - Hook de Entrenamiento de Intervalos (2 Notas)', (
     )
 
     act(() => {
-      result.current.startSession()
+      // Iniciamos pasando explícitamente 4 semitonos (3M) sobre C4 (60)
+      result.current.startSession([4], [60])
     })
 
     expect(result.current.isSessionActive).toBe(true)
     expect(result.current.currentQuestionIndex).toBe(1)
     expect(onPlayInterval).toHaveBeenCalledTimes(1)
+
+    const [root, target] = onPlayInterval.mock.calls[0]
+    expect(root).toBe(60)
+    expect(target).toBe(64) // C4 + 4 semitonos = E4
   })
 
   it('debe manejar la secuencia de 2 pasos: fijar Nota 1 y evaluar al tocar Nota 2', () => {
@@ -45,7 +50,7 @@ describe('useIntervalTrainer - Hook de Entrenamiento de Intervalos (2 Notas)', (
     )
 
     act(() => {
-      result.current.startSession()
+      result.current.startSession([4], [60])
     })
 
     act(() => {

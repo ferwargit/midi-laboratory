@@ -123,6 +123,7 @@ export function useSingleNoteTrainer({
       const token = `token_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
       questionTokenRef.current = token
 
+      // Si la estrategia es adaptativa, usa los pesos; si es aleatoria, usa la regla anti-repetición pura
       const decision = strategy.selectNextNote({
         activeNotes: currentPool,
         history: historyBufferRef.current,
@@ -137,7 +138,6 @@ export function useSingleNoteTrainer({
       setIsWaitingAnswer(true)
       setStimulusStartTime(Date.now())
 
-      // Liberar el candado de avance solo cuando el nuevo ejercicio ya está activo
       isAdvancingRef.current = false
 
       onPlayStimulus(decision.selectedNote, decision)

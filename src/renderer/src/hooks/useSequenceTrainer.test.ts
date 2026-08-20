@@ -27,8 +27,8 @@ describe('useSequenceTrainer - Hook de Entrenamiento de Secuencias Melódicas', 
     )
 
     act(() => {
-      result.current.setSequenceLength(3)
-      result.current.startSession()
+      // Iniciamos pasando explícitamente notas y longitud 3
+      result.current.startSession([60, 62, 64], 3)
     })
 
     expect(result.current.isSessionActive).toBe(true)

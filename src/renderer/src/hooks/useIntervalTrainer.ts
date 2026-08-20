@@ -11,6 +11,7 @@ import {
   evaluateIntervalAnswer
 } from '../domain/exercise/intervalEvaluator'
 import { AdvanceMode, SessionLimitType } from '../domain/exercise/types'
+import { generateValidInterval } from '../domain/exercise/exerciseGeneratorRules'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
 
@@ -49,7 +50,7 @@ export interface UseIntervalTrainerReturn {
   firstNotePlayed: number | null
   lastResult: IntervalExerciseResult | null
   sessionHistory: IntervalExerciseResult[]
-  startSession: () => void
+  startSession: (overrideIntervals?: unknown, overrideRoots?: unknown) => void
   stopSession: () => void
   advanceToNextInterval: () => void
   repeatCurrentInterval: () => void
@@ -89,21 +90,36 @@ export function useIntervalTrainer({
   const questionTokenRef = useRef<string | null>(null)
   const isAdvancingRef = useRef<boolean>(false)
   const isWaitingAnswerRef = useRef<boolean>(false)
+
+  const activeIntervalsBufferRef = useRef<number[]>([2, 4, 5, 7, 12])
+  const rootRangeNotesBufferRef = useRef<number[]>([60])
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<IntervalExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    activeIntervalsBufferRef.current = activeIntervals
+  }, [activeIntervals])
+
+  useEffect(() => {
+    rootRangeNotesBufferRef.current = rootRangeNotes
+  }, [rootRangeNotes])
 
   const setSelectedPresetId = (id: string): void => {
     setSelectedPresetIdState(id)
     const preset = INTERVAL_PRESETS.find((p) => p.id === id)
     if (preset) {
       setActiveIntervals([...preset.intervalSemitones])
+      activeIntervalsBufferRef.current = [...preset.intervalSemitones]
       setDirectionMode(preset.defaultDirection)
       if (preset.fixedRootNote !== null) {
         setRootRangeNotes([preset.fixedRootNote])
+        rootRangeNotesBufferRef.current = [preset.fixedRootNote]
       } else {
-        setRootRangeNotes(Array.from({ length: 25 }, (_, i) => 48 + i))
+        const roots = Array.from({ length: 25 }, (_, i) => 48 + i)
+        setRootRangeNotes(roots)
+        rootRangeNotesBufferRef.current = roots
       }
     }
   }
@@ -122,49 +138,50 @@ export function useIntervalTrainer({
     )
   }
 
-  const triggerNextInterval = useCallback((): void => {
-    if (activeIntervals.length === 0 || rootRangeNotes.length === 0) return
+  const triggerNextInterval = useCallback(
+    (intervalsPool?: number[], rootsPool?: number[]): void => {
+      const currentIntervals = intervalsPool || activeIntervalsBufferRef.current
+      const currentRoots = rootsPool || rootRangeNotesBufferRef.current
 
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
+      if (currentIntervals.length === 0 || currentRoots.length === 0) return
 
-    const token = `token_int_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
-    questionTokenRef.current = token
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current)
+        autoAdvanceTimerRef.current = null
+      }
 
-    const chosenSemitones = activeIntervals[Math.floor(Math.random() * activeIntervals.length)]
+      const token = `token_int_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+      questionTokenRef.current = token
 
-    let finalDirection: IntervalDirection = 'ascending'
-    if (directionMode === 'both') {
-      finalDirection = Math.random() > 0.5 ? 'ascending' : 'descending'
-    } else {
-      finalDirection = directionMode
-    }
+      const lastSt = currentStimulus ? currentStimulus.semitones : null
+      const intervalData = generateValidInterval(
+        currentIntervals,
+        currentRoots,
+        directionMode,
+        lastSt
+      )
 
-    const chosenRoot = rootRangeNotes[Math.floor(Math.random() * rootRangeNotes.length)]
-    const targetNote =
-      finalDirection === 'ascending' ? chosenRoot + chosenSemitones : chosenRoot - chosenSemitones
+      const stimulus: IntervalExerciseStimulus = {
+        rootNote: intervalData.rootNote,
+        targetNote: intervalData.targetNote,
+        semitones: intervalData.semitones,
+        direction: intervalData.direction
+      }
 
-    const stimulus: IntervalExerciseStimulus = {
-      rootNote: chosenRoot,
-      targetNote,
-      semitones: chosenSemitones,
-      direction: finalDirection
-    }
+      setCurrentStimulus(stimulus)
+      setWaitingNoteStep(1)
+      setFirstNotePlayed(null)
+      setLastResult(null)
+      setIsWaitingManualAdvance(false)
+      isWaitingAnswerRef.current = true
+      setStimulusStartTime(Date.now())
 
-    setCurrentStimulus(stimulus)
-    setWaitingNoteStep(1)
-    setFirstNotePlayed(null)
-    setLastResult(null)
-    setIsWaitingManualAdvance(false)
-    isWaitingAnswerRef.current = true
-    setStimulusStartTime(Date.now())
+      isAdvancingRef.current = false
 
-    isAdvancingRef.current = false
-
-    onPlayInterval(chosenRoot, targetNote, finalDirection)
-  }, [activeIntervals, directionMode, rootRangeNotes, onPlayInterval])
+      onPlayInterval(stimulus.rootNote, stimulus.targetNote, stimulus.direction)
+    },
+    [currentStimulus, directionMode, onPlayInterval]
+  )
 
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
     if (autoAdvanceTimerRef.current) {
@@ -200,7 +217,7 @@ export function useIntervalTrainer({
     const presetLabel =
       sessionLimitType === 'time'
         ? `Intervalos Tiempo (${sessionDurationMinutes}m)`
-        : `Intervalos (${activeIntervals.length})`
+        : `Intervalos (${activeIntervalsBufferRef.current.length})`
 
     const sessionRecord: DbSessionRecord = {
       id: sessionIdRef.current,
@@ -216,7 +233,7 @@ export function useIntervalTrainer({
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
-  }, [sessionLimitType, sessionDurationMinutes, activeIntervals.length, saveSessionToDb])
+  }, [sessionLimitType, sessionDurationMinutes, saveSessionToDb])
 
   useEffect(() => {
     if (isSessionActive && sessionLimitType === 'time') {
@@ -239,14 +256,32 @@ export function useIntervalTrainer({
     }
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
-  const startSession = (): void => {
-    if (!Array.isArray(activeIntervals) || activeIntervals.length === 0) {
+  const startSession = (overrideIntervals?: unknown, overrideRoots?: unknown): void => {
+    const validIntervals =
+      Array.isArray(overrideIntervals) && overrideIntervals.length > 0
+        ? (overrideIntervals as number[])
+        : activeIntervalsBufferRef.current
+    const validRoots =
+      Array.isArray(overrideRoots) && overrideRoots.length > 0
+        ? (overrideRoots as number[])
+        : rootRangeNotesBufferRef.current
+
+    if (validIntervals.length === 0) {
       alert('Debes seleccionar al menos 1 intervalo.')
       return
     }
-    if (!Array.isArray(rootRangeNotes) || rootRangeNotes.length === 0) {
+    if (validRoots.length === 0) {
       alert('Debes seleccionar al menos 1 nota raíz en el teclado.')
       return
+    }
+
+    if (Array.isArray(overrideIntervals) && overrideIntervals.length > 0) {
+      setActiveIntervals(overrideIntervals as number[])
+      activeIntervalsBufferRef.current = overrideIntervals as number[]
+    }
+    if (Array.isArray(overrideRoots) && overrideRoots.length > 0) {
+      setRootRangeNotes(overrideRoots as number[])
+      rootRangeNotesBufferRef.current = overrideRoots as number[]
     }
 
     sessionIdRef.current = `session_int_${Date.now()}`
@@ -262,7 +297,7 @@ export function useIntervalTrainer({
       setTimeRemainingSeconds(sessionDurationMinutes * 60)
     }
 
-    triggerNextInterval()
+    triggerNextInterval(validIntervals, validRoots)
   }
 
   const advanceToNextInterval = useCallback((): void => {
@@ -401,7 +436,7 @@ export function useIntervalTrainer({
 
   const trainWeakIntervalsOnly = (): void => {
     const weakIntervals: number[] = []
-    activeIntervals.forEach((st) => {
+    activeIntervalsBufferRef.current.forEach((st) => {
       const attempts = historyBufferRef.current.filter((h) => h.expectedStimulus.semitones === st)
       if (attempts.length > 0) {
         const correct = attempts.filter((h) => h.isIntervalCorrect).length
@@ -416,16 +451,7 @@ export function useIntervalTrainer({
       return
     }
 
-    setActiveIntervals(weakIntervals)
-    sessionIdRef.current = `session_int_${Date.now()}`
-    sessionStartTimeRef.current = Date.now()
-    answersBufferRef.current = []
-    historyBufferRef.current = []
-    setSessionHistory([])
-    setCurrentQuestionIndex(1)
-    setIsSessionFinished(false)
-    setIsSessionActive(true)
-    triggerNextInterval()
+    startSession(weakIntervals)
   }
 
   return {

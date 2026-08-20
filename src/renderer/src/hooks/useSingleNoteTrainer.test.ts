@@ -3,7 +3,7 @@ import { renderHook, act } from '@testing-library/react'
 import { useSingleNoteTrainer } from './useSingleNoteTrainer'
 
 describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () => {
-  it('debe iniciar en estado de reposo (no activo)', () => {
+  it('debe iniciar en estado de reposo con límites por defecto', () => {
     const onPlayStimulus = vi.fn()
     const onInstrumentChanged = vi.fn()
 
@@ -18,6 +18,7 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
     expect(result.current.isSessionFinished).toBe(false)
     expect(result.current.currentQuestionIndex).toBe(0)
     expect(result.current.sessionLimitType).toBe('questions')
+    expect(result.current.advanceMode).toBe('smart')
   })
 
   it('debe tolerar que startSession reciba un evento sin lanzar error de iterador', () => {
@@ -52,7 +53,7 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
       })
     )
 
-    const specificPool = [62, 64, 65]
+    const specificPool = [62, 64, 65] // D4, E4, F4
     act(() => {
       result.current.startSession(specificPool)
     })

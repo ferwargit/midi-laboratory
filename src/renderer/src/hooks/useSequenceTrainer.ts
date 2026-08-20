@@ -43,7 +43,7 @@ export interface UseSequenceTrainerReturn {
   capturedNotes: number[]
   lastResult: SequenceExerciseResult | null
   sessionHistory: SequenceExerciseResult[]
-  startSession: () => void
+  startSession: (overrideNotes?: unknown, overrideLength?: unknown) => void
   stopSession: () => void
   advanceToNextSequence: () => void
   repeatCurrentSequence: () => void
@@ -83,17 +83,30 @@ export function useSequenceTrainer({
   const questionTokenRef = useRef<string | null>(null)
   const isAdvancingRef = useRef<boolean>(false)
   const isWaitingAnswerRef = useRef<boolean>(false)
+
+  const customCandidateNotesBufferRef = useRef<number[]>([60, 62, 64, 65, 67])
+  const sequenceLengthBufferRef = useRef<number>(3)
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<SequenceExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    customCandidateNotesBufferRef.current = customCandidateNotes
+  }, [customCandidateNotes])
+
+  useEffect(() => {
+    sequenceLengthBufferRef.current = sequenceLength
+  }, [sequenceLength])
 
   const setSelectedPresetId = (id: string): void => {
     setSelectedPresetIdState(id)
     const preset = SEQUENCE_PRESETS.find((p) => p.id === id)
     if (preset) {
       setSequenceLength(preset.length)
+      sequenceLengthBufferRef.current = preset.length
       setCustomCandidateNotes([...preset.candidateNotes])
+      customCandidateNotesBufferRef.current = [...preset.candidateNotes]
     }
   }
 
@@ -103,39 +116,40 @@ export function useSequenceTrainer({
     )
   }
 
-  const triggerNextSequence = useCallback((): void => {
-    if (customCandidateNotes.length < 2) return
+  const triggerNextSequence = useCallback(
+    (notesPool?: number[], lengthToUse?: number): void => {
+      const currentPool = notesPool || customCandidateNotesBufferRef.current
+      const currentLen = lengthToUse || sequenceLengthBufferRef.current
 
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
+      if (currentPool.length < 2) return
 
-    const token = `token_seq_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
-    questionTokenRef.current = token
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current)
+        autoAdvanceTimerRef.current = null
+      }
 
-    const preset = SEQUENCE_PRESETS.find((p) => p.id === selectedPresetId)
-    const maxJump = preset ? preset.maxJumpSemitones : 12
-    const allowRepeat = preset ? preset.allowRepeatedConsecutive : true
+      const token = `token_seq_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+      questionTokenRef.current = token
 
-    const sequence = generateMelodicSequence(
-      customCandidateNotes,
-      sequenceLength,
-      maxJump,
-      allowRepeat
-    )
+      const preset = SEQUENCE_PRESETS.find((p) => p.id === selectedPresetId)
+      const maxJump = preset ? preset.maxJumpSemitones : 12
+      const allowRepeat = preset ? preset.allowRepeatedConsecutive : true
 
-    setCurrentSequence(sequence)
-    setCapturedNotes([])
-    setLastResult(null)
-    setIsWaitingManualAdvance(false)
-    isWaitingAnswerRef.current = true
-    setStimulusStartTime(Date.now())
+      const sequence = generateMelodicSequence(currentPool, currentLen, maxJump, allowRepeat)
 
-    isAdvancingRef.current = false
+      setCurrentSequence(sequence)
+      setCapturedNotes([])
+      setLastResult(null)
+      setIsWaitingManualAdvance(false)
+      isWaitingAnswerRef.current = true
+      setStimulusStartTime(Date.now())
 
-    onPlaySequence(sequence)
-  }, [customCandidateNotes, selectedPresetId, sequenceLength, onPlaySequence])
+      isAdvancingRef.current = false
+
+      onPlaySequence(sequence)
+    },
+    [selectedPresetId, onPlaySequence]
+  )
 
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
     if (autoAdvanceTimerRef.current) {
@@ -173,7 +187,7 @@ export function useSequenceTrainer({
     const presetLabel =
       sessionLimitType === 'time'
         ? `Secuencias Tiempo (${sessionDurationMinutes}m)`
-        : `Secuencias (${sequenceLength} notas)`
+        : `Secuencias (${sequenceLengthBufferRef.current} notas)`
 
     const sessionRecord: DbSessionRecord = {
       id: sessionIdRef.current,
@@ -189,7 +203,7 @@ export function useSequenceTrainer({
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
-  }, [sessionLimitType, sessionDurationMinutes, sequenceLength, saveSessionToDb])
+  }, [sessionLimitType, sessionDurationMinutes, saveSessionToDb])
 
   useEffect(() => {
     if (isSessionActive && sessionLimitType === 'time') {
@@ -212,10 +226,28 @@ export function useSequenceTrainer({
     }
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
-  const startSession = (): void => {
-    if (!Array.isArray(customCandidateNotes) || customCandidateNotes.length < 2) {
+  const startSession = (overrideNotes?: unknown, overrideLength?: unknown): void => {
+    const validNotes =
+      Array.isArray(overrideNotes) && overrideNotes.length > 0
+        ? (overrideNotes as number[])
+        : customCandidateNotesBufferRef.current
+    const validLength =
+      typeof overrideLength === 'number' && overrideLength >= 3
+        ? overrideLength
+        : sequenceLengthBufferRef.current
+
+    if (validNotes.length < 2) {
       alert('Debes seleccionar al menos 2 notas candidatas en el teclado.')
       return
+    }
+
+    if (Array.isArray(overrideNotes) && overrideNotes.length > 0) {
+      setCustomCandidateNotes(overrideNotes as number[])
+      customCandidateNotesBufferRef.current = overrideNotes as number[]
+    }
+    if (typeof overrideLength === 'number' && overrideLength >= 3) {
+      setSequenceLength(overrideLength)
+      sequenceLengthBufferRef.current = overrideLength
     }
 
     sessionIdRef.current = `session_seq_${Date.now()}`
@@ -231,7 +263,7 @@ export function useSequenceTrainer({
       setTimeRemainingSeconds(sessionDurationMinutes * 60)
     }
 
-    triggerNextSequence()
+    triggerNextSequence(validNotes, validLength)
   }
 
   const advanceToNextSequence = useCallback((): void => {
@@ -373,16 +405,7 @@ export function useSequenceTrainer({
       return
     }
 
-    setCustomCandidateNotes(weakPool.sort((a, b) => a - b))
-    sessionIdRef.current = `session_seq_${Date.now()}`
-    sessionStartTimeRef.current = Date.now()
-    answersBufferRef.current = []
-    historyBufferRef.current = []
-    setSessionHistory([])
-    setCurrentQuestionIndex(1)
-    setIsSessionFinished(false)
-    setIsSessionActive(true)
-    triggerNextSequence()
+    startSession(weakPool.sort((a, b) => a - b))
   }
 
   return {
