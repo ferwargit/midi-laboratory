@@ -1,4 +1,10 @@
 import { calculateMelodicContour, ContourDirection } from '../music/sequences'
+import {
+  DEFAULT_EVALUATION_POLICY,
+  EvaluationPolicy,
+  checkNoteMatch,
+  sanitizeResponseTime
+} from './evalPolicy'
 
 export interface SequenceExerciseResult {
   expectedNotes: number[]
@@ -49,14 +55,15 @@ export function calculateLevenshteinDistance(a: number[], b: number[]): number {
 export function evaluateSequenceAnswer(
   expectedNotes: number[],
   playedNotes: number[],
-  responseTimeMs: number
+  rawResponseTimeMs: number,
+  policy: EvaluationPolicy = DEFAULT_EVALUATION_POLICY
 ): SequenceExerciseResult {
   const length = expectedNotes.length
   let exactMatchesCount = 0
 
   const noteByNoteEvaluation = expectedNotes.map((expected, idx) => {
     const played = idx < playedNotes.length ? playedNotes[idx] : null
-    const isCorrect = played === expected
+    const isCorrect = played !== null && checkNoteMatch(expected, played, policy)
     if (isCorrect) exactMatchesCount++
     return { expected, played, isCorrect }
   })
@@ -72,6 +79,7 @@ export function evaluateSequenceAnswer(
   const distance = calculateLevenshteinDistance(expectedNotes, playedNotes)
   const maxLen = Math.max(expectedNotes.length, playedNotes.length)
   const similarityScorePercentage = Math.max(0, Math.round(((maxLen - distance) / maxLen) * 100))
+  const responseTimeMs = sanitizeResponseTime(rawResponseTimeMs, policy)
 
   let feedbackMessage = ''
   if (isExactMatch) {
@@ -99,7 +107,7 @@ export function evaluateSequenceAnswer(
     levenshteinDistance: distance,
     similarityScorePercentage,
     noteByNoteEvaluation,
-    responseTimeMs: Math.max(0, responseTimeMs),
+    responseTimeMs,
     feedbackMessage
   }
 }

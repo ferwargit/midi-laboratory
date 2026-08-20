@@ -3,6 +3,7 @@ import {
   DEFAULT_EVALUATION_POLICY,
   EvaluationPolicy,
   checkNoteMatch,
+  calculateNormalizedDistance,
   sanitizeResponseTime
 } from './evalPolicy'
 
@@ -16,14 +17,14 @@ export function evaluateSingleNoteAnswer(
   policy: EvaluationPolicy = DEFAULT_EVALUATION_POLICY
 ): ExerciseResult {
   const correct = checkNoteMatch(expectedNote, playedNote, policy)
-  const semitoneDistance = policy.normalizedDistance(expectedNote, playedNote)
+  const distance = calculateNormalizedDistance(expectedNote, playedNote)
   const responseTimeMs = sanitizeResponseTime(rawResponseTimeMs, policy)
 
   return {
     expectedNote,
     playedNote,
     correct,
-    semitoneDistance,
+    semitoneDistance: distance.rawDistance,
     responseTimeMs
   }
 }

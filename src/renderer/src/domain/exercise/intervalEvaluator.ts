@@ -1,4 +1,5 @@
 import { IntervalDirection, getIntervalDefinition } from '../music/intervals'
+import { DEFAULT_EVALUATION_POLICY, EvaluationPolicy, sanitizeResponseTime } from './evalPolicy'
 
 export interface IntervalExerciseStimulus {
   rootNote: number
@@ -12,22 +13,20 @@ export interface IntervalExerciseResult {
   playedNotes: [number, number]
   playedSemitones: number
   playedDirection: IntervalDirection
-  isIntervalCorrect: boolean // ¿Acertó la distancia de oído?
-  isRootCorrect: boolean // ¿Arrancó en la nota base pedida?
-  isExactMatch: boolean // ¿Acertó ambas cosas (100% exacto)?
-  isTransposedCorrect: boolean // Tocó el intervalo correcto pero transportado (error motor, no de oído)
-  semitoneDistanceError: number // Distancia de error en semitonos (ej: tocó 3 semitonos en vez de 4 -> -1)
+  isIntervalCorrect: boolean
+  isRootCorrect: boolean
+  isExactMatch: boolean
+  isTransposedCorrect: boolean
+  semitoneDistanceError: number
   responseTimeMs: number
   feedbackMessage: string
 }
 
-/**
- * Evalúa una respuesta de 2 notas frente a un intervalo estímulo.
- */
 export function evaluateIntervalAnswer(
   stimulus: IntervalExerciseStimulus,
   playedNotes: [number, number],
-  responseTimeMs: number
+  rawResponseTimeMs: number,
+  policy: EvaluationPolicy = DEFAULT_EVALUATION_POLICY
 ): IntervalExerciseResult {
   const [playedRoot, playedTarget] = playedNotes
   const playedDiff = playedTarget - playedRoot
@@ -41,6 +40,7 @@ export function evaluateIntervalAnswer(
   const isExactMatch = isIntervalCorrect && isRootCorrect
   const isTransposedCorrect = isIntervalCorrect && !isRootCorrect
   const semitoneDistanceError = playedSemitones - stimulus.semitones
+  const responseTimeMs = sanitizeResponseTime(rawResponseTimeMs, policy)
 
   const expectedDef = getIntervalDefinition(stimulus.semitones)
   const playedDef = getIntervalDefinition(playedSemitones)
@@ -64,7 +64,7 @@ export function evaluateIntervalAnswer(
     isExactMatch,
     isTransposedCorrect,
     semitoneDistanceError,
-    responseTimeMs: Math.max(0, responseTimeMs),
+    responseTimeMs,
     feedbackMessage
   }
 }
