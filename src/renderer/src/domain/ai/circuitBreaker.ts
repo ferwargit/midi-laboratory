@@ -6,10 +6,11 @@ export interface CircuitBreakerConfig {
   requestTimeoutMs: number
 }
 
+// Timeout generoso de 15 minutos (900.000 ms) para dar libertad absoluta a modelos de razonamiento profundo
 export const DEFAULT_CIRCUIT_CONFIG: CircuitBreakerConfig = {
   failureThreshold: 3,
   cooldownPeriodMs: 30000,
-  requestTimeoutMs: 4500
+  requestTimeoutMs: 900000
 }
 
 export class CircuitBreaker {

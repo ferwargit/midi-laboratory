@@ -25,7 +25,7 @@ export class LmStudioService {
 
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 1000)
+      const timeout = setTimeout(() => controller.abort(), 2000)
 
       const res = await fetch(`${this.baseUrl}/v1/models`, {
         signal: controller.signal
@@ -48,7 +48,7 @@ export class LmStudioService {
   async analyzeAndPrescribe(metrics: AnalyticsMetrics): Promise<AiAnalysisResponse> {
     const fallbackOp = (): AiAnalysisResponse => generateAlgorithmicFallback(metrics)
 
-    return this.circuitBreaker.execute(async (signal) => {
+    return this.circuitBreaker.execute(async () => {
       const loadedModelId = await this.getLoadedModelId()
       if (!loadedModelId) {
         throw new Error('No hay modelo cargado en LM Studio')
@@ -79,9 +79,8 @@ export class LmStudioService {
           body: JSON.stringify({
             model: loadedModelId,
             messages,
-            temperature: 0.2
-          }),
-          signal
+            temperature: 0.3
+          })
         })
 
         if (!res.ok) throw new Error(`HTTP error ${res.status}`)
@@ -93,7 +92,7 @@ export class LmStudioService {
 
       const validatedResponse = validateAndParseAiResponse(rawContent, returnedModel)
       if (!validatedResponse) {
-        throw new Error('Payload inválido')
+        throw new Error('Payload inválido devuelto por el LLM')
       }
 
       return validatedResponse
