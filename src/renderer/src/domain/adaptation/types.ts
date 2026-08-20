@@ -1,6 +1,6 @@
 import { ExerciseResult } from '../exercise/types'
 
-export type StrategyId = 'random' | 'adaptive_v1'
+export type StrategyId = 'random' | 'adaptive_v1' | 'spaced_repetition'
 
 export interface StrategyInfo {
   id: StrategyId

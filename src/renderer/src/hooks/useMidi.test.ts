@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useMidi } from './useMidi'
 
-describe('useMidi - Hook de Gestión y Filtrado MIDI', () => {
+describe('useMidi - Hook de Gestión, Filtrado y Sincronización MIDI', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('debe inicializarse con estado por defecto y sin bucles de eventos', () => {
+  it('debe inicializarse con estado por defecto, sin teclas presionadas ni estímulos activos', () => {
     const onDeviceReconnected = vi.fn()
     const { result } = renderHook(() =>
       useMidi({
@@ -16,13 +16,14 @@ describe('useMidi - Hook de Gestión y Filtrado MIDI', () => {
     )
 
     expect(result.current.pressedNotes).toEqual([])
+    expect(result.current.activeStimulusNotes).toEqual([])
     expect(result.current.inputs).toEqual([])
     expect(result.current.outputs).toEqual([])
-    // Al inicializar sin cambio de desconexión previo no debe disparar reconexión falsa
+    expect(typeof result.current.isDeviceDisconnected).toBe('boolean')
     expect(onDeviceReconnected).not.toHaveBeenCalled()
   })
 
-  it('clearAllPressedNotes debe vaciar el array de teclas presionadas de forma inmediata', () => {
+  it('clearAllPressedNotes debe vaciar teclas presionadas y estímulos activos inmediatamente', () => {
     const { result } = renderHook(() => useMidi())
 
     act(() => {
@@ -30,6 +31,7 @@ describe('useMidi - Hook de Gestión y Filtrado MIDI', () => {
     })
 
     expect(result.current.pressedNotes).toEqual([])
+    expect(result.current.activeStimulusNotes).toEqual([])
   })
 
   it('changeProgram y sendNote no deben lanzar error si el dispositivo está desconectado o no hay puerto', () => {

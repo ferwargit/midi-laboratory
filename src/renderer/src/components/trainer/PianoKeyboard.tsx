@@ -6,6 +6,7 @@ interface PianoKeyboardProps {
   keys: number[]
   activeNotes?: number[]
   pressedNotes?: number[]
+  stimulusNotes?: number[] // Notas que están sonando en el estímulo actual
   onToggleNote?: (note: number) => void
   onPlayNoteVirtual?: (note: number) => void
   performances?: Map<number, NotePerformance>
@@ -18,6 +19,7 @@ function PianoKeyboardComponent({
   keys = [],
   activeNotes = [],
   pressedNotes = [],
+  stimulusNotes = [],
   onToggleNote,
   onPlayNoteVirtual,
   performances,
@@ -50,7 +52,9 @@ function PianoKeyboardComponent({
     const isPhysicallyPressed = Array.isArray(pressedNotes) && pressedNotes.includes(note)
     const isVirtualClicked = clickedNote === note
     const isCurrentlyActive = isPhysicallyPressed || isVirtualClicked
+    const isStimulusPlaying = Array.isArray(stimulusNotes) && stimulusNotes.includes(note)
 
+    // 1. PRIORIDAD MÁXIMA: Tecla pulsada por el usuario (Ámbar brillante)
     if (isCurrentlyActive) {
       return {
         bg: black
@@ -60,8 +64,19 @@ function PianoKeyboardComponent({
       }
     }
 
+    // 2. ESTÍMULO SONANDO EN MODO ASISTIDO (Cian brillante)
+    if (isStimulusPlaying) {
+      return {
+        bg: black
+          ? 'bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.9)] brightness-125'
+          : 'bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.9)] brightness-125',
+        text: 'text-black font-extrabold'
+      }
+    }
+
     const isNoteActive = Array.isArray(activeNotes) && activeNotes.includes(note)
 
+    // 3. MODO HEATMAP (Durante la sesión o en el Resumen Final)
     if (showHeatmap) {
       const perf = performances?.get(note)
       const attempts = perf?.attempts ?? 0
@@ -110,6 +125,7 @@ function PianoKeyboardComponent({
       }
     }
 
+    // 4. MODO CONFIGURACIÓN PREVIA
     if (isNoteActive) {
       return {
         bg: black

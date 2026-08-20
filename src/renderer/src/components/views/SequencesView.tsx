@@ -11,6 +11,7 @@ interface SequencesViewProps {
   trainer: UseSequenceTrainerReturn
   pianoKeys: number[]
   pressedNotes: number[]
+  stimulusNotes?: number[]
   onVirtualKeyPress?: (note: number) => void
 }
 
@@ -24,6 +25,7 @@ export function SequencesView({
   trainer,
   pianoKeys,
   pressedNotes,
+  stimulusNotes = [],
   onVirtualKeyPress
 }: SequencesViewProps): React.ReactElement {
   const getSessionProgressLabel = (): string => {
@@ -100,6 +102,7 @@ export function SequencesView({
               keys={pianoKeys}
               activeNotes={trainer.customCandidateNotes}
               pressedNotes={pressedNotes}
+              stimulusNotes={stimulusNotes}
               isInteractiveTraining={trainer.isSessionActive}
               onPlayNoteVirtual={onVirtualKeyPress}
               onToggleNote={!trainer.isSessionActive ? trainer.toggleCustomNote : undefined}

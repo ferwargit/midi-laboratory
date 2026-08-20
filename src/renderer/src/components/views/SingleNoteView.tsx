@@ -2,6 +2,7 @@ import React from 'react'
 import { UseSingleNoteTrainerReturn } from '../../hooks/useSingleNoteTrainer'
 import { EXERCISE_PRESETS } from '../../domain/music/presets'
 import { AVAILABLE_STRATEGIES } from '../../domain/adaptation/adaptiveEngine'
+import { StrategyId } from '../../domain/adaptation/types'
 import { INSTRUMENT_CATALOG } from '../../domain/music/instruments'
 import { ADVANCE_MODE_OPTIONS, AdvanceMode, SessionLimitType } from '../../domain/exercise/types'
 import { midiNoteToName } from '../../domain/music/noteUtils'
@@ -15,6 +16,7 @@ interface SingleNoteViewProps {
   trainer: UseSingleNoteTrainerReturn
   pianoKeys: number[]
   pressedNotes: number[]
+  stimulusNotes?: number[]
   onVirtualKeyPress?: (note: number) => void
 }
 
@@ -28,6 +30,7 @@ export function SingleNoteView({
   trainer,
   pianoKeys,
   pressedNotes,
+  stimulusNotes = [],
   onVirtualKeyPress
 }: SingleNoteViewProps): React.ReactElement {
   const weakNotesList = Array.from(trainer.performances.values())
@@ -167,6 +170,7 @@ export function SingleNoteView({
               keys={pianoKeys}
               activeNotes={trainer.activeNotes}
               pressedNotes={pressedNotes}
+              stimulusNotes={stimulusNotes}
               isInteractiveTraining={trainer.isSessionActive}
               onPlayNoteVirtual={onVirtualKeyPress}
               onToggleNote={!trainer.isSessionActive ? trainer.toggleNote : undefined}
@@ -200,7 +204,6 @@ export function SingleNoteView({
                 </div>
               </div>
 
-              {/* PANEL DE 4 CONFIGURACIONES INCLUYENDO TIEMPO Y CRITERIO */}
               <div className="grid grid-cols-4 gap-3 pt-2 border-t border-zinc-800">
                 <div>
                   <label className="block text-xs text-zinc-400 mb-1">Timbre / Instrumento:</label>
@@ -224,7 +227,7 @@ export function SingleNoteView({
                   <select
                     value={trainer.selectedStrategyId}
                     onChange={(e): void =>
-                      trainer.setSelectedStrategyId(e.target.value as 'random' | 'adaptive_v1')
+                      trainer.setSelectedStrategyId(e.target.value as StrategyId)
                     }
                     className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
                   >

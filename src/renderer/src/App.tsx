@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { generateMidiRange, midiNoteToName } from './domain/music/noteUtils'
+import { VisualCueMode } from './domain/exercise/visualAudioSync'
 import { useMidi } from './hooks/useMidi'
 import { useSingleNoteTrainer } from './hooks/useSingleNoteTrainer'
 import { useIntervalTrainer } from './hooks/useIntervalTrainer'
@@ -23,6 +24,7 @@ type AppMode = 'single_note' | 'intervals' | 'sequences' | 'analytics'
 
 export default function App(): React.ReactElement {
   const [appMode, setAppMode] = useState<AppMode>('single_note')
+  const [visualCueMode, setVisualCueMode] = useState<VisualCueMode>('blind') // Por defecto oído puro
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false)
   const handleNoteRef = useRef<(note: number) => void>(() => {})
 
@@ -33,22 +35,15 @@ export default function App(): React.ReactElement {
     initializeDb()
   }, [initializeDb])
 
-  // Hook de MIDI con auto-recuperación ante desconexión
   const midi = useMidi({
     onNoteOn: (note) => handleNoteRef.current(note),
-    onDeviceDisconnected: () => {
-      midi.addLog({ type: 'EVAL', message: '⚠️ Hardware MIDI desconectado en caliente.' })
-    },
-    onDeviceReconnected: () => {
-      midi.addLog({ type: 'EVAL', message: '✅ Hardware MIDI re-conectado y re-vinculado.' })
-    },
     enableSoftwareThru: true
   })
 
   // 1. Modalidad 1: Nota Individual
   const singleNoteTrainer = useSingleNoteTrainer({
     onPlayStimulus: (note, decision) => {
-      midi.sendNote(note)
+      midi.sendNote(note, 500)
       const noteName = midiNoteToName(note)
       midi.addLog({
         type: 'OUT',
@@ -134,7 +129,7 @@ export default function App(): React.ReactElement {
     sequenceTrainer.handleUserNotePlayed
   ])
 
-  // Atajos de Teclado (Space = Avanzar / R = Repetir)
+  // Atajos de Teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.code === 'Space') {
@@ -223,63 +218,84 @@ export default function App(): React.ReactElement {
     setIsResetModalOpen(false)
   }
 
+  // Notas del estímulo que se iluminan según el modo pedagógico
+  const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
+
   return (
     <div className="p-5 max-w-7xl mx-auto space-y-4">
       <Header status={midi.status} />
 
-      {/* ALERTA DE DESCONEXIÓN MIDI EN CALIENTE */}
       <MidiDisconnectAlert isDisconnected={midi.isDeviceDisconnected} />
 
-      {/* SELECTOR PRINCIPAL */}
-      <div className="flex gap-2 bg-zinc-900/90 border border-zinc-800 p-1.5 rounded-lg">
-        <button
-          type="button"
-          disabled={isAnySessionActive}
-          onClick={(): void => setAppMode('single_note')}
-          className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
-            appMode === 'single_note'
-              ? 'bg-sky-600 text-white shadow-sm'
-              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-          }`}
-        >
-          🎵 Nota Individual
-        </button>
-        <button
-          type="button"
-          disabled={isAnySessionActive}
-          onClick={(): void => setAppMode('intervals')}
-          className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
-            appMode === 'intervals'
-              ? 'bg-sky-600 text-white shadow-sm'
-              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-          }`}
-        >
-          📏 Intervalos (2 Notas)
-        </button>
-        <button
-          type="button"
-          disabled={isAnySessionActive}
-          onClick={(): void => setAppMode('sequences')}
-          className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
-            appMode === 'sequences'
-              ? 'bg-sky-600 text-white shadow-sm'
-              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-          }`}
-        >
-          🎼 Secuencias (3 a 6 Notas)
-        </button>
-        <button
-          type="button"
-          disabled={isAnySessionActive}
-          onClick={(): void => setAppMode('analytics')}
-          className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
-            appMode === 'analytics'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-          }`}
-        >
-          📊 Historial & IA
-        </button>
+      {/* SELECTOR PRINCIPAL Y MODO DE PISTAS VISUALES */}
+      <div className="flex justify-between items-center bg-zinc-900/90 border border-zinc-800 p-1.5 rounded-lg gap-3">
+        <div className="flex gap-2 flex-1">
+          <button
+            type="button"
+            disabled={isAnySessionActive}
+            onClick={(): void => setAppMode('single_note')}
+            className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
+              appMode === 'single_note'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            🎵 Nota Individual
+          </button>
+          <button
+            type="button"
+            disabled={isAnySessionActive}
+            onClick={(): void => setAppMode('intervals')}
+            className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
+              appMode === 'intervals'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            📏 Intervalos (2 Notas)
+          </button>
+          <button
+            type="button"
+            disabled={isAnySessionActive}
+            onClick={(): void => setAppMode('sequences')}
+            className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
+              appMode === 'sequences'
+                ? 'bg-sky-600 text-white shadow-sm'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            🎼 Secuencias (3 a 6 Notas)
+          </button>
+          <button
+            type="button"
+            disabled={isAnySessionActive}
+            onClick={(): void => setAppMode('analytics')}
+            className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
+              appMode === 'analytics'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            📊 Historial & IA
+          </button>
+        </div>
+
+        {/* SELECTOR DE PISTAS VISUALES */}
+        <div className="flex items-center gap-1.5 px-2 bg-zinc-950 rounded border border-zinc-800 text-[11px]">
+          <span className="text-zinc-400">Pistas:</span>
+          <button
+            type="button"
+            onClick={(): void => setVisualCueMode((m) => (m === 'blind' ? 'assisted' : 'blind'))}
+            className={`px-2 py-1 rounded font-semibold transition-colors cursor-pointer ${
+              visualCueMode === 'blind'
+                ? 'bg-zinc-800 text-amber-300'
+                : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+            }`}
+            title="Cambiar entre modo a ciegas y modo con iluminación sincronizada"
+          >
+            {visualCueMode === 'blind' ? '👂 Oído Puro' : '👁️ Asistido'}
+          </button>
+        </div>
       </div>
 
       <MidiDeviceSelect
@@ -292,12 +308,13 @@ export default function App(): React.ReactElement {
         disabled={isAnySessionActive}
       />
 
-      {/* VISTAS MODULARES */}
+      {/* VISTAS MODULARES CON SINCRONIZACIÓN DE ESTÍMULO */}
       {appMode === 'single_note' && (
         <SingleNoteView
           trainer={singleNoteTrainer}
           pianoKeys={PIANO_KEYS}
           pressedNotes={midi.pressedNotes}
+          stimulusNotes={liveStimulusNotes}
           onVirtualKeyPress={handleVirtualKeyPress}
         />
       )}
@@ -322,10 +339,8 @@ export default function App(): React.ReactElement {
 
       {appMode === 'analytics' && <AnalyticsView onLoadPrescription={handleLoadPrescription} />}
 
-      {/* TARJETA DE BASE DE DATOS GLOBAL */}
       <DatabaseCard onOpenResetModal={(): void => setIsResetModalOpen(true)} />
 
-      {/* MODAL DE RESET */}
       <ConfirmModal
         isOpen={isResetModalOpen}
         title="¿Resetear Base de Datos de Prueba?"

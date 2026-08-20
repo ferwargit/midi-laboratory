@@ -13,6 +13,7 @@ interface IntervalsViewProps {
   trainer: UseIntervalTrainerReturn
   pianoKeys: number[]
   pressedNotes: number[]
+  stimulusNotes?: number[]
   onVirtualKeyPress?: (note: number) => void
 }
 
@@ -26,6 +27,7 @@ export function IntervalsView({
   trainer,
   pianoKeys,
   pressedNotes,
+  stimulusNotes = [],
   onVirtualKeyPress
 }: IntervalsViewProps): React.ReactElement {
   const liveActiveNotes = trainer.isSessionActive
@@ -118,6 +120,7 @@ export function IntervalsView({
               keys={pianoKeys}
               activeNotes={liveActiveNotes}
               pressedNotes={pressedNotes}
+              stimulusNotes={stimulusNotes}
               isInteractiveTraining={trainer.isSessionActive}
               onPlayNoteVirtual={onVirtualKeyPress}
               onToggleNote={!trainer.isSessionActive ? trainer.toggleRootNote : undefined}
