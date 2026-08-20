@@ -47,7 +47,7 @@ describe('ai - Servicios de IA y Prescripción Pedagógica', () => {
   })
 
   it('LmStudioService debe retornar fallback rápidamente si el puerto no responde', async () => {
-    const service = new LmStudioService('http://127.0.0.1:9999') // Puerto ficticio
+    const service = new LmStudioService('http://127.0.0.1:9999')
     const result = await service.analyzeAndPrescribe(mockMetrics)
     expect(result.source).toBe('algorithmic_fallback')
     expect(result.prescription).toBeDefined()

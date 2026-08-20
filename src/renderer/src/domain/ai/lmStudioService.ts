@@ -1,6 +1,7 @@
 import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 import { buildSystemPrompt, buildUserPrompt } from './promptBuilder'
 import { generateAlgorithmicFallback } from './fallbackGenerator'
+import { validateAndParseAiResponse } from './schemaValidator'
 import { AiAnalysisResponse } from './types'
 
 const LM_STUDIO_DEFAULT_URL = 'http://127.0.0.1:1234'
@@ -13,12 +14,10 @@ export class LmStudioService {
   }
 
   async getLoadedModelId(): Promise<string | null> {
-    // 1. En Electron usamos el puente IPC nativo si existe
     if (typeof window !== 'undefined' && window.customAPI?.checkLmStudioModels) {
       return await window.customAPI.checkLmStudioModels()
     }
 
-    // 2. En Node/Vitest usamos fetch a this.baseUrl con timeout de 1s
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 1000)
@@ -86,23 +85,21 @@ export class LmStudioService {
         if (!res.ok) return generateAlgorithmicFallback(metrics)
         const data = await res.json()
         const message = data.choices[0]?.message
-        // Soporte tanto para content normal como para reasoning_content de Qwen
         rawContent = message?.content || message?.reasoning_content || ''
         returnedModel = data.model || loadedModelId
       }
 
-      // Extraer el bloque JSON de la respuesta (ignorando tags <think> y markdown)
-      const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
-      const jsonString = jsonMatch ? jsonMatch[0] : rawContent
+      // Validación estricta de esquema antes de aceptar la respuesta
+      const validatedResponse = validateAndParseAiResponse(rawContent, returnedModel)
 
-      const parsed = JSON.parse(jsonString)
-
-      return {
-        source: 'lm_studio_ai',
-        modelName: returnedModel,
-        analysisText: parsed.analysisText || 'Análisis completado exitosamente por tu IA Local.',
-        prescription: parsed.prescription
+      if (validatedResponse) {
+        return validatedResponse
       }
+
+      console.warn(
+        'El payload devuelto por LM Studio no cumplió el esquema estricto, usando fallback.'
+      )
+      return generateAlgorithmicFallback(metrics)
     } catch (err) {
       console.warn('Fallo o timeout al consultar LM Studio, usando motor local:', err)
       return generateAlgorithmicFallback(metrics)
