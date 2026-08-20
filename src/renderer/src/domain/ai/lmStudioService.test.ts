@@ -3,8 +3,9 @@ import { generateAlgorithmicFallback } from './fallbackGenerator'
 import { buildSystemPrompt, buildUserPrompt } from './promptBuilder'
 import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 import { LmStudioService } from './lmStudioService'
+import { CircuitBreaker } from './circuitBreaker'
 
-describe('ai - Servicios de IA y Prescripción Pedagógica', () => {
+describe('ai - Servicios de IA, Prescripción y Circuit Breaker', () => {
   const mockMetrics: AnalyticsMetrics = {
     modeFilter: 'single_note',
     filteredSessionsCount: 2,
@@ -46,9 +47,15 @@ describe('ai - Servicios de IA y Prescripción Pedagógica', () => {
     expect(response.prescription.recommendedNotes.length).toBeGreaterThan(0)
   })
 
-  it('LmStudioService debe retornar fallback rápidamente si el puerto no responde', async () => {
-    const service = new LmStudioService('http://127.0.0.1:9999')
+  it('LmStudioService debe retornar fallback rápidamente si el puerto no responde sin bloquear la práctica', async () => {
+    const fastCircuitBreaker = new CircuitBreaker({
+      failureThreshold: 2,
+      cooldownPeriodMs: 1000,
+      requestTimeoutMs: 100
+    })
+    const service = new LmStudioService('http://127.0.0.1:9999', fastCircuitBreaker)
     const result = await service.analyzeAndPrescribe(mockMetrics)
+
     expect(result.source).toBe('algorithmic_fallback')
     expect(result.prescription).toBeDefined()
   })

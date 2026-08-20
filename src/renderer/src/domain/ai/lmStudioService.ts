@@ -2,24 +2,27 @@ import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 import { buildSystemPrompt, buildUserPrompt } from './promptBuilder'
 import { generateAlgorithmicFallback } from './fallbackGenerator'
 import { validateAndParseAiResponse } from './schemaValidator'
+import { CircuitBreaker } from './circuitBreaker'
 import { AiAnalysisResponse } from './types'
 
 const LM_STUDIO_DEFAULT_URL = 'http://127.0.0.1:1234'
 
 export class LmStudioService {
   private baseUrl: string
+  private circuitBreaker: CircuitBreaker
 
-  constructor(baseUrl = LM_STUDIO_DEFAULT_URL) {
+  constructor(baseUrl = LM_STUDIO_DEFAULT_URL, circuitBreaker = new CircuitBreaker()) {
     this.baseUrl = baseUrl
+    this.circuitBreaker = circuitBreaker
   }
 
   async getLoadedModelId(): Promise<string | null> {
-    // 1. En Electron usamos el puente IPC nativo si existe
+    if (!this.circuitBreaker.canExecute()) return null
+
     if (typeof window !== 'undefined' && window.customAPI?.checkLmStudioModels) {
       return await window.customAPI.checkLmStudioModels()
     }
 
-    // 2. En Node/Vitest usamos fetch a this.baseUrl con timeout
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 1000)
@@ -43,18 +46,19 @@ export class LmStudioService {
   }
 
   async analyzeAndPrescribe(metrics: AnalyticsMetrics): Promise<AiAnalysisResponse> {
-    const loadedModelId = await this.getLoadedModelId()
+    const fallbackOp = (): AiAnalysisResponse => generateAlgorithmicFallback(metrics)
 
-    if (!loadedModelId) {
-      return generateAlgorithmicFallback(metrics)
-    }
+    return this.circuitBreaker.execute(async (signal) => {
+      const loadedModelId = await this.getLoadedModelId()
+      if (!loadedModelId) {
+        throw new Error('No hay modelo cargado en LM Studio')
+      }
 
-    const messages = [
-      { role: 'system', content: buildSystemPrompt() },
-      { role: 'user', content: buildUserPrompt(metrics) }
-    ]
+      const messages = [
+        { role: 'system', content: buildSystemPrompt() },
+        { role: 'user', content: buildUserPrompt(metrics) }
+      ]
 
-    try {
       let rawContent = ''
       let returnedModel = loadedModelId
 
@@ -64,14 +68,11 @@ export class LmStudioService {
           messages
         })
         if (!result.success || !result.content) {
-          return generateAlgorithmicFallback(metrics)
+          throw new Error(result.error || 'Respuesta vacía de IPC')
         }
         rawContent = result.content
         returnedModel = result.model || loadedModelId
       } else {
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 4000)
-
         const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -80,31 +81,22 @@ export class LmStudioService {
             messages,
             temperature: 0.2
           }),
-          signal: controller.signal
+          signal
         })
-        clearTimeout(timeout)
 
-        if (!res.ok) return generateAlgorithmicFallback(metrics)
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`)
         const data = await res.json()
         const message = data.choices[0]?.message
         rawContent = message?.content || message?.reasoning_content || ''
         returnedModel = data.model || loadedModelId
       }
 
-      // Validación estricta y sanitización determinista de octavas
       const validatedResponse = validateAndParseAiResponse(rawContent, returnedModel)
-
-      if (validatedResponse) {
-        return validatedResponse
+      if (!validatedResponse) {
+        throw new Error('Payload inválido')
       }
 
-      console.warn(
-        'El payload devuelto por LM Studio no cumplió el esquema estricto, usando fallback.'
-      )
-      return generateAlgorithmicFallback(metrics)
-    } catch (err) {
-      console.warn('Fallo o timeout al consultar LM Studio, usando motor local:', err)
-      return generateAlgorithmicFallback(metrics)
-    }
+      return validatedResponse
+    }, fallbackOp)
   }
 }
