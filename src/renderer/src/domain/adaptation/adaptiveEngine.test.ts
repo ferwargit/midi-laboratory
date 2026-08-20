@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest'
 import {
   RandomSelectionStrategy,
   AdaptiveV1SelectionStrategy,
-  createStrategy
+  createStrategy,
+  AVAILABLE_STRATEGIES
 } from './adaptiveEngine'
+import { SpacedRepetitionStrategy } from './spacedRepetitionEngine'
 import { ExerciseResult } from '../exercise/types'
+import { StrategyId } from './types'
 
 describe('adaptiveEngine - Estrategias de selección de ejercicios', () => {
   describe('RandomSelectionStrategy', () => {
@@ -109,10 +112,20 @@ describe('adaptiveEngine - Estrategias de selección de ejercicios', () => {
     })
   })
 
-  describe('Factory createStrategy', () => {
-    it('debe instanciar la estrategia correspondiente al id', () => {
+  describe('Factory createStrategy y Registro de Estrategias', () => {
+    it('debe instanciar las 3 estrategias correctamente según su ID', () => {
       expect(createStrategy('random')).toBeInstanceOf(RandomSelectionStrategy)
       expect(createStrategy('adaptive_v1')).toBeInstanceOf(AdaptiveV1SelectionStrategy)
+      expect(createStrategy('spaced_repetition' as StrategyId)).toBeInstanceOf(
+        SpacedRepetitionStrategy
+      )
+    })
+
+    it('AVAILABLE_STRATEGIES debe contener las 3 opciones seleccionables', () => {
+      const ids = AVAILABLE_STRATEGIES.map((s) => s.id)
+      expect(ids).toContain('adaptive_v1')
+      expect(ids).toContain('spaced_repetition')
+      expect(ids).toContain('random')
     })
   })
 })

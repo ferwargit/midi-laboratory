@@ -1,5 +1,6 @@
 import { ExerciseResult } from '../exercise/types'
 import { midiNoteToName } from '../music/noteUtils'
+import { SpacedRepetitionStrategy } from './spacedRepetitionEngine'
 import {
   ExerciseSelectionStrategy,
   NotePerformance,
@@ -210,17 +211,24 @@ export const AVAILABLE_STRATEGIES: StrategyInfo[] = [
   {
     id: 'adaptive_v1',
     name: 'Adaptativo Inteligente (v1)',
-    description: 'Aprende de tus errores y refuerza notas débiles automáticamente.'
+    description: 'Pondera por matriz de confusión y sesgos de semitono.'
+  },
+  {
+    id: 'spaced_repetition' as StrategyId,
+    name: 'Repetición Espaciada (Leitner / SM-2)',
+    description: 'Organiza notas en cajas de memoria y espacia las dominadas.'
   },
   {
     id: 'random',
     name: 'Aleatorio Clásico',
-    description: 'Todas las notas tienen la misma probabilidad matemática.'
+    description: 'Todas las notas tienen exactamente la misma probabilidad.'
   }
 ]
 
 export function createStrategy(id: StrategyId): ExerciseSelectionStrategy {
   switch (id) {
+    case 'spaced_repetition' as StrategyId:
+      return new SpacedRepetitionStrategy()
     case 'adaptive_v1':
       return new AdaptiveV1SelectionStrategy()
     case 'random':
