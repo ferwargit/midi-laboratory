@@ -14,10 +14,12 @@ export class LmStudioService {
   }
 
   async getLoadedModelId(): Promise<string | null> {
+    // 1. En Electron usamos el puente IPC nativo si existe
     if (typeof window !== 'undefined' && window.customAPI?.checkLmStudioModels) {
       return await window.customAPI.checkLmStudioModels()
     }
 
+    // 2. En Node/Vitest usamos fetch a this.baseUrl con timeout
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 1000)
@@ -89,7 +91,7 @@ export class LmStudioService {
         returnedModel = data.model || loadedModelId
       }
 
-      // Validación estricta de esquema antes de aceptar la respuesta
+      // Validación estricta y sanitización determinista de octavas
       const validatedResponse = validateAndParseAiResponse(rawContent, returnedModel)
 
       if (validatedResponse) {

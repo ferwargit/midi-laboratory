@@ -1,4 +1,5 @@
 import { AiAnalysisResponse, AiExercisePrescription } from './types'
+import { sanitizePrescription } from './prescriptionSanitizer'
 
 const VALID_TARGET_MODES = ['single_note', 'intervals', 'sequences'] as const
 const VALID_INSTRUMENTS = [
@@ -11,19 +12,14 @@ const VALID_INSTRUMENTS = [
 const VALID_LIMIT_TYPES = ['questions', 'time', 'mastery', 'infinite'] as const
 const VALID_ADVANCE_MODES = ['smart', 'manual', 'auto_fast', 'auto_slow'] as const
 
-/**
- * Valida de forma exhaustiva si un objeto desconocido cumple el contrato de AiExercisePrescription.
- */
 export function isValidPrescription(obj: unknown): obj is AiExercisePrescription {
   if (!obj || typeof obj !== 'object') return false
 
   const p = obj as Record<string, unknown>
 
-  // 1. Strings requeridos
   if (typeof p.title !== 'string' || p.title.trim().length === 0) return false
   if (typeof p.rationale !== 'string' || p.rationale.trim().length === 0) return false
 
-  // 2. Enums válidos
   if (!VALID_TARGET_MODES.includes(p.targetMode as (typeof VALID_TARGET_MODES)[number]))
     return false
   if (!VALID_INSTRUMENTS.includes(p.instrumentId as (typeof VALID_INSTRUMENTS)[number]))
@@ -32,38 +28,18 @@ export function isValidPrescription(obj: unknown): obj is AiExercisePrescription
   if (!VALID_ADVANCE_MODES.includes(p.advanceMode as (typeof VALID_ADVANCE_MODES)[number]))
     return false
 
-  // 3. Array de notas recomendadas
   if (!Array.isArray(p.recommendedNotes) || p.recommendedNotes.length === 0) return false
   const allNotesValid = p.recommendedNotes.every(
     (n) => typeof n === 'number' && Number.isInteger(n) && n >= 21 && n <= 108
   )
   if (!allNotesValid) return false
 
-  // 4. Parámetros numéricos
   if (typeof p.questionsCount !== 'number' || p.questionsCount <= 0) return false
   if (typeof p.durationMinutes !== 'number' || p.durationMinutes <= 0) return false
-
-  // 5. Validaciones condicionales opcionales
-  if (p.recommendedIntervals !== undefined && Array.isArray(p.recommendedIntervals)) {
-    const allIntervalsValid = p.recommendedIntervals.every(
-      (st) => typeof st === 'number' && Number.isInteger(st) && st >= 1 && st <= 12
-    )
-    if (!allIntervalsValid) return false
-  }
-
-  if (p.sequenceLength !== undefined && p.sequenceLength !== null) {
-    if (typeof p.sequenceLength !== 'number' || p.sequenceLength < 3 || p.sequenceLength > 6) {
-      return false
-    }
-  }
 
   return true
 }
 
-/**
- * Valida un JSON crudo devuelto por un LLM y lo transforma en AiAnalysisResponse validado.
- * Retorna null si el payload está corrupto, malformado o incompleto.
- */
 export function validateAndParseAiResponse(
   rawJsonString: string,
   modelName: string
@@ -90,11 +66,14 @@ export function validateAndParseAiResponse(
       return null
     }
 
+    // Sanitización determinista de octavas y campos
+    const sanitizedPrescription = sanitizePrescription(parsed.prescription, parsed.analysisText)
+
     return {
       source: 'lm_studio_ai',
       modelName,
       analysisText: parsed.analysisText.trim(),
-      prescription: parsed.prescription
+      prescription: sanitizedPrescription
     }
   } catch {
     return null
