@@ -166,15 +166,25 @@ export class DatabaseEngine {
         }
 
         const totalExercises = sessions.reduce((acc, s) => acc + s.totalQuestions, 0)
-        const totalAccuracy = sessions.reduce((acc, s) => acc + s.accuracyPercentage, 0)
-        const totalTime = sessions.reduce((acc, s) => acc + s.avgResponseTimeMs, 0)
+        const totalCorrect = sessions.reduce((acc, s) => acc + s.correctAnswers, 0)
         const totalDuration = sessions.reduce((acc, s) => acc + (s.durationSeconds || 0), 0)
+
+        // Promedio ponderado real por volumen de preguntas
+        const overallAccuracy =
+          totalExercises > 0 ? Math.round((totalCorrect / totalExercises) * 100) : 0
+
+        const weightedTimeSum = sessions.reduce(
+          (acc, s) => acc + s.avgResponseTimeMs * s.totalQuestions,
+          0
+        )
+        const overallAvgTimeMs =
+          totalExercises > 0 ? Math.round(weightedTimeSum / totalExercises) : 0
 
         resolve({
           totalSessions,
           totalExercises,
-          overallAccuracy: Math.round(totalAccuracy / totalSessions),
-          overallAvgTimeMs: Math.round(totalTime / totalSessions),
+          overallAccuracy,
+          overallAvgTimeMs,
           totalDurationSeconds: totalDuration
         })
       }

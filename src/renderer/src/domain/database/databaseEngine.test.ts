@@ -24,6 +24,50 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
     expect(summary.totalDurationSeconds).toBe(0)
   })
 
+  it('debe calcular el promedio ponderado exacto por volumen de preguntas', async () => {
+    // Sesión 1: 10 preguntas, 10 aciertos (100% de precisión, tiempo 1000ms)
+    const s1: DbSessionRecord = {
+      id: 's1',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Nivel 1',
+      totalQuestions: 10,
+      correctAnswers: 10,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 20
+    }
+
+    // Sesión 2: 90 preguntas, 45 aciertos (50% de precisión, tiempo 2000ms)
+    const s2: DbSessionRecord = {
+      id: 's2',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Nivel 3',
+      totalQuestions: 90,
+      correctAnswers: 45,
+      accuracyPercentage: 50,
+      avgResponseTimeMs: 2000,
+      durationSeconds: 180
+    }
+
+    await engine.saveSession(s1, [])
+    await engine.saveSession(s2, [])
+
+    const summary = await engine.getSummary()
+    expect(summary.totalSessions).toBe(2)
+    expect(summary.totalExercises).toBe(100)
+
+    // Total aciertos: 10 + 45 = 55 de 100 -> Precisión ponderada = exactamente 55% (no 75%)
+    expect(summary.overallAccuracy).toBe(55)
+
+    // Tiempo medio ponderado: (10*1000 + 90*2000) / 100 = 1900ms
+    expect(summary.overallAvgTimeMs).toBe(1900)
+    expect(summary.totalDurationSeconds).toBe(200)
+  })
+
   it('debe guardar sesión incluyendo duración en segundos', async () => {
     const mockSession: DbSessionRecord = {
       id: 'session_flute_1',
