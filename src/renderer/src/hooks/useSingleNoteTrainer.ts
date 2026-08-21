@@ -408,12 +408,34 @@ export function useSingleNoteTrainer({
     const finalStrategyId = activeSessionStrategyIdRef.current
     const finalInstrument = activeSessionInstrumentRef.current
 
-    const presetLabel =
+    // Identificar si coincide con algún preset formal o es selección libre
+    const activePool = activeNotesBufferRef.current
+    let contentName = `Notas Personalizadas (${activePool.length})`
+
+    // Si tenemos los presets importados o por cantidad de notas
+    if (
+      activePool.length === 3 &&
+      activePool.includes(60) &&
+      activePool.includes(62) &&
+      activePool.includes(64)
+    ) {
+      contentName = 'Nivel 1 (C, D, E)'
+    } else if (activePool.length === 5 && activePool.includes(60) && activePool.includes(67)) {
+      contentName = 'Nivel 2 (C a G)'
+    } else if (activePool.length === 8 && activePool.includes(60) && activePool.includes(72)) {
+      contentName = 'Nivel 3 (Octava Diatónica)'
+    } else if (activePool.length === 13) {
+      contentName = 'Nivel 4 (Cromático C4-C5)'
+    }
+
+    const formatTag =
       finalLimitType === 'time'
-        ? `Tiempo (${finalDurationMinutes}m)`
+        ? `Cronometrado ${finalDurationMinutes}m`
         : finalLimitType === 'mastery'
-          ? 'Maestría'
-          : `Notas (${activeNotesBufferRef.current.length})`
+          ? 'Modo Maestría'
+          : `Bloque ${allAnswers.length} preguntas`
+
+    const presetLabel = `${contentName} • ${formatTag}`
 
     const sessionRecord: DbSessionRecord = {
       id: finishedSessionId,

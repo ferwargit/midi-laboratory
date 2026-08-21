@@ -463,12 +463,20 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </Card>
       )}
 
-      {/* TAB 5: HISTORIAL DE SESIONES */}
+      {/* TAB 5: HISTORIAL DE SESIONES ENRIQUECIDO */}
       {activeTab === 'sessions' && (
         <Card className="space-y-3 bg-zinc-900/80 backdrop-blur-2xl border-zinc-800/80 shadow-2xl">
-          <h3 className="text-sm font-bold text-zinc-100 font-mono uppercase tracking-wider">
-            Registro Histórico de Sesiones ({modeFilter}: {displayedSessions.length})
-          </h3>
+          <div className="flex justify-between items-center pb-2 border-b border-zinc-800/80">
+            <div>
+              <h3 className="text-sm font-bold text-zinc-100 font-mono uppercase tracking-wider m-0">
+                Registro Histórico de Sesiones ({modeFilter}: {displayedSessions.length})
+              </h3>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                Desglose detallado por contenido musical, formato de entrenamiento y rendimiento:
+              </p>
+            </div>
+          </div>
+
           {displayedSessions.length === 0 ? (
             <div className="text-center py-8 text-zinc-600 text-xs italic font-mono">
               No hay sesiones registradas en la modalidad seleccionada ({modeFilter}).
@@ -477,22 +485,48 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-mono">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-zinc-500 text-[10px] uppercase">
+                  <tr className="border-b border-zinc-800 text-zinc-500 text-[10px] uppercase tracking-wider">
                     <th className="pb-2.5">Fecha</th>
-                    <th className="pb-2.5">Preset</th>
+                    <th className="pb-2.5">Contenido / Configuración</th>
+                    <th className="pb-2.5">Formato</th>
                     <th className="pb-2.5 text-center">Preguntas</th>
                     <th className="pb-2.5 text-center">Duración</th>
                     <th className="pb-2.5 text-center">Precisión Cruda</th>
-                    <th className="pb-2.5 text-center">Oído Real</th>
+                    <th className="pb-2.5 text-center">Oído Real (IRT)</th>
                     <th className="pb-2.5 text-right">Tiempo Medio</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
                   {displayedSessions.map((s) => {
                     const psych = metrics.sessionPsychometricsList.find((p) => p.sessionId === s.id)
+
+                    // Separación inteligente de contenido vs formato (para sesiones viejas y nuevas)
+                    const rawName = s.presetName || ''
+                    const isTimed =
+                      rawName.toLowerCase().includes('tiempo') || s.durationSeconds <= 65
+                    const isMastery = rawName.toLowerCase().includes('maestría')
+
+                    let displayContent = rawName
+                    if (rawName.includes('•')) {
+                      displayContent = rawName.split('•')[0].trim()
+                    } else if (rawName.toLowerCase().startsWith('tiempo')) {
+                      displayContent = 'Notas Aisladas (Pool Activo)'
+                    }
+
+                    // Etiqueta del motor adaptativo
+                    const strategyLabel =
+                      s.strategyId === 'adaptive_v1'
+                        ? 'Adaptativo v1'
+                        : s.strategyId === 'spaced_repetition'
+                          ? 'Leitner SM-2'
+                          : s.strategyId === 'random'
+                            ? 'Aleatorio'
+                            : s.strategyId.replace('_', ' ')
+
                     return (
                       <tr key={s.id} className="hover:bg-zinc-950/50 transition-colors">
-                        <td className="py-2.5 text-zinc-400 text-[11px]">
+                        {/* 1. Fecha */}
+                        <td className="py-3 text-zinc-400 text-[11px] whitespace-nowrap">
                           {new Date(s.createdAt).toLocaleDateString('es-AR', {
                             day: '2-digit',
                             month: 'short',
@@ -500,20 +534,52 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                             minute: '2-digit'
                           })}
                         </td>
-                        <td className="py-2.5 font-sans font-medium text-zinc-100">
-                          {s.presetName}
+
+                        {/* 2. Contenido Musical */}
+                        <td className="py-3 font-sans">
+                          <div className="font-semibold text-zinc-100 text-xs">
+                            {displayContent}
+                          </div>
+                          <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                            Motor: <span className="text-zinc-400">{strategyLabel}</span>
+                          </div>
                         </td>
-                        <td className="py-2.5 text-center">
+
+                        {/* 3. Formato / Criterio */}
+                        <td className="py-3 whitespace-nowrap">
+                          {isTimed ? (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-950/70 border border-amber-800 text-amber-300 text-[10px] font-bold">
+                              ⏱️ Cronometrado {formatDuration(s.durationSeconds || 60)}
+                            </span>
+                          ) : isMastery ? (
+                            <span className="px-2 py-0.5 rounded-md bg-purple-950/70 border border-purple-800 text-purple-300 text-[10px] font-bold">
+                              🎯 Maestría (≥85%)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">
+                              🔢 Serie {s.totalQuestions} ej.
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 4. Preguntas */}
+                        <td className="py-3 text-center whitespace-nowrap">
                           <span className="text-emerald-400 font-bold">{s.correctAnswers}</span> /{' '}
                           {s.totalQuestions}
                         </td>
-                        <td className="py-2.5 text-center text-zinc-400">
+
+                        {/* 5. Duración */}
+                        <td className="py-3 text-center text-zinc-400 whitespace-nowrap">
                           {formatDuration(s.durationSeconds || 0)}
                         </td>
-                        <td className="py-2.5 text-center text-zinc-300 font-bold">
+
+                        {/* 6. Precisión Cruda */}
+                        <td className="py-3 text-center text-zinc-200 font-bold whitespace-nowrap">
                           {s.accuracyPercentage}%
                         </td>
-                        <td className="py-2.5 text-center">
+
+                        {/* 7. Oído Real (Corregido por Azar) */}
+                        <td className="py-3 text-center whitespace-nowrap">
                           <span
                             className={`font-bold ${
                               (psych?.normalizedAccuracy || s.accuracyPercentage) >= 80
@@ -526,7 +592,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                             {psych ? `${psych.normalizedAccuracy}%` : `${s.accuracyPercentage}%`}
                           </span>
                         </td>
-                        <td className="py-2.5 text-right text-zinc-300 font-mono">
+
+                        {/* 8. Tiempo Medio */}
+                        <td className="py-3 text-right text-zinc-300 font-mono whitespace-nowrap">
                           {(s.avgResponseTimeMs / 1000).toFixed(2)}s
                         </td>
                       </tr>

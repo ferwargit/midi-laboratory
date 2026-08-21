@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useSingleNoteTrainer } from './useSingleNoteTrainer'
+import { useDatabaseStore } from '../stores/useDatabaseStore'
 
 describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
   beforeEach(() => {
@@ -324,8 +325,44 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
         result.current.advanceToNextQuestion()
       })
 
-      // Sin el fix, isAdvancingRef queda en true para siempre y esta llamada no hace nada
       expect(onPlayStimulus).toHaveBeenCalledTimes(2)
+    })
+
+    // NUEVO TEST: Valida que la sesión guarde la taxonomía enriquecida (Contenido • Formato)
+    it('debe guardar la sesión con metadatos enriquecidos de contenido y formato de entrenamiento', async () => {
+      const saveSpy = vi
+        .spyOn(useDatabaseStore.getState(), 'saveSession')
+        .mockResolvedValue(undefined)
+      const onPlayStimulus = vi.fn()
+      const onInstrumentChanged = vi.fn()
+
+      const { result } = renderHook(() =>
+        useSingleNoteTrainer({ onPlayStimulus, onInstrumentChanged })
+      )
+
+      act(() => {
+        result.current.setSessionLimitType('questions')
+        result.current.setSessionQuestionsCount(1)
+        result.current.startSession([60, 62, 64]) // Nivel 1 (C, D, E)
+      })
+
+      act(() => {
+        const expected = result.current.currentExpectedNote as number
+        result.current.handleUserNotePlayed(expected)
+      })
+
+      act(() => {
+        result.current.stopSession()
+      })
+
+      expect(saveSpy).toHaveBeenCalled()
+      const savedSession = saveSpy.mock.calls[0][0]
+
+      // Debe contener el nombre del contenido y el formato del bloque
+      expect(savedSession.presetName).toContain('Nivel 1 (C, D, E)')
+      expect(savedSession.presetName).toContain('Bloque 1 preguntas')
+
+      saveSpy.mockRestore()
     })
   })
 })
