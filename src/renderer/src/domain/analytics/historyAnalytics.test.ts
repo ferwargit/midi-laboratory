@@ -30,6 +30,19 @@ describe('historyAnalytics - Psicometría y Corrección por Azar', () => {
     durationSeconds: 20
   }
 
+  const sSequenceWithWordNotas: DbSessionRecord = {
+    id: 's_seq',
+    createdAt: new Date().toISOString(),
+    strategyId: 'sequences_v1',
+    instrumentId: 'piano_sequences',
+    presetName: 'Secuencias (3 notas)', // Caso crítico del bug
+    totalQuestions: 3,
+    correctAnswers: 2,
+    accuracyPercentage: 66,
+    avgResponseTimeMs: 3000,
+    durationSeconds: 30
+  }
+
   const answers: DbAnswerRecord[] = [
     {
       id: 'a1',
@@ -43,29 +56,30 @@ describe('historyAnalytics - Psicometría y Corrección por Azar', () => {
       velocity: 90,
       reasonTelemetry: '',
       createdAt: new Date().toISOString()
-    },
-    {
-      id: 'a2',
-      sessionId: 's_int',
-      questionIndex: 1,
-      expectedNote: 64,
-      playedNote: 65,
-      isCorrect: false,
-      semitoneDistance: 1,
-      responseTimeMs: 2200,
-      velocity: 90,
-      reasonTelemetry: '',
-      createdAt: new Date().toISOString()
     }
   ]
 
-  it('filterSessionsByMode debe segmentar correctamente', () => {
-    const all = filterSessionsByMode([sNote, sInterval], 'all')
-    expect(all.length).toBe(2)
+  it('filterSessionsByMode debe segmentar correctamente y evitar colisiones por la palabra "notas"', () => {
+    const allSessions = [sNote, sInterval, sSequenceWithWordNotas]
 
-    const onlyNotes = filterSessionsByMode([sNote, sInterval], 'single_note')
+    // 1. Filtro Global
+    const all = filterSessionsByMode(allSessions, 'all')
+    expect(all.length).toBe(3)
+
+    // 2. Filtro Single Note: solo debe contener sNote (1 sesión, NO sSequenceWithWordNotas)
+    const onlyNotes = filterSessionsByMode(allSessions, 'single_note')
     expect(onlyNotes.length).toBe(1)
     expect(onlyNotes[0].id).toBe('s_note')
+
+    // 3. Filtro Secuencias: debe capturar sSequenceWithWordNotas
+    const onlySequences = filterSessionsByMode(allSessions, 'sequences')
+    expect(onlySequences.length).toBe(1)
+    expect(onlySequences[0].id).toBe('s_seq')
+
+    // 4. Filtro Intervalos
+    const onlyIntervals = filterSessionsByMode(allSessions, 'intervals')
+    expect(onlyIntervals.length).toBe(1)
+    expect(onlyIntervals[0].id).toBe('s_int')
   })
 
   it('computeAnalyticsMetrics debe calcular la precisión corregida por azar y entropía', () => {

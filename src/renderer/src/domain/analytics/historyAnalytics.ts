@@ -40,30 +40,47 @@ export interface AnalyticsMetrics {
   sessionPsychometricsList: SessionPsychometrics[]
 }
 
+export function isSequenceSession(s: DbSessionRecord): boolean {
+  const name = s.presetName.toLowerCase()
+  return (
+    s.strategyId.includes('sequences') ||
+    s.instrumentId === 'piano_sequences' ||
+    name.includes('secuencia')
+  )
+}
+
+export function isIntervalSession(s: DbSessionRecord): boolean {
+  const name = s.presetName.toLowerCase()
+  return (
+    s.strategyId.includes('intervals') ||
+    s.instrumentId === 'piano_intervals' ||
+    name.includes('intervalo')
+  )
+}
+
+export function isSingleNoteSession(s: DbSessionRecord): boolean {
+  if (isSequenceSession(s) || isIntervalSession(s)) {
+    return false
+  }
+  const name = s.presetName.toLowerCase()
+  return (
+    s.strategyId === 'random' ||
+    s.strategyId === 'adaptive_v1' ||
+    s.strategyId === 'spaced_repetition' ||
+    name.includes('nota') ||
+    name.includes('maestría') ||
+    name.includes('tiempo')
+  )
+}
+
 export function filterSessionsByMode(
   sessions: DbSessionRecord[],
   modeFilter: AnalyticsModeFilter
 ): DbSessionRecord[] {
   if (modeFilter === 'all') return sessions
-  if (modeFilter === 'single_note') {
-    return sessions.filter(
-      (s) =>
-        s.strategyId === 'random' ||
-        s.strategyId === 'adaptive_v1' ||
-        s.presetName.toLowerCase().includes('notas') ||
-        s.presetName.toLowerCase().includes('maestría')
-    )
-  }
-  if (modeFilter === 'intervals') {
-    return sessions.filter(
-      (s) => s.strategyId.includes('intervals') || s.presetName.toLowerCase().includes('intervalo')
-    )
-  }
-  if (modeFilter === 'sequences') {
-    return sessions.filter(
-      (s) => s.strategyId.includes('sequences') || s.presetName.toLowerCase().includes('secuencia')
-    )
-  }
+  if (modeFilter === 'sequences') return sessions.filter(isSequenceSession)
+  if (modeFilter === 'intervals') return sessions.filter(isIntervalSession)
+  if (modeFilter === 'single_note') return sessions.filter(isSingleNoteSession)
   return sessions
 }
 
