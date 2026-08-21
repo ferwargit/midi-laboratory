@@ -5,3 +5,5 @@ coverage
 .DS_Store
 .eslintcache
 *.log*
+
+repomix-output.xml

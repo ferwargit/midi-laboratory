@@ -129,7 +129,7 @@ export default function App(): React.ReactElement {
     sequenceTrainer.handleUserNotePlayed
   ])
 
-  // Atajos de Teclado
+  // Atajos de Teclado Globales
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.code === 'Space') {
@@ -222,78 +222,73 @@ export default function App(): React.ReactElement {
   const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
 
   return (
-    <div className="p-5 max-w-7xl mx-auto space-y-4">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 font-sans">
       <Header status={midi.status} />
 
       <MidiDisconnectAlert isDisconnected={midi.isDeviceDisconnected} />
 
-      {/* SELECTOR PRINCIPAL Y MODO DE PISTAS VISUALES */}
-      <div className="flex justify-between items-center bg-zinc-900/90 border border-zinc-800 p-1.5 rounded-lg gap-3">
-        <div className="flex gap-2 flex-1">
-          <button
-            type="button"
-            disabled={isAnySessionActive}
-            onClick={(): void => setAppMode('single_note')}
-            className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
-              appMode === 'single_note'
-                ? 'bg-sky-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            🎵 Nota Individual
-          </button>
-          <button
-            type="button"
-            disabled={isAnySessionActive}
-            onClick={(): void => setAppMode('intervals')}
-            className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
-              appMode === 'intervals'
-                ? 'bg-sky-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            📏 Intervalos (2 Notas)
-          </button>
-          <button
-            type="button"
-            disabled={isAnySessionActive}
-            onClick={(): void => setAppMode('sequences')}
-            className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
-              appMode === 'sequences'
-                ? 'bg-sky-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            🎼 Secuencias (3 a 6 Notas)
-          </button>
-          <button
-            type="button"
-            disabled={isAnySessionActive}
-            onClick={(): void => setAppMode('analytics')}
-            className={`flex-1 py-2 rounded-md font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50 ${
-              appMode === 'analytics'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            📊 Historial & IA
-          </button>
+      {/* BARRA DE NAVEGACIÓN Y SELECTOR DE PISTAS LED */}
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-2 rounded-2xl gap-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+        {/* SELECTOR SEGMENTADO PRINCIPAL */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 flex-1">
+          {[
+            { id: 'single_note', label: 'Nota Individual', code: 'MODO 01' },
+            { id: 'intervals', label: 'Intervalos', code: 'MODO 02' },
+            { id: 'sequences', label: 'Secuencias', code: 'MODO 03' },
+            { id: 'analytics', label: 'Psicometría & IA', code: 'DIAGNÓSTICO' }
+          ].map((tab) => {
+            const isActive = appMode === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                disabled={isAnySessionActive}
+                onClick={(): void => setAppMode(tab.id as AppMode)}
+                className={`py-2 px-3 rounded-xl font-medium transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center ${
+                  isActive
+                    ? tab.id === 'analytics'
+                      ? 'bg-purple-600/90 text-white shadow-[0_0_20px_rgba(168,85,247,0.35)] border border-purple-400/40'
+                      : 'bg-gradient-to-b from-sky-500 to-sky-600 text-white shadow-[0_0_20px_rgba(56,189,248,0.3)] border border-sky-400/40'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                }`}
+              >
+                <span className="text-[9px] font-mono tracking-widest opacity-60 uppercase mb-0.5">
+                  {tab.code}
+                </span>
+                <span className="text-xs font-semibold">{tab.label}</span>
+              </button>
+            )
+          })}
         </div>
 
-        {/* SELECTOR DE PISTAS VISUALES */}
-        <div className="flex items-center gap-1.5 px-2 bg-zinc-950 rounded border border-zinc-800 text-[11px]">
-          <span className="text-zinc-400">Pistas:</span>
+        {/* SELECTOR DE PISTAS VISUALES / AUDITIVAS */}
+        <div className="flex items-center justify-center gap-1 bg-zinc-950/80 p-1.5 rounded-xl border border-zinc-800/80 text-[11px] font-mono shrink-0">
+          <span className="text-zinc-500 px-2 text-[10px] tracking-wider uppercase font-semibold">
+            Pistas:
+          </span>
           <button
             type="button"
-            onClick={(): void => setVisualCueMode((m) => (m === 'blind' ? 'assisted' : 'blind'))}
-            className={`px-2 py-1 rounded font-semibold transition-colors cursor-pointer ${
+            onClick={(): void => setVisualCueMode('blind')}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
               visualCueMode === 'blind'
-                ? 'bg-zinc-800 text-amber-300'
-                : 'bg-cyan-950 text-cyan-300 border border-cyan-800'
+                ? 'bg-amber-400/15 border border-amber-400/50 text-amber-300 font-bold shadow-[0_0_12px_rgba(251,191,36,0.2)]'
+                : 'text-zinc-500 hover:text-zinc-300'
             }`}
-            title="Cambiar entre modo a ciegas y modo con iluminación sincronizada"
+            title="El piano no se ilumina al sonar la nota para entrenar la escucha real"
           >
-            {visualCueMode === 'blind' ? '👂 Oído Puro' : '👁️ Asistido'}
+            Oído Puro
+          </button>
+          <button
+            type="button"
+            onClick={(): void => setVisualCueMode('assisted')}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              visualCueMode === 'assisted'
+                ? 'bg-cyan-400/15 border border-cyan-400/50 text-cyan-300 font-bold shadow-[0_0_12px_rgba(34,211,238,0.2)]'
+                : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+            title="La tecla se ilumina en cian sincronizada con el sonido"
+          >
+            Asistido LED
           </button>
         </div>
       </div>
@@ -308,7 +303,7 @@ export default function App(): React.ReactElement {
         disabled={isAnySessionActive}
       />
 
-      {/* VISTAS MODULARES CON SINCRONIZACIÓN DE ESTÍMULO */}
+      {/* VISTAS MODULARES DE ENTRENAMIENTO */}
       {appMode === 'single_note' && (
         <SingleNoteView
           trainer={singleNoteTrainer}
@@ -324,6 +319,7 @@ export default function App(): React.ReactElement {
           trainer={intervalTrainer}
           pianoKeys={PIANO_KEYS}
           pressedNotes={midi.pressedNotes}
+          stimulusNotes={liveStimulusNotes}
           onVirtualKeyPress={handleVirtualKeyPress}
         />
       )}
@@ -333,6 +329,7 @@ export default function App(): React.ReactElement {
           trainer={sequenceTrainer}
           pianoKeys={PIANO_KEYS}
           pressedNotes={midi.pressedNotes}
+          stimulusNotes={liveStimulusNotes}
           onVirtualKeyPress={handleVirtualKeyPress}
         />
       )}
@@ -345,7 +342,7 @@ export default function App(): React.ReactElement {
         isOpen={isResetModalOpen}
         title="¿Resetear Base de Datos de Prueba?"
         message="Esta acción eliminará todas las sesiones y respuestas acumuladas en la memoria local para que puedas reiniciar tu historial desde cero. Esta operación no se puede deshacer."
-        confirmText="🗑️ Sí, Borrar Todo"
+        confirmText="Sí, Borrar Todo"
         cancelText="Cancelar"
         onConfirm={handleConfirmReset}
         onCancel={(): void => setIsResetModalOpen(false)}

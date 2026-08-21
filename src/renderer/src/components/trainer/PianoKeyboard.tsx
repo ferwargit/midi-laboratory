@@ -6,7 +6,7 @@ interface PianoKeyboardProps {
   keys: number[]
   activeNotes?: number[]
   pressedNotes?: number[]
-  stimulusNotes?: number[] // Notas que están sonando en el estímulo actual
+  stimulusNotes?: number[]
   onToggleNote?: (note: number) => void
   onPlayNoteVirtual?: (note: number) => void
   performances?: Map<number, NotePerformance>
@@ -48,35 +48,35 @@ function PianoKeyboardComponent({
   const getKeyStyle = (
     note: number,
     black: boolean
-  ): { bg: string; text: string; dot?: boolean } => {
+  ): { bg: string; text: string; dot?: boolean; border?: string } => {
     const isPhysicallyPressed = Array.isArray(pressedNotes) && pressedNotes.includes(note)
     const isVirtualClicked = clickedNote === note
     const isCurrentlyActive = isPhysicallyPressed || isVirtualClicked
     const isStimulusPlaying = Array.isArray(stimulusNotes) && stimulusNotes.includes(note)
 
-    // 1. PRIORIDAD MÁXIMA: Tecla pulsada por el usuario (Ámbar brillante)
+    // 1. PRIORIDAD: Tecla pulsada por el usuario (Ámbar Neón)
     if (isCurrentlyActive) {
       return {
         bg: black
-          ? 'bg-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.9)] brightness-125'
-          : 'bg-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.9)] brightness-125',
-        text: 'text-black font-extrabold'
+          ? 'bg-amber-400 shadow-[0_0_20px_rgba(251,191,36,1)] brightness-125'
+          : 'bg-amber-300 shadow-[0_0_25px_rgba(251,191,36,1)] brightness-125',
+        text: 'text-zinc-950 font-black'
       }
     }
 
-    // 2. ESTÍMULO SONANDO EN MODO ASISTIDO (Cian brillante)
+    // 2. ESTÍMULO SONANDO EN MODO ASISTIDO (Cian Eléctrico)
     if (isStimulusPlaying) {
       return {
         bg: black
-          ? 'bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.9)] brightness-125'
-          : 'bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.9)] brightness-125',
-        text: 'text-black font-extrabold'
+          ? 'bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,1)] brightness-125'
+          : 'bg-cyan-300 shadow-[0_0_25px_rgba(34,211,238,1)] brightness-125',
+        text: 'text-zinc-950 font-black'
       }
     }
 
     const isNoteActive = Array.isArray(activeNotes) && activeNotes.includes(note)
 
-    // 3. MODO HEATMAP (Durante la sesión o en el Resumen Final)
+    // 3. HEATMAP ANALÍTICO
     if (showHeatmap) {
       const perf = performances?.get(note)
       const attempts = perf?.attempts ?? 0
@@ -85,66 +85,61 @@ function PianoKeyboardComponent({
       if (attempts > 0) {
         if (accuracy >= 85) {
           return {
-            bg: black
-              ? 'bg-emerald-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.4)]'
-              : 'bg-emerald-500 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.15)]',
-            text: 'text-white'
+            bg: black ? 'bg-emerald-600 shadow-inner' : 'bg-emerald-500 shadow-inner',
+            text: 'text-white font-bold'
           }
         }
         if (accuracy >= 50) {
           return {
-            bg: black
-              ? 'bg-amber-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.4)]'
-              : 'bg-amber-400 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.15)]',
-            text: 'text-black font-extrabold'
+            bg: black ? 'bg-amber-600 shadow-inner' : 'bg-amber-400 shadow-inner',
+            text: 'text-zinc-950 font-bold'
           }
         }
         return {
-          bg: black
-            ? 'bg-red-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.4)]'
-            : 'bg-red-500 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.15)]',
-          text: 'text-white'
+          bg: black ? 'bg-rose-600 shadow-inner' : 'bg-rose-500 shadow-inner',
+          text: 'text-white font-bold'
         }
       }
 
       if (isNoteActive) {
         return {
           bg: black
-            ? 'bg-gradient-to-b from-zinc-800 to-zinc-950 shadow-[0_4px_6px_rgba(0,0,0,0.6)]'
-            : 'bg-gradient-to-b from-white via-zinc-50 to-zinc-200 shadow-[inset_0_-4px_4px_rgba(0,0,0,0.1)]',
-          text: black ? 'text-zinc-400' : 'text-zinc-800',
+            ? 'bg-gradient-to-b from-zinc-800 to-zinc-950 shadow-md'
+            : 'bg-gradient-to-b from-zinc-100 via-zinc-200 to-zinc-300 shadow-sm',
+          text: black ? 'text-zinc-400' : 'text-zinc-700',
           dot: true
         }
       }
 
       return {
         bg: black
-          ? 'bg-zinc-800/70 border-zinc-800/80 shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]'
-          : 'bg-zinc-300/40 border-zinc-700/40 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.08)]',
-        text: black ? 'text-zinc-500 font-medium' : 'text-zinc-400 font-medium'
+          ? 'bg-zinc-900 border-zinc-800 text-zinc-600'
+          : 'bg-zinc-300/30 border-zinc-700/30 text-zinc-500',
+        text: black ? 'text-zinc-600' : 'text-zinc-500'
       }
     }
 
-    // 4. MODO CONFIGURACIÓN PREVIA
+    // 4. MODO CONFIGURACIÓN PREVIA (Pool Activo)
     if (isNoteActive) {
       return {
         bg: black
-          ? 'bg-sky-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.5)]'
-          : 'bg-sky-400 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.2)]',
-        text: black ? 'text-white' : 'text-zinc-950 font-bold'
+          ? 'bg-sky-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.5),0_0_12px_rgba(2,132,199,0.5)]'
+          : 'bg-sky-400 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.2),0_0_15px_rgba(56,189,248,0.4)]',
+        text: black ? 'text-white font-bold' : 'text-zinc-950 font-black'
       }
     }
 
+    // 5. ESTADO EN REPOSO ESTÁNDAR
     if (black) {
       return {
-        bg: 'bg-gradient-to-b from-zinc-800 to-zinc-950 hover:from-zinc-700 hover:to-zinc-900 shadow-[0_4px_6px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.15)]',
-        text: 'text-zinc-400'
+        bg: 'bg-gradient-to-b from-zinc-800 via-zinc-900 to-zinc-950 shadow-[0_8px_14px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.15)]',
+        text: 'text-zinc-400 hover:text-zinc-200'
       }
     }
 
     return {
-      bg: 'bg-gradient-to-b from-white via-zinc-50 to-zinc-200 hover:from-zinc-100 hover:to-zinc-300 shadow-[inset_0_-4px_4px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.3)]',
-      text: 'text-zinc-800'
+      bg: 'bg-gradient-to-b from-white via-zinc-100 to-zinc-300 hover:from-zinc-50 hover:to-zinc-200 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.12),0_2px_5px_rgba(0,0,0,0.35)]',
+      text: 'text-zinc-800 hover:text-zinc-950'
     }
   }
 
@@ -155,12 +150,13 @@ function PianoKeyboardComponent({
     const totalWhiteKeys = Math.max(1, whiteKeys.length)
     const whiteKeyWidthPercent = 100 / totalWhiteKeys
 
-    return (prevWhiteIndex + 1) * whiteKeyWidthPercent - whiteKeyWidthPercent * 0.32
+    return (prevWhiteIndex + 1) * whiteKeyWidthPercent - whiteKeyWidthPercent * 0.33
   }
 
   return (
-    <div className="w-full bg-zinc-950 border border-zinc-800/80 rounded-xl p-2.5 shadow-2xl overflow-hidden select-none">
-      <div className="relative w-full h-24 md:h-28 flex">
+    <div className="w-full bg-zinc-950/90 border border-zinc-800/80 rounded-2xl p-2 md:p-3 shadow-[0_12px_40px_rgba(0,0,0,0.7)] backdrop-blur-xl overflow-hidden select-none">
+      <div className="relative w-full h-24 md:h-32 flex rounded-lg overflow-hidden bg-black/40 p-0.5">
+        {/* TECLAS BLANCAS */}
         {whiteKeys.map((note) => {
           const style = getKeyStyle(note, false)
           return (
@@ -170,20 +166,21 @@ function PianoKeyboardComponent({
               disabled={disabled}
               onClick={(): void => handleKeyInteraction(note)}
               title={`${midiNoteToName(note)} (${note})`}
-              className={`relative flex-1 h-full rounded-b-md border-r border-zinc-300/60 last:border-r-0 flex flex-col justify-end items-center pb-1.5 transition-all duration-75 cursor-pointer ${
+              className={`relative flex-1 h-full rounded-b-lg border-r border-zinc-400/40 last:border-r-0 flex flex-col justify-end items-center pb-2 transition-all duration-75 cursor-pointer active:translate-y-[2px] ${
                 style.bg
-              } ${style.text} ${disabled ? 'cursor-default' : 'active:brightness-95'}`}
+              } ${style.text} ${disabled ? 'cursor-default' : ''}`}
             >
-              <span className="text-[10px] md:text-[11px] font-semibold tracking-tighter leading-none">
+              <span className="text-[10px] md:text-xs font-bold tracking-tighter leading-none">
                 {midiNoteToName(note)}
               </span>
               {style.dot && (
-                <span className="absolute top-2 w-1.5 h-1.5 rounded-full bg-sky-500/70" />
+                <span className="absolute top-2.5 w-2 h-2 rounded-full bg-sky-500 shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
               )}
             </button>
           )
         })}
 
+        {/* TECLAS NEGRAS */}
         {keys
           .filter((k) => isBlackKey(k))
           .map((note) => {
@@ -192,7 +189,7 @@ function PianoKeyboardComponent({
 
             const style = getKeyStyle(note, true)
             const totalWhiteKeys = Math.max(1, whiteKeys.length)
-            const blackKeyWidthPercent = (100 / totalWhiteKeys) * 0.64
+            const blackKeyWidthPercent = (100 / totalWhiteKeys) * 0.66
 
             return (
               <button
@@ -205,14 +202,16 @@ function PianoKeyboardComponent({
                   left: `${leftPercent}%`,
                   width: `${blackKeyWidthPercent}%`
                 }}
-                className={`absolute top-0 h-[62%] rounded-b-md z-20 flex flex-col justify-end items-center pb-1 transition-all duration-75 cursor-pointer border-x border-b border-black/40 ${
+                className={`absolute top-0 h-[64%] rounded-b-md z-20 flex flex-col justify-end items-center pb-1.5 transition-all duration-75 cursor-pointer border-x border-b border-black/80 active:translate-y-[2px] ${
                   style.bg
-                } ${style.text} ${disabled ? 'cursor-default' : 'active:scale-[0.98]'}`}
+                } ${style.text} ${disabled ? 'cursor-default' : ''}`}
               >
-                <span className="text-[8px] md:text-[9px] font-medium tracking-tighter leading-none scale-90">
+                <span className="text-[8px] md:text-[9px] font-semibold tracking-tight leading-none scale-90">
                   {midiNoteToName(note)}
                 </span>
-                {style.dot && <span className="absolute top-1.5 w-1 h-1 rounded-full bg-sky-400" />}
+                {style.dot && (
+                  <span className="absolute top-2 w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
+                )}
               </button>
             )
           })}
