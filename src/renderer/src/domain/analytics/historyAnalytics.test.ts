@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   computeAnalyticsMetrics,
   filterSessionsByMode,
-  filterSessionsAdvanced
+  filterSessionsAdvanced,
+  reconstructSessionConfig
 } from './historyAnalytics'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
@@ -159,5 +160,58 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     const report = generateDiagnosticReport(metrics)
     expect(report.title).toContain('Informe')
     expect(report.concreteActionPlan.length).toBeGreaterThan(0)
+  })
+
+  it('reconstructSessionConfig debe reconstruir con precisión el pool de notas y formato de una sesión pasada', () => {
+    const pastSession: DbSessionRecord = {
+      id: 's_hist_1',
+      createdAt: new Date('2026-08-20T15:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'flute',
+      presetName: 'Nivel 1 (C, D, E) • Cronometrado 3m',
+      totalQuestions: 20,
+      correctAnswers: 12,
+      accuracyPercentage: 60,
+      avgResponseTimeMs: 1600,
+      durationSeconds: 180
+    }
+
+    const pastAnswers: DbAnswerRecord[] = [
+      {
+        id: 'ans_1',
+        sessionId: 's_hist_1',
+        questionIndex: 1,
+        expectedNote: 60,
+        playedNote: 60,
+        isCorrect: true,
+        semitoneDistance: 0,
+        responseTimeMs: 1400,
+        velocity: 90,
+        reasonTelemetry: '',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'ans_2',
+        sessionId: 's_hist_1',
+        questionIndex: 2,
+        expectedNote: 64,
+        playedNote: 65,
+        isCorrect: false,
+        semitoneDistance: 1,
+        responseTimeMs: 1800,
+        velocity: 90,
+        reasonTelemetry: '',
+        createdAt: new Date().toISOString()
+      }
+    ]
+
+    const prescription = reconstructSessionConfig(pastSession, pastAnswers)
+
+    expect(prescription.targetMode).toBe('single_note')
+    expect(prescription.instrumentId).toBe('flute')
+    expect(prescription.recommendedNotes).toEqual([60, 64]) // Pool reconstruido
+    expect(prescription.limitType).toBe('time')
+    expect(prescription.durationMinutes).toBe(3)
+    expect(prescription.title).toContain('Re-testeo: Nivel 1')
   })
 })

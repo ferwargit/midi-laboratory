@@ -1,3 +1,4 @@
+import { AiExercisePrescription } from '../ai/types'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 import { midiNoteToName } from '../music/noteUtils'
 
@@ -356,5 +357,76 @@ export function computeAnalyticsMetrics(
     mostDifficultNotes,
     strongestNotes,
     sessionPsychometricsList
+  }
+}
+
+export function reconstructSessionConfig(
+  session: DbSessionRecord,
+  allAnswers: DbAnswerRecord[]
+): AiExercisePrescription {
+  const sessionAnswers = allAnswers.filter((a) => a.sessionId === session.id)
+
+  // 1. Detección de Modalidad
+  let targetMode: 'single_note' | 'intervals' | 'sequences' = 'single_note'
+  if (isIntervalSession(session)) targetMode = 'intervals'
+  else if (isSequenceSession(session)) targetMode = 'sequences'
+
+  // 2. Reconstrucción del Pool de Notas / Intervalos
+  let recommendedNotes: number[] = [60, 62, 64]
+  let recommendedIntervals: number[] | undefined = undefined
+  let sequenceLength: number | undefined = undefined
+
+  if (targetMode === 'single_note') {
+    const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
+      (a, b) => a - b
+    )
+    recommendedNotes = uniqueNotes.length >= 2 ? uniqueNotes : [60, 62, 64]
+  } else if (targetMode === 'intervals') {
+    // Si fue de intervalos, extraer los semitonos practicados
+    const stList: number[] = []
+    sessionAnswers.forEach((a) => {
+      const match = a.reasonTelemetry.match(/(\d+)\s*st/i)
+      if (match) stList.push(parseInt(match[1], 10))
+    })
+    recommendedIntervals = Array.from(new Set(stList)).sort((a, b) => a - b)
+    if (recommendedIntervals.length === 0) recommendedIntervals = [2, 4, 5, 7, 12]
+  } else if (targetMode === 'sequences') {
+    const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
+      (a, b) => a - b
+    )
+    recommendedNotes = uniqueNotes.length >= 2 ? uniqueNotes : [60, 62, 64, 65, 67]
+    sequenceLength =
+      sessionAnswers.length > 0 ? Math.min(6, Math.max(3, session.totalQuestions > 0 ? 3 : 4)) : 3
+  }
+
+  // 3. Reconstrucción del Formato y Límite
+  const name = (session.presetName || '').toLowerCase()
+  const isTimed =
+    name.includes('tiempo') || name.includes('cronometrado') || session.durationSeconds >= 55
+  const isMastery = name.includes('maestría')
+
+  const limitType = isTimed ? 'time' : isMastery ? 'mastery' : 'questions'
+  const durationMinutes = Math.max(1, Math.round((session.durationSeconds || 60) / 60))
+  const questionsCount = session.totalQuestions || 10
+
+  // 4. Mapeo de Instrumento
+  const validInstruments = ['acoustic_grand_piano', 'flute', 'violin', 'clarinet', 'acoustic_bass']
+  const instrumentId = validInstruments.includes(session.instrumentId)
+    ? (session.instrumentId as AiExercisePrescription['instrumentId'])
+    : 'acoustic_grand_piano'
+
+  return {
+    title: `Re-testeo: ${session.presetName}`,
+    rationale: `Sesión clonada de tu registro histórico (${new Date(session.createdAt).toLocaleDateString('es-AR')}) para evaluar evolución longitudinal bajo las mismas condiciones.`,
+    targetMode,
+    instrumentId,
+    recommendedNotes,
+    recommendedIntervals,
+    sequenceLength,
+    limitType,
+    questionsCount,
+    durationMinutes,
+    advanceMode: 'smart',
+    noteDurationMs: 500
   }
 }

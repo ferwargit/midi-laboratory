@@ -6,7 +6,8 @@ import {
   AnalyticsModeFilter,
   AnalyticsMasteryFilter,
   filterSessionsAdvanced,
-  DetailedSessionAnalysis
+  DetailedSessionAnalysis,
+  reconstructSessionConfig
 } from '../../domain/analytics/historyAnalytics'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { INSTRUMENT_CATALOG } from '../../domain/music/instruments'
@@ -540,6 +541,8 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                         {renderSortIndicator('rpm')}
                       </div>
                     </th>
+
+                    <th className="pb-2.5 text-center">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
@@ -666,6 +669,21 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                         <td className="py-3 text-right text-sky-400 font-bold whitespace-nowrap">
                           {item.responsesPerMinute}{' '}
                           <span className="text-[9px] font-normal text-zinc-500">RPM</span>
+                        </td>
+
+                        <td className="py-3 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={(): void => {
+                              const config = reconstructSessionConfig(s, answers)
+                              onLoadPrescription(config)
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 hover:border-sky-400 text-sky-200 text-[10px] font-mono font-bold transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95 flex items-center gap-1 mx-auto"
+                            title={`Clonar y repetir esta sesión idéntica (${s.presetName})`}
+                          >
+                            <span>🔁</span>
+                            <span>Re-testar</span>
+                          </button>
                         </td>
                       </tr>
                     )
