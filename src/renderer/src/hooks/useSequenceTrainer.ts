@@ -63,7 +63,7 @@ export function useSequenceTrainer({
   const [customCandidateNotes, setCustomCandidateNotes] = useState<number[]>([60, 62, 64, 65, 67])
   const [sessionLimitType, setSessionLimitType] = useState<SessionLimitType>('questions')
   const [sessionQuestionsCount, setSessionQuestionsCount] = useState<number>(10)
-  const [sessionDurationMinutes, setSessionDurationMinutes] = useState<number>(5)
+  const [sessionDurationMinutes, setSessionDurationMinutesState] = useState<number>(5)
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(300)
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false)
@@ -86,10 +86,28 @@ export function useSequenceTrainer({
 
   const customCandidateNotesBufferRef = useRef<number[]>([60, 62, 64, 65, 67])
   const sequenceLengthBufferRef = useRef<number>(3)
+  const sessionDurationMinutesBufferRef = useRef<number>(5)
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<SequenceExerciseResult[]>([])
+
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const setSessionDurationMinutes = useCallback((minutes: number): void => {
+    sessionDurationMinutesBufferRef.current = minutes
+    setSessionDurationMinutesState(minutes)
+  }, [])
+
+  const cleanupSessionTimers = useCallback((): void => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current)
+      autoAdvanceTimerRef.current = null
+    }
+    if (sessionCountdownTimerRef.current) {
+      clearInterval(sessionCountdownTimerRef.current)
+      sessionCountdownTimerRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     customCandidateNotesBufferRef.current = customCandidateNotes
@@ -152,14 +170,8 @@ export function useSequenceTrainer({
   )
 
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-    if (sessionCountdownTimerRef.current) {
-      clearInterval(sessionCountdownTimerRef.current)
-      sessionCountdownTimerRef.current = null
-    }
+    console.debug('[useSequenceTrainer] finalizeAndSaveSession called for sessionId=', sessionIdRef.current)
+    cleanupSessionTimers()
 
     questionTokenRef.current = null
     isAdvancingRef.current = false
@@ -186,7 +198,7 @@ export function useSequenceTrainer({
 
     const presetLabel =
       sessionLimitType === 'time'
-        ? `Secuencias Tiempo (${sessionDurationMinutes}m)`
+        ? `Secuencias Tiempo (${sessionDurationMinutesBufferRef.current}m)`
         : `Secuencias (${sequenceLengthBufferRef.current} notas)`
 
     const sessionRecord: DbSessionRecord = {
@@ -203,30 +215,43 @@ export function useSequenceTrainer({
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
-  }, [sessionLimitType, sessionDurationMinutes, saveSessionToDb])
+    // clear session id so pending timers won't act on the finished session
+    sessionIdRef.current = ''
+  }, [cleanupSessionTimers, sessionLimitType, saveSessionToDb])
 
+  // Temporizador regresivo para sesiones por tiempo
   useEffect(() => {
-    if (isSessionActive && sessionLimitType === 'time') {
-      sessionCountdownTimerRef.current = setInterval(() => {
-        setTimeRemainingSeconds((prev) => {
-          if (prev <= 1) {
-            clearInterval(sessionCountdownTimerRef.current!)
-            finalizeAndSaveSession()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
+    if (!isSessionActive || sessionLimitType !== 'time') return
+
+    const interval = setInterval(() => {
+      setTimeRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          sessionCountdownTimerRef.current = null
+          // apply immediate UI state changes synchronously so tests see the finished state
+          const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
+          setIsSessionActive(false)
+          setIsSessionFinished(true)
+          setIsWaitingManualAdvance(false)
+          setCapturedNotes([])
+          // persist asynchronously
+          void finalizeAndSaveSession()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    sessionCountdownTimerRef.current = interval
 
     return (): void => {
-      if (sessionCountdownTimerRef.current) {
-        clearInterval(sessionCountdownTimerRef.current)
-      }
+      clearInterval(interval)
+      sessionCountdownTimerRef.current = null
     }
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
   const startSession = (overrideNotes?: unknown, overrideLength?: unknown): void => {
+    cleanupSessionTimers()
+
     const validNotes =
       Array.isArray(overrideNotes) && overrideNotes.length > 0
         ? (overrideNotes as number[])
@@ -236,10 +261,7 @@ export function useSequenceTrainer({
         ? overrideLength
         : sequenceLengthBufferRef.current
 
-    if (validNotes.length < 2) {
-      alert('Debes seleccionar al menos 2 notas candidatas en el teclado.')
-      return
-    }
+    if (validNotes.length < 2) return
 
     if (Array.isArray(overrideNotes) && overrideNotes.length > 0) {
       setCustomCandidateNotes(overrideNotes as number[])
@@ -260,7 +282,32 @@ export function useSequenceTrainer({
     setIsSessionActive(true)
 
     if (sessionLimitType === 'time') {
-      setTimeRemainingSeconds(sessionDurationMinutes * 60)
+      setTimeRemainingSeconds(sessionDurationMinutesBufferRef.current * 60)
+      // recreate countdown interval for the newly started session (ensure previous timers were cleaned)
+      if (sessionCountdownTimerRef.current) {
+        clearInterval(sessionCountdownTimerRef.current)
+        sessionCountdownTimerRef.current = null
+      }
+      const interval = setInterval(() => {
+        setTimeRemainingSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval)
+            sessionCountdownTimerRef.current = null
+            const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
+            setIsSessionActive(false)
+            setIsSessionFinished(true)
+            setIsWaitingManualAdvance(false)
+            setCapturedNotes([])
+            // persist asynchronously
+            void finalizeAndSaveSession()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      sessionCountdownTimerRef.current = interval
+      // debug: indicate interval created for this session (tests use fake timers)
+      // console.debug('[useSequenceTrainer] countdown interval created, sessionId=', sessionIdRef.current)
     }
 
     triggerNextSequence(validNotes, validLength)
@@ -294,10 +341,10 @@ export function useSequenceTrainer({
   ])
 
   const stopSession = useCallback((): void => {
+    cleanupSessionTimers()
     if (answersBufferRef.current.length > 0) {
       finalizeAndSaveSession()
     } else {
-      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
       questionTokenRef.current = null
       isWaitingAnswerRef.current = false
       setIsSessionActive(false)
@@ -306,12 +353,11 @@ export function useSequenceTrainer({
       setCurrentSequence([])
       setCapturedNotes([])
     }
-  }, [finalizeAndSaveSession])
+  }, [cleanupSessionTimers, finalizeAndSaveSession])
 
   const resetToConfig = (): void => {
-    if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
+    cleanupSessionTimers()
     questionTokenRef.current = null
-    isWaitingAnswerRef.current = false
     setIsSessionActive(false)
     setIsSessionFinished(false)
     setIsWaitingManualAdvance(false)
@@ -375,9 +421,13 @@ export function useSequenceTrainer({
           setIsWaitingManualAdvance(true)
         } else {
           const delay = advanceMode === 'auto_slow' ? 3500 : 1800
-          autoAdvanceTimerRef.current = setTimeout(() => {
-            advanceToNextSequence()
-          }, delay)
+          {
+            const scheduledSessionId = sessionIdRef.current
+            autoAdvanceTimerRef.current = setTimeout(() => {
+              if (sessionIdRef.current !== scheduledSessionId) return
+              advanceToNextSequence()
+            }, delay)
+          }
         }
       }
     },
@@ -400,12 +450,14 @@ export function useSequenceTrainer({
       )
     )
 
-    if (weakPool.length < 2) {
-      alert('¡Felicitaciones! No tienes suficientes notas débiles para aislar.')
-      return
-    }
+    if (weakPool.length === 0) return
 
-    startSession(weakPool.sort((a, b) => a - b))
+    const poolToTrain =
+      weakPool.length === 1
+        ? [weakPool[0], weakPool[0] >= 60 ? weakPool[0] - 2 : weakPool[0] + 2]
+        : weakPool
+
+    startSession(poolToTrain.sort((a, b) => a - b))
   }
 
   return {

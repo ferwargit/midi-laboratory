@@ -69,7 +69,7 @@ export function useIntervalTrainer({
   const [rootRangeNotes, setRootRangeNotes] = useState<number[]>([60])
   const [sessionLimitType, setSessionLimitType] = useState<SessionLimitType>('questions')
   const [sessionQuestionsCount, setSessionQuestionsCount] = useState<number>(10)
-  const [sessionDurationMinutes, setSessionDurationMinutes] = useState<number>(5)
+  const [sessionDurationMinutes, setSessionDurationMinutesState] = useState<number>(5)
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(300)
   const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false)
@@ -93,10 +93,27 @@ export function useIntervalTrainer({
 
   const activeIntervalsBufferRef = useRef<number[]>([2, 4, 5, 7, 12])
   const rootRangeNotesBufferRef = useRef<number[]>([60])
+  const sessionDurationMinutesBufferRef = useRef<number>(5)
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
   const historyBufferRef = useRef<IntervalExerciseResult[]>([])
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const setSessionDurationMinutes = useCallback((minutes: number): void => {
+    sessionDurationMinutesBufferRef.current = minutes
+    setSessionDurationMinutesState(minutes)
+  }, [])
+
+  const cleanupSessionTimers = useCallback((): void => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current)
+      autoAdvanceTimerRef.current = null
+    }
+    if (sessionCountdownTimerRef.current) {
+      clearInterval(sessionCountdownTimerRef.current)
+      sessionCountdownTimerRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     activeIntervalsBufferRef.current = activeIntervals
@@ -184,14 +201,8 @@ export function useIntervalTrainer({
   )
 
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-    if (sessionCountdownTimerRef.current) {
-      clearInterval(sessionCountdownTimerRef.current)
-      sessionCountdownTimerRef.current = null
-    }
+    console.debug('[useIntervalTrainer] finalizeAndSaveSession called for sessionId=', sessionIdRef.current)
+    cleanupSessionTimers()
 
     questionTokenRef.current = null
     isAdvancingRef.current = false
@@ -216,7 +227,7 @@ export function useIntervalTrainer({
 
     const presetLabel =
       sessionLimitType === 'time'
-        ? `Intervalos Tiempo (${sessionDurationMinutes}m)`
+        ? `Intervalos Tiempo (${sessionDurationMinutesBufferRef.current}m)`
         : `Intervalos (${activeIntervalsBufferRef.current.length})`
 
     const sessionRecord: DbSessionRecord = {
@@ -233,30 +244,45 @@ export function useIntervalTrainer({
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
-  }, [sessionLimitType, sessionDurationMinutes, saveSessionToDb])
+    // clear session id so any previously scheduled timers cannot affect subsequent sessions
+    sessionIdRef.current = ''
+  }, [cleanupSessionTimers, sessionLimitType, saveSessionToDb])
 
+  // Temporizador regresivo para sesiones por tiempo
   useEffect(() => {
-    if (isSessionActive && sessionLimitType === 'time') {
-      sessionCountdownTimerRef.current = setInterval(() => {
-        setTimeRemainingSeconds((prev) => {
-          if (prev <= 1) {
-            clearInterval(sessionCountdownTimerRef.current!)
-            finalizeAndSaveSession()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
+    if (!isSessionActive || sessionLimitType !== 'time') return
+
+    const interval = setInterval(() => {
+      setTimeRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          sessionCountdownTimerRef.current = null
+          // apply immediate UI state changes synchronously so tests see the finished state
+          const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
+          setIsSessionActive(false)
+          setIsSessionFinished(true)
+          setIsWaitingManualAdvance(false)
+          setWaitingNoteStep(1)
+          setFirstNotePlayed(null)
+          setSessionElapsedSeconds(totalSeconds)
+          // persist asynchronously
+          void finalizeAndSaveSession()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    sessionCountdownTimerRef.current = interval
 
     return (): void => {
-      if (sessionCountdownTimerRef.current) {
-        clearInterval(sessionCountdownTimerRef.current)
-      }
+      clearInterval(interval)
+      sessionCountdownTimerRef.current = null
     }
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
   const startSession = (overrideIntervals?: unknown, overrideRoots?: unknown): void => {
+    cleanupSessionTimers()
+
     const validIntervals =
       Array.isArray(overrideIntervals) && overrideIntervals.length > 0
         ? (overrideIntervals as number[])
@@ -266,14 +292,7 @@ export function useIntervalTrainer({
         ? (overrideRoots as number[])
         : rootRangeNotesBufferRef.current
 
-    if (validIntervals.length === 0) {
-      alert('Debes seleccionar al menos 1 intervalo.')
-      return
-    }
-    if (validRoots.length === 0) {
-      alert('Debes seleccionar al menos 1 nota raíz en el teclado.')
-      return
-    }
+    if (validIntervals.length === 0 || validRoots.length === 0) return
 
     if (Array.isArray(overrideIntervals) && overrideIntervals.length > 0) {
       setActiveIntervals(overrideIntervals as number[])
@@ -294,7 +313,33 @@ export function useIntervalTrainer({
     setIsSessionActive(true)
 
     if (sessionLimitType === 'time') {
-      setTimeRemainingSeconds(sessionDurationMinutes * 60)
+      setTimeRemainingSeconds(sessionDurationMinutesBufferRef.current * 60)
+      // recreate countdown interval for the newly started session (ensure previous timers were cleaned)
+      if (sessionCountdownTimerRef.current) {
+        clearInterval(sessionCountdownTimerRef.current)
+        sessionCountdownTimerRef.current = null
+      }
+      const interval = setInterval(() => {
+        setTimeRemainingSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval)
+            sessionCountdownTimerRef.current = null
+            // compute totalSeconds for persistence but do not rely on a dedicated state field here
+            const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
+            setIsSessionActive(false)
+            setIsSessionFinished(true)
+            setIsWaitingManualAdvance(false)
+            setWaitingNoteStep(1)
+            setFirstNotePlayed(null)
+            void finalizeAndSaveSession()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+      sessionCountdownTimerRef.current = interval
+      // debug: indicate interval created for this session (tests use fake timers)
+      // console.debug('[useIntervalTrainer] countdown interval created, sessionId=', sessionIdRef.current)
     }
 
     triggerNextInterval(validIntervals, validRoots)
@@ -328,10 +373,10 @@ export function useIntervalTrainer({
   ])
 
   const stopSession = useCallback((): void => {
+    cleanupSessionTimers()
     if (answersBufferRef.current.length > 0) {
       finalizeAndSaveSession()
     } else {
-      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
       questionTokenRef.current = null
       isWaitingAnswerRef.current = false
       setIsSessionActive(false)
@@ -340,10 +385,10 @@ export function useIntervalTrainer({
       setCurrentStimulus(null)
       setFirstNotePlayed(null)
     }
-  }, [finalizeAndSaveSession])
+  }, [cleanupSessionTimers, finalizeAndSaveSession])
 
   const resetToConfig = (): void => {
-    if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current)
+    cleanupSessionTimers()
     questionTokenRef.current = null
     isWaitingAnswerRef.current = false
     setIsSessionActive(false)
@@ -415,9 +460,13 @@ export function useIntervalTrainer({
           setIsWaitingManualAdvance(true)
         } else {
           const delay = advanceMode === 'auto_slow' ? 3500 : 1600
-          autoAdvanceTimerRef.current = setTimeout(() => {
-            advanceToNextInterval()
-          }, delay)
+          {
+            const scheduledSessionId = sessionIdRef.current
+            autoAdvanceTimerRef.current = setTimeout(() => {
+              if (sessionIdRef.current !== scheduledSessionId) return
+              advanceToNextInterval()
+            }, delay)
+          }
         }
       }
     },
@@ -446,10 +495,7 @@ export function useIntervalTrainer({
       }
     })
 
-    if (weakIntervals.length === 0) {
-      alert('¡Felicitaciones! No tienes intervalos débiles en esta sesión.')
-      return
-    }
+    if (weakIntervals.length === 0) return
 
     startSession(weakIntervals)
   }
