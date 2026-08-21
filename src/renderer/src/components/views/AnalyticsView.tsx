@@ -19,6 +19,21 @@ interface AnalyticsViewProps {
   onLoadPrescription: (prescription: AiExercisePrescription) => void
 }
 
+type SortColumnKey =
+  | 'date'
+  | 'content'
+  | 'format'
+  | 'pool'
+  | 'questions'
+  | 'duration'
+  | 'accuracy'
+  | 'normalizedAccuracy'
+  | 'fastPercent'
+  | 'bias'
+  | 'rpm'
+
+type SortDirection = 'asc' | 'desc'
+
 function formatDuration(totalSeconds: number): string {
   if (totalSeconds < 60) return `${totalSeconds}s`
   const mins = Math.floor(totalSeconds / 60)
@@ -45,7 +60,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const hydrateReportsByMode = useAiStore((state) => state.hydrateReportsByMode)
 
   const [activeTab, setActiveTab] = useState<
-    'ai_report' | 'ai_history' | 'charts' | 'confusions' | 'sessions'
+    'sessions' | 'ai_report' | 'ai_history' | 'charts' | 'confusions'
   >('sessions')
 
   // Filtros Secundarios
@@ -55,6 +70,10 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   )
   const [selectedMastery, setSelectedMastery] = useState<AnalyticsMasteryFilter>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
+
+  // Estado del Motor de Ordenamiento (Por defecto: más recientes primero)
+  const [sortKey, setSortKey] = useState<SortColumnKey>('date')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
 
   useEffect(() => {
     recomputeMetrics(sessions, answers)
@@ -70,7 +89,28 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
 
   const currentAiResponse = aiResponsesByMode[modeFilter]
 
-  // Aplicación de filtros multidimensionales en vivo
+  // Función para alternar o cambiar columna de ordenamiento
+  const handleSortClick = (column: SortColumnKey): void => {
+    if (sortKey === column) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(column)
+      // Por defecto descendente para métricas numéricas y fechas, ascendente para texto
+      const defaultDescColumns: SortColumnKey[] = [
+        'date',
+        'accuracy',
+        'normalizedAccuracy',
+        'fastPercent',
+        'rpm',
+        'pool',
+        'questions',
+        'duration'
+      ]
+      setSortDirection(defaultDescColumns.includes(column) ? 'desc' : 'asc')
+    }
+  }
+
+  // Filtrado + Ordenamiento Clínico Computado
   const displayedAnalysisList: DetailedSessionAnalysis[] = useMemo(() => {
     const filteredRaw = filterSessionsAdvanced(sessions, {
       mode: modeFilter,
@@ -80,7 +120,56 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       searchQuery
     })
     const validIds = new Set(filteredRaw.map((s) => s.id))
-    return (metrics.sessionPsychometricsList || []).filter((item) => validIds.has(item.session.id))
+    const list = (metrics.sessionPsychometricsList || []).filter((item) =>
+      validIds.has(item.session.id)
+    )
+
+    return [...list].sort((a, b) => {
+      let comparison = 0
+
+      switch (sortKey) {
+        case 'date':
+          comparison =
+            new Date(a.session.createdAt).getTime() - new Date(b.session.createdAt).getTime()
+          break
+        case 'content':
+          comparison = (a.session.presetName || '').localeCompare(b.session.presetName || '')
+          break
+        case 'format':
+          comparison = a.formatType.localeCompare(b.formatType)
+          break
+        case 'pool':
+          comparison = a.poolSize - b.poolSize || a.entropyBits - b.entropyBits
+          break
+        case 'questions':
+          comparison =
+            a.session.totalQuestions - b.session.totalQuestions ||
+            a.session.correctAnswers - b.session.correctAnswers
+          break
+        case 'duration':
+          comparison = (a.session.durationSeconds || 0) - (b.session.durationSeconds || 0)
+          break
+        case 'accuracy':
+          comparison = a.session.accuracyPercentage - b.session.accuracyPercentage
+          break
+        case 'normalizedAccuracy':
+          comparison = a.normalizedAccuracy - b.normalizedAccuracy
+          break
+        case 'fastPercent':
+          comparison = a.fastPercent - b.fastPercent
+          break
+        case 'bias':
+          comparison = a.dominantBias.localeCompare(b.dominantBias)
+          break
+        case 'rpm':
+          comparison = a.responsesPerMinute - b.responsesPerMinute
+          break
+        default:
+          comparison = 0
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
   }, [
     sessions,
     modeFilter,
@@ -88,12 +177,24 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     selectedFormat,
     selectedMastery,
     searchQuery,
-    metrics
+    metrics,
+    sortKey,
+    sortDirection
   ])
 
   const filteredReports = aiReports.filter(
     (r) => modeFilter === 'all' || r.modeFilter === modeFilter
   )
+
+  // Renderizador de flecha de ordenamiento
+  const renderSortIndicator = (column: SortColumnKey): React.ReactElement => {
+    if (sortKey !== column) {
+      return <span className="opacity-0 group-hover:opacity-40 ml-1">⇅</span>
+    }
+    return (
+      <span className="text-sky-400 font-bold ml-1">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+    )
+  }
 
   return (
     <div className="space-y-4 font-sans">
@@ -142,7 +243,6 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
 
       {/* 2. BARRA DE FILTROS MULTIDIMENSIONALES */}
       <div className="bg-zinc-900/70 backdrop-blur-2xl p-3 rounded-2xl border border-zinc-800/80 space-y-2.5 shadow-xl font-mono text-xs">
-        {/* Fila 1: Selector principal de modo y estado GPU */}
         <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-zinc-500 text-[10px] uppercase font-bold px-1">Modalidad:</span>
@@ -193,9 +293,8 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           </div>
         </div>
 
-        {/* Fila 2: Filtros cruzados avanzados */}
+        {/* Fila de filtros cruzados */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-800/80 text-[11px]">
-          {/* Buscador */}
           <div>
             <input
               type="text"
@@ -206,7 +305,6 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
             />
           </div>
 
-          {/* Filtro Instrumento */}
           <div>
             <select
               value={selectedInstrument}
@@ -222,7 +320,6 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
             </select>
           </div>
 
-          {/* Filtro Formato */}
           <div>
             <select
               value={selectedFormat}
@@ -236,7 +333,6 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
             </select>
           </div>
 
-          {/* Filtro Maestría */}
           <div>
             <select
               value={selectedMastery}
@@ -281,17 +377,26 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         })}
       </div>
 
-      {/* 4. TABLA CLÍNICA DE SESIONES ENRIQUECIDA */}
+      {/* 4. TABLA CLÍNICA DE SESIONES CON ORDENAMIENTO INTERACTIVO */}
       {activeTab === 'sessions' && (
         <Card className="space-y-3 bg-zinc-900/80 backdrop-blur-2xl border-zinc-800/80 shadow-2xl">
-          <div className="flex justify-between items-center pb-2 border-b border-zinc-800/80">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/80">
             <div>
               <h3 className="text-sm font-bold text-zinc-100 font-mono uppercase tracking-wider m-0">
                 Registro Histórico y Telemetría Clínica ({displayedAnalysisList.length} sesiones)
               </h3>
               <p className="text-[11px] text-zinc-400 mt-0.5">
-                Datos psicométricos de alta resolución transmitidos al profesor de IA:
+                Haz clic en cualquier cabecera de columna para ordenar ascendente/descendente:
               </p>
+            </div>
+
+            {/* Badge de orden activo */}
+            <div className="text-[10px] font-mono bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded-lg text-zinc-400 flex items-center gap-1.5">
+              <span>Orden:</span>
+              <strong className="text-sky-400 uppercase">{sortKey}</strong>
+              <span className="text-zinc-200 font-bold">
+                {sortDirection === 'asc' ? '▲ (Menor a Mayor)' : '▼ (Mayor a Menor)'}
+              </span>
             </div>
           </div>
 
@@ -303,18 +408,138 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-mono">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-zinc-500 text-[10px] uppercase tracking-wider">
-                    <th className="pb-2.5">Fecha</th>
-                    <th className="pb-2.5">Contenido & Timbre</th>
-                    <th className="pb-2.5">Formato</th>
-                    <th className="pb-2.5 text-center">Carga (Pool)</th>
-                    <th className="pb-2.5 text-center">Preguntas</th>
-                    <th className="pb-2.5 text-center">Duración</th>
-                    <th className="pb-2.5 text-center">Precisión</th>
-                    <th className="pb-2.5 text-center">Oído Real (IRT)</th>
-                    <th className="pb-2.5 text-center">Reflejo (&lt;1.2s)</th>
-                    <th className="pb-2.5 text-center">Sesgo</th>
-                    <th className="pb-2.5 text-right">Cadencia</th>
+                  <tr className="border-b border-zinc-800 text-zinc-500 text-[10px] uppercase tracking-wider select-none">
+                    {/* 1. Fecha */}
+                    <th
+                      onClick={(): void => handleSortClick('date')}
+                      className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por fecha y hora de sesión"
+                    >
+                      <div className="flex items-center">
+                        <span>Fecha</span>
+                        {renderSortIndicator('date')}
+                      </div>
+                    </th>
+
+                    {/* 2. Contenido & Timbre */}
+                    <th
+                      onClick={(): void => handleSortClick('content')}
+                      className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar alfabéticamente por contenido/preset"
+                    >
+                      <div className="flex items-center">
+                        <span>Contenido & Timbre</span>
+                        {renderSortIndicator('content')}
+                      </div>
+                    </th>
+
+                    {/* 3. Formato */}
+                    <th
+                      onClick={(): void => handleSortClick('format')}
+                      className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por formato (tiempo, preguntas, maestría)"
+                    >
+                      <div className="flex items-center">
+                        <span>Formato</span>
+                        {renderSortIndicator('format')}
+                      </div>
+                    </th>
+
+                    {/* 4. Carga (Pool) */}
+                    <th
+                      onClick={(): void => handleSortClick('pool')}
+                      className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por tamaño del pool y entropía de Shannon"
+                    >
+                      <div className="flex items-center justify-center">
+                        <span>Carga (Pool)</span>
+                        {renderSortIndicator('pool')}
+                      </div>
+                    </th>
+
+                    {/* 5. Preguntas */}
+                    <th
+                      onClick={(): void => handleSortClick('questions')}
+                      className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por volumen de preguntas"
+                    >
+                      <div className="flex items-center justify-center">
+                        <span>Preguntas</span>
+                        {renderSortIndicator('questions')}
+                      </div>
+                    </th>
+
+                    {/* 6. Duración */}
+                    <th
+                      onClick={(): void => handleSortClick('duration')}
+                      className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por duración total en segundos"
+                    >
+                      <div className="flex items-center justify-center">
+                        <span>Duración</span>
+                        {renderSortIndicator('duration')}
+                      </div>
+                    </th>
+
+                    {/* 7. Precisión */}
+                    <th
+                      onClick={(): void => handleSortClick('accuracy')}
+                      className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por porcentaje de acierto crudo"
+                    >
+                      <div className="flex items-center justify-center">
+                        <span>Precisión</span>
+                        {renderSortIndicator('accuracy')}
+                      </div>
+                    </th>
+
+                    {/* 8. Oído Real IRT */}
+                    <th
+                      onClick={(): void => handleSortClick('normalizedAccuracy')}
+                      className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por precisión normalizada libre de azar"
+                    >
+                      <div className="flex items-center justify-center">
+                        <span>Oído Real (IRT)</span>
+                        {renderSortIndicator('normalizedAccuracy')}
+                      </div>
+                    </th>
+
+                    {/* 9. Reflejo Inmediato */}
+                    <th
+                      onClick={(): void => handleSortClick('fastPercent')}
+                      className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por porcentaje de respuestas en <1.2s"
+                    >
+                      <div className="flex items-center justify-center">
+                        <span>Reflejo (&lt;1.2s)</span>
+                        {renderSortIndicator('fastPercent')}
+                      </div>
+                    </th>
+
+                    {/* 10. Sesgo */}
+                    <th
+                      onClick={(): void => handleSortClick('bias')}
+                      className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por sesgo direccional dominante"
+                    >
+                      <div className="flex items-center justify-center">
+                        <span>Sesgo</span>
+                        {renderSortIndicator('bias')}
+                      </div>
+                    </th>
+
+                    {/* 11. Cadencia / RPM */}
+                    <th
+                      onClick={(): void => handleSortClick('rpm')}
+                      className="pb-2.5 text-right cursor-pointer hover:text-zinc-200 transition-colors group"
+                      title="Ordenar por respuestas por minuto (velocidad de flujo)"
+                    >
+                      <div className="flex items-center justify-end">
+                        <span>Cadencia</span>
+                        {renderSortIndicator('rpm')}
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
@@ -368,7 +593,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                           )}
                         </td>
 
-                        {/* 4. Carga Contextual / Entropía */}
+                        {/* 4. Carga (Pool) */}
                         <td className="py-3 text-center whitespace-nowrap">
                           <span className="text-zinc-300 font-bold">{item.poolSize} notas</span>
                           <span className="block text-[10px] text-purple-400">
@@ -507,7 +732,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                 <Button
                   variant="success"
                   onClick={(): void => onLoadPrescription(currentAiResponse.prescription)}
-                  className="shrink-0 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer"
+                  className="shrink-0 font-bold text-xs shadow-[0_0_20px_rgba(168,85,247,0.3)] cursor-pointer"
                 >
                   🚀 Cargar y Ejecutar Ejercicio
                 </Button>
