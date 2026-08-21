@@ -1,8 +1,12 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useSingleNoteTrainer } from './useSingleNoteTrainer'
 
-describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () => {
+describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('debe iniciar en estado de reposo con límites por defecto', () => {
     const onPlayStimulus = vi.fn()
     const onInstrumentChanged = vi.fn()
@@ -21,7 +25,7 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
     expect(result.current.advanceMode).toBe('smart')
   })
 
-  it('debe tolerar que startSession reciba un evento sin lanzar error de iterador', () => {
+  it('debe tolerar que startSession reciba un evento de React sin lanzar error', () => {
     const onPlayStimulus = vi.fn()
     const onInstrumentChanged = vi.fn()
 
@@ -53,7 +57,7 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
       })
     )
 
-    const specificPool = [62, 64, 65] // D4, E4, F4
+    const specificPool = [62, 64, 65]
     act(() => {
       result.current.startSession(specificPool)
     })
@@ -61,13 +65,12 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
     expect(result.current.isSessionActive).toBe(true)
     expect(result.current.currentQuestionIndex).toBe(1)
     expect(result.current.isWaitingAnswer).toBe(true)
-    expect(onPlayStimulus).toHaveBeenCalledTimes(1)
 
     const noteCalled = onPlayStimulus.mock.calls[0][0]
     expect(specificPool).toContain(noteCalled)
   })
 
-  it('debe evaluar correctamente la respuesta del usuario y registrar acierto/fallo', () => {
+  it('debe evaluar la respuesta del usuario y registrar acierto/fallo', () => {
     const onPlayStimulus = vi.fn()
     const onInstrumentChanged = vi.fn()
 
@@ -91,25 +94,89 @@ describe('useSingleNoteTrainer - Hook de Entrenamiento de Nota Individual', () =
     expect(result.current.sessionHistory.length).toBe(1)
   })
 
-  it('debe permitir detener la sesión manualmente sin errores', () => {
-    const onPlayStimulus = vi.fn()
-    const onInstrumentChanged = vi.fn()
-
+  it('debe alternar notas con toggleNote', () => {
     const { result } = renderHook(() =>
       useSingleNoteTrainer({
-        onPlayStimulus,
+        onPlayStimulus: vi.fn(),
+        onInstrumentChanged: vi.fn()
+      })
+    )
+
+    act(() => {
+      result.current.toggleNote(60)
+    })
+    expect(result.current.activeNotes).not.toContain(60)
+
+    act(() => {
+      result.current.toggleNote(60)
+    })
+    expect(result.current.activeNotes).toContain(60)
+  })
+
+  it('debe cambiar de instrumento y notificar al Korg', () => {
+    const onInstrumentChanged = vi.fn()
+    const { result } = renderHook(() =>
+      useSingleNoteTrainer({
+        onPlayStimulus: vi.fn(),
         onInstrumentChanged
       })
     )
 
     act(() => {
-      result.current.startSession()
+      result.current.setSelectedInstrumentId('flute')
     })
-    expect(result.current.isSessionActive).toBe(true)
 
+    expect(result.current.selectedInstrument.id).toBe('flute')
+    expect(onInstrumentChanged).toHaveBeenCalledWith(73)
+  })
+
+  it('repeatCurrentNote debe volver a emitir el estímulo activo', () => {
+    const onPlayStimulus = vi.fn()
+    const { result } = renderHook(() =>
+      useSingleNoteTrainer({
+        onPlayStimulus,
+        onInstrumentChanged: vi.fn()
+      })
+    )
+
+    act(() => {
+      result.current.startSession([60, 62])
+    })
+    expect(onPlayStimulus).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      result.current.repeatCurrentNote()
+    })
+    expect(onPlayStimulus).toHaveBeenCalledTimes(2)
+  })
+
+  it('trainWeakNotesOnly debe aislar notas falladas y re-lanzar la sesión', () => {
+    const onPlayStimulus = vi.fn()
+    const { result } = renderHook(() =>
+      useSingleNoteTrainer({
+        onPlayStimulus,
+        onInstrumentChanged: vi.fn()
+      })
+    )
+
+    act(() => {
+      result.current.startSession([60, 62])
+    })
+
+    // Simulamos fallo
+    act(() => {
+      result.current.handleUserNotePlayed(70)
+    })
     act(() => {
       result.current.stopSession()
     })
-    expect(result.current.isSessionActive).toBe(false)
+
+    expect(result.current.isSessionFinished).toBe(true)
+
+    act(() => {
+      result.current.trainWeakNotesOnly()
+    })
+
+    expect(result.current.isSessionActive).toBe(true)
   })
 })

@@ -408,14 +408,17 @@ export function useSingleNoteTrainer({
       }
     })
 
-    if (weakNotes.length < 2) {
-      alert(
-        '¡Felicitaciones! Tienes menos de 2 notas débiles. Puedes continuar con la selección actual.'
-      )
+    if (weakNotes.length === 0) {
       return
     }
 
-    startSession(weakNotes.sort((a, b) => a - b))
+    // Si solo hay 1 nota débil, añadimos una nota ancla vecina para permitir contraste perceptual
+    const poolToTrain =
+      weakNotes.length === 1
+        ? [weakNotes[0], weakNotes[0] >= 60 ? weakNotes[0] - 2 : weakNotes[0] + 2]
+        : weakNotes
+
+    startSession(poolToTrain.sort((a, b) => a - b))
   }
 
   return {

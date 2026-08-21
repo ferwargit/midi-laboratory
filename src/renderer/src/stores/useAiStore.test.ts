@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useAiStore } from './useAiStore'
 import { DbAiReportRecord } from '../domain/database/types'
 import { AnalyticsMetrics } from '../domain/analytics/historyAnalytics'
+import { LmStudioService } from '../domain/ai/lmStudioService'
 
 describe('useAiStore - Store del Asistente de IA Local Segregado por Modalidad', () => {
   const mockMetrics: AnalyticsMetrics = {
@@ -25,7 +26,7 @@ describe('useAiStore - Store del Asistente de IA Local Segregado por Modalidad',
   }
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.restoreAllMocks()
     useAiStore.getState().resetAiMemory()
   })
 
@@ -100,5 +101,51 @@ describe('useAiStore - Store del Asistente de IA Local Segregado por Modalidad',
 
     useAiStore.getState().resetAiMemory()
     expect(useAiStore.getState().aiResponsesByMode.single_note).toBeNull()
+  })
+
+  it('runAiDiagnostic debe recurrir al fallback y actualizar el estado si el servicio falla o no conecta', async () => {
+    const saveCallback = vi.fn().mockResolvedValue(undefined)
+
+    // Mockeamos analyzeAndPrescribe para simular rechazo inmediato sin llamar a la GPU real
+    vi.spyOn(LmStudioService.prototype, 'analyzeAndPrescribe').mockRejectedValueOnce(
+      new Error('LM Studio no disponible en prueba unitaria')
+    )
+    vi.spyOn(LmStudioService.prototype, 'checkConnection').mockResolvedValueOnce(false)
+
+    await useAiStore.getState().runAiDiagnostic(mockMetrics, saveCallback)
+
+    const state = useAiStore.getState()
+    expect(state.isAiAnalyzing).toBe(false)
+    expect(state.aiResponsesByMode.single_note).not.toBeNull()
+    expect(state.aiResponsesByMode.single_note?.source).toBe('algorithmic_fallback')
+  })
+
+  it('runAiDiagnostic debe persistir el reporte si el servicio de IA responde exitosamente', async () => {
+    const saveCallback = vi.fn().mockResolvedValue(undefined)
+
+    vi.spyOn(LmStudioService.prototype, 'checkConnection').mockResolvedValueOnce(true)
+    vi.spyOn(LmStudioService.prototype, 'analyzeAndPrescribe').mockResolvedValueOnce({
+      source: 'lm_studio_ai',
+      modelName: 'qwen3.5-mock',
+      analysisText: 'Diagnóstico IA mockeado exitoso.',
+      prescription: {
+        title: 'Prescripción Mock',
+        rationale: 'Razón',
+        targetMode: 'single_note',
+        instrumentId: 'acoustic_grand_piano',
+        recommendedNotes: [60, 62],
+        limitType: 'questions',
+        questionsCount: 10,
+        durationMinutes: 5,
+        advanceMode: 'smart'
+      }
+    })
+
+    await useAiStore.getState().runAiDiagnostic(mockMetrics, saveCallback)
+
+    const state = useAiStore.getState()
+    expect(state.isAiAnalyzing).toBe(false)
+    expect(state.aiResponsesByMode.single_note?.modelName).toBe('qwen3.5-mock')
+    expect(saveCallback).toHaveBeenCalledTimes(1)
   })
 })
