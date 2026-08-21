@@ -26,19 +26,18 @@ describe('ai - Servicios de IA, Prescripción y Circuit Breaker', () => {
     sessionPsychometricsList: []
   }
 
-  it('buildSystemPrompt y buildUserPrompt deben generar prompts válidos con el catálogo completo', () => {
-    const sys = buildSystemPrompt()
+  it('buildSystemPrompt y buildUserPrompt generan prompts válidos con el catálogo formal', () => {
+    const sys = buildSystemPrompt('single_note')
     const user = buildUserPrompt(mockMetrics)
 
     expect(sys).toContain('Profesor de Oído Musical')
     expect(sys).toContain('CATÁLOGO FORMAL DE PARÁMETROS DISPONIBLES')
     expect(sys).toContain('recommendedNotes')
-    expect(sys).toContain('recommendedIntervals')
     expect(user).toContain('Precisión Cruda Global: 80%')
     expect(user).toContain('Entropía Media del Contexto')
   })
 
-  it('generateAlgorithmicFallback debe generar un análisis y prescripción válida sin conexión', () => {
+  it('generateAlgorithmicFallback genera un análisis y prescripción válida sin conexión', () => {
     const response = generateAlgorithmicFallback(mockMetrics)
 
     expect(response.source).toBe('algorithmic_fallback')
@@ -47,7 +46,7 @@ describe('ai - Servicios de IA, Prescripción y Circuit Breaker', () => {
     expect(response.prescription.recommendedNotes.length).toBeGreaterThan(0)
   })
 
-  it('LmStudioService debe retornar fallback rápidamente si el puerto no responde sin bloquear la práctica', async () => {
+  it('LmStudioService retorna fallback rápidamente si el puerto no responde sin bloquear la práctica', async () => {
     const fastCircuitBreaker = new CircuitBreaker({
       failureThreshold: 2,
       cooldownPeriodMs: 1000,

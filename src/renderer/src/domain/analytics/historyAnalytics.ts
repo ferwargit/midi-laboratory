@@ -19,6 +19,17 @@ export interface ConfusionPair {
   count: number
 }
 
+export interface SessionPsychometrics {
+  sessionId: string
+  poolSize: number
+  entropyBits: number
+  chanceBaseline: number
+  rawAccuracy: number
+  normalizedAccuracy: number
+  durationSeconds: number
+  responsesPerMinute: number
+}
+
 export interface DetailedSessionAnalysis {
   session: DbSessionRecord
   poolSize: number
@@ -113,9 +124,8 @@ export function filterSessionsAdvanced(
 
     // 4. Filtro Formato
     const name = (s.presetName || '').toLowerCase()
-    const isTimed =
-      name.includes('tiempo') || name.includes('cronometrado') || s.durationSeconds >= 55
-    const isMastery = name.includes('maestría')
+    const isTimed = name.includes('tiempo') || name.includes('cronometrado')
+    const isMastery = name.includes('maestría') || name.includes('mastery')
 
     if (filters.format === 'time' && !isTimed) return false
     if (filters.format === 'mastery' && !isMastery) return false
@@ -237,7 +247,7 @@ export function computeAnalyticsMetrics(
 
     const pName = (session.presetName || '').toLowerCase()
     const formatType: 'time' | 'mastery' | 'questions' | 'infinite' =
-      pName.includes('tiempo') || pName.includes('cronometrado') || session.durationSeconds >= 55
+      pName.includes('tiempo') || pName.includes('cronometrado')
         ? 'time'
         : pName.includes('maestría')
           ? 'mastery'

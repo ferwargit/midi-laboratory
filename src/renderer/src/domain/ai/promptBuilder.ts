@@ -1,8 +1,35 @@
-import { AnalyticsMetrics } from '../analytics/historyAnalytics'
+import { AnalyticsMetrics, AnalyticsModeFilter } from '../analytics/historyAnalytics'
 
-export function buildSystemPrompt(): string {
+export function buildSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
+  let specializedInstructions = ''
+
+  if (mode === 'single_note') {
+    specializedInstructions = `
+ENFOQUE CLÍNICO PARA NOTA INDIVIDUAL (PITCH DISCRIMINATION):
+- Analiza el sesgo de semitono (+st hacia agudo vs -st hacia grave).
+- Examina la velocidad de reflejo inmediato (<1.2s) vs sobrepensamiento (>2.8s).
+- Identifica zonas de incertidumbre en teclas negras (alteraciones) vs teclas blancas (diatónicas).
+- En la prescripción, targetMode DEBE ser 'single_note' y DEBES recomendar un pool de 2 a 8 notas MIDI exactas.`
+  } else if (mode === 'intervals') {
+    specializedInstructions = `
+ENFOQUE CLÍNICO PARA INTERVALOS (RELATIVE PITCH & DISTANCE):
+- Analiza errores de cualidad (ej: confundir 3M con 3m) y de inversión (4J vs 5J).
+- Evalúa el desempeño según la dirección (ascendente vs descendente).
+- En la prescripción, targetMode DEBE ser 'intervals' y DEBES incluir el array 'recommendedIntervals' con los semitonos a reforzar (1 a 12).`
+  } else if (mode === 'sequences') {
+    specializedInstructions = `
+ENFOQUE CLÍNICO PARA SECUENCIAS (AUDITORY WORKING MEMORY & CONTOUR):
+- Analiza la capacidad de retención del contorno melódico (subidas, bajadas) y distancia Levenshtein.
+- Evalúa la fatiga cognitiva a medida que aumenta la longitud de la frase.
+- En la prescripción, targetMode DEBE ser 'sequences', sequenceLength entre 3 y 6, y pool de notas en 'recommendedNotes'.`
+  } else {
+    specializedInstructions = `
+ENFOQUE CLÍNICO GLOBAL INTEGRAL:
+- Evalúa la correlación entre altura absoluta, memoria melódica y discriminación interválica.`
+  }
+
   return `Eres un Profesor de Oído Musical y Psicoacústica de Élite (Item Response Theory & Auditory Perception Expert) especializado en piano y entrenamiento auditivo con hardware MIDI.
-Tu objetivo es analizar las métricas clínicas acumuladas de un alumno y devolver un JSON con:
+Tu objetivo es analizar las métricas clínicas acumuladas de un alumno y devolver un JSON estricto con:
 1. 'analysisText': Diagnóstico psicopedagógico profundo, clínico, empático y detallado en español.
 2. 'prescription': Configuración de ejercicio personalizada para corregir sus errores específicos.
 
@@ -20,6 +47,7 @@ CATÁLOGO FORMAL DE PARÁMETROS DISPONIBLES EN EL SOFTWARE:
 - durationMinutes: 1, 3, 5 o 10 minutos.
 - advanceMode: 'smart' (pausa al fallar) | 'manual' (espera espacio)
 - noteDurationMs: Duración de la nota emitida (estándar: 500).
+${specializedInstructions}
 
 FORMATO DE RESPUESTA OBLIGATORIO (JSON puro sin bloques markdown alrededor):
 {
@@ -46,7 +74,7 @@ export function buildUserPrompt(
   customQueryType: 'general' | 'fatigue' | 'weekly_plan' = 'general'
 ): string {
   let instruction =
-    'Analiza los patrones de fatiga, diferencias de rendimiento según el timbre y la velocidad de reflejo. Emite un diagnóstico riguroso y genera la prescripción de ejercicio óptima para desbloquear sus puntos ciegos.'
+    'Analiza exhaustivamente los patrones de error, sesgos de semitono (+st / -st), la precisión corregida por azar y las latencias cognitivas, y genera la prescripción de ejercicio óptima.'
 
   if (customQueryType === 'fatigue') {
     instruction =
@@ -56,7 +84,7 @@ export function buildUserPrompt(
       'Diseña un plan de estudio semanal estructurado de 7 días combinando Nota Aislada, Intervalos y Secuencias según los puntos ciegos detectados.'
   }
 
-  // Construir matriz de sesiones detallada para la IA
+  // Telemetría clínica cronológica de sesiones de alta resolución
   const sessionsTelemetry = (metrics.sessionPsychometricsList || []).slice(0, 10).map((s) => ({
     id: s.session.id,
     fecha: s.session.createdAt,

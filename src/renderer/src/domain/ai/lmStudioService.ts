@@ -54,8 +54,9 @@ export class LmStudioService {
         throw new Error('No hay modelo cargado en LM Studio')
       }
 
+      // AQUÍ SE CONSTRUYEN LOS MENSAJES CON EL MODO ESPECÍFICO
       const messages = [
-        { role: 'system', content: buildSystemPrompt() },
+        { role: 'system', content: buildSystemPrompt(metrics.modeFilter) },
         { role: 'user', content: buildUserPrompt(metrics) }
       ]
 

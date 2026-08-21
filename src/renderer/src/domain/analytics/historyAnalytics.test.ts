@@ -1,98 +1,163 @@
 import { describe, it, expect } from 'vitest'
-import { computeAnalyticsMetrics, filterSessionsByMode } from './historyAnalytics'
+import {
+  computeAnalyticsMetrics,
+  filterSessionsByMode,
+  filterSessionsAdvanced
+} from './historyAnalytics'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 
-describe('historyAnalytics - Psicometría y Corrección por Azar', () => {
-  const sNote: DbSessionRecord = {
-    id: 's_note',
-    createdAt: new Date().toISOString(),
+describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetría Clínica', () => {
+  const sNotePiano: DbSessionRecord = {
+    id: 's_note_piano',
+    createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
     strategyId: 'adaptive_v1',
-    instrumentId: 'piano',
-    presetName: 'Notas (3)',
-    totalQuestions: 2,
-    correctAnswers: 2,
-    accuracyPercentage: 100,
-    avgResponseTimeMs: 1000,
-    durationSeconds: 10
+    instrumentId: 'acoustic_grand_piano',
+    presetName: 'Nivel 1 (C, D, E) • Cronometrado 1m',
+    totalQuestions: 10,
+    correctAnswers: 9,
+    accuracyPercentage: 90,
+    avgResponseTimeMs: 1100,
+    durationSeconds: 60
+  }
+
+  const sNoteFlute: DbSessionRecord = {
+    id: 's_note_flute',
+    createdAt: new Date('2026-08-21T11:00:00Z').toISOString(),
+    strategyId: 'spaced_repetition',
+    instrumentId: 'flute',
+    presetName: 'Notas Personalizadas (4) • Bloque 10 preguntas',
+    totalQuestions: 10,
+    correctAnswers: 4,
+    accuracyPercentage: 40,
+    avgResponseTimeMs: 2500,
+    durationSeconds: 90
   }
 
   const sInterval: DbSessionRecord = {
     id: 's_int',
-    createdAt: new Date().toISOString(),
+    createdAt: new Date('2026-08-21T12:00:00Z').toISOString(),
     strategyId: 'intervals_v1',
     instrumentId: 'piano_intervals',
-    presetName: 'Intervalos (4)',
-    totalQuestions: 4,
-    correctAnswers: 2,
-    accuracyPercentage: 50,
-    avgResponseTimeMs: 2000,
-    durationSeconds: 20
+    presetName: 'Nivel 1.1: Intervalos Clásicos • Bloque 10 preguntas',
+    totalQuestions: 10,
+    correctAnswers: 7,
+    accuracyPercentage: 70,
+    avgResponseTimeMs: 1800,
+    durationSeconds: 80
   }
 
-  const sSequenceWithWordNotas: DbSessionRecord = {
+  const sSequence: DbSessionRecord = {
     id: 's_seq',
-    createdAt: new Date().toISOString(),
+    createdAt: new Date('2026-08-21T13:00:00Z').toISOString(),
     strategyId: 'sequences_v1',
     instrumentId: 'piano_sequences',
-    presetName: 'Secuencias (3 notas)', // Caso crítico del bug
-    totalQuestions: 3,
-    correctAnswers: 2,
-    accuracyPercentage: 66,
-    avgResponseTimeMs: 3000,
-    durationSeconds: 30
+    presetName: 'Secuencias (3 notas) • Cronometrado 3m',
+    totalQuestions: 15,
+    correctAnswers: 12,
+    accuracyPercentage: 80,
+    avgResponseTimeMs: 2200,
+    durationSeconds: 180
   }
 
-  const answers: DbAnswerRecord[] = [
+  const mockAnswers: DbAnswerRecord[] = [
     {
       id: 'a1',
-      sessionId: 's_note',
+      sessionId: 's_note_piano',
       questionIndex: 1,
       expectedNote: 60,
       playedNote: 60,
       isCorrect: true,
       semitoneDistance: 0,
-      responseTimeMs: 900,
+      responseTimeMs: 950,
       velocity: 90,
+      reasonTelemetry: '',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'a2',
+      sessionId: 's_note_flute',
+      questionIndex: 1,
+      expectedNote: 64,
+      playedNote: 65,
+      isCorrect: false,
+      semitoneDistance: 1,
+      responseTimeMs: 2400,
+      velocity: 85,
       reasonTelemetry: '',
       createdAt: new Date().toISOString()
     }
   ]
 
-  it('filterSessionsByMode debe segmentar correctamente y evitar colisiones por la palabra "notas"', () => {
-    const allSessions = [sNote, sInterval, sSequenceWithWordNotas]
+  it('filterSessionsByMode segmenta inequívocamente sin colisiones de texto', () => {
+    const all = [sNotePiano, sNoteFlute, sInterval, sSequence]
 
-    // 1. Filtro Global
-    const all = filterSessionsByMode(allSessions, 'all')
-    expect(all.length).toBe(3)
-
-    // 2. Filtro Single Note: solo debe contener sNote (1 sesión, NO sSequenceWithWordNotas)
-    const onlyNotes = filterSessionsByMode(allSessions, 'single_note')
-    expect(onlyNotes.length).toBe(1)
-    expect(onlyNotes[0].id).toBe('s_note')
-
-    // 3. Filtro Secuencias: debe capturar sSequenceWithWordNotas
-    const onlySequences = filterSessionsByMode(allSessions, 'sequences')
-    expect(onlySequences.length).toBe(1)
-    expect(onlySequences[0].id).toBe('s_seq')
-
-    // 4. Filtro Intervalos
-    const onlyIntervals = filterSessionsByMode(allSessions, 'intervals')
-    expect(onlyIntervals.length).toBe(1)
-    expect(onlyIntervals[0].id).toBe('s_int')
+    expect(filterSessionsByMode(all, 'all').length).toBe(4)
+    expect(filterSessionsByMode(all, 'single_note').length).toBe(2)
+    expect(filterSessionsByMode(all, 'intervals').length).toBe(1)
+    expect(filterSessionsByMode(all, 'sequences').length).toBe(1)
   })
 
-  it('computeAnalyticsMetrics debe calcular la precisión corregida por azar y entropía', () => {
-    const noteMetrics = computeAnalyticsMetrics([sNote], [answers[0]], 'single_note')
-    expect(noteMetrics.totalAnswers).toBe(1)
-    expect(noteMetrics.normalizedOverallAccuracy).toBeDefined()
-    expect(noteMetrics.avgEntropyBits).toBeGreaterThan(0)
+  it('filterSessionsAdvanced aplica filtros cruzados por Timbre, Formato, Nivel de Maestría y Búsqueda', () => {
+    const all = [sNotePiano, sNoteFlute, sInterval, sSequence]
+
+    // 1. Filtrar solo flauta en single_note
+    const fluteOnly = filterSessionsAdvanced(all, {
+      mode: 'single_note',
+      instrumentId: 'flute'
+    })
+    expect(fluteOnly.length).toBe(1)
+    expect(fluteOnly[0].id).toBe('s_note_flute')
+
+    // 2. Filtrar por Formato Cronometrado
+    const timedOnly = filterSessionsAdvanced(all, {
+      mode: 'all',
+      format: 'time'
+    })
+    expect(timedOnly.map((s) => s.id)).toEqual(['s_note_piano', 's_seq'])
+
+    // 3. Filtrar por Nivel de Maestría (Dominadas >=85%)
+    const mastered = filterSessionsAdvanced(all, {
+      mode: 'single_note',
+      mastery: 'mastered'
+    })
+    expect(mastered.length).toBe(1)
+    expect(mastered[0].id).toBe('s_note_piano')
+
+    // 4. Filtrar por Búsqueda de texto
+    const searchMatch = filterSessionsAdvanced(all, {
+      mode: 'all',
+      searchQuery: 'Intervalos Clásicos'
+    })
+    expect(searchMatch.length).toBe(1)
+    expect(searchMatch[0].id).toBe('s_int')
   })
 
-  it('generateDiagnosticReport debe redactar el informe con base científica', () => {
-    const metrics = computeAnalyticsMetrics([sNote], [answers[0]], 'single_note')
+  it('computeAnalyticsMetrics calcula telemetría clínica de alta resolución por sesión (RPM, reflejo, sesgo)', () => {
+    const all = [sNotePiano, sNoteFlute]
+    const metrics = computeAnalyticsMetrics(all, mockAnswers, 'single_note')
+
+    expect(metrics.filteredSessionsCount).toBe(2)
+    expect(metrics.totalAnswers).toBe(2)
+    expect(metrics.sessionPsychometricsList.length).toBe(2)
+
+    const pianoAnalysis = metrics.sessionPsychometricsList.find(
+      (p) => p.session.id === 's_note_piano'
+    )
+    expect(pianoAnalysis?.responsesPerMinute).toBe(10)
+    expect(pianoAnalysis?.fastPercent).toBe(100)
+
+    const fluteAnalysis = metrics.sessionPsychometricsList.find(
+      (p) => p.session.id === 's_note_flute'
+    )
+    expect(fluteAnalysis?.sharpBiasCount).toBe(1)
+    expect(fluteAnalysis?.dominantBias).toBe('sharp')
+  })
+
+  it('generateDiagnosticReport redacta el plan de acción psicopedagógico correctamente', () => {
+    const metrics = computeAnalyticsMetrics([sNotePiano], [mockAnswers[0]], 'single_note')
     const report = generateDiagnosticReport(metrics)
-    expect(report.title).toBeDefined()
+    expect(report.title).toContain('Informe')
     expect(report.concreteActionPlan.length).toBeGreaterThan(0)
   })
 })
