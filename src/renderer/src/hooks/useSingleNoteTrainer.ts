@@ -332,6 +332,11 @@ export function useSingleNoteTrainer({
     (notesPool?: number[]): void => {
       const currentPool = notesPool || activeNotesBufferRef.current
 
+      // FIX: se resetea siempre, incluso si la función corta más abajo por
+      // pool insuficiente. Antes quedaba en `true` para siempre si el pool
+      // bajaba de 2 notas justo al momento de avanzar, trabando la sesión.
+      isAdvancingRef.current = false
+
       if (currentPool.length < 2) return
 
       if (autoAdvanceTimerRef.current) {
@@ -354,8 +359,6 @@ export function useSingleNoteTrainer({
       setIsWaitingManualAdvance(false)
       setIsWaitingAnswer(true)
       setStimulusStartTime(Date.now())
-
-      isAdvancingRef.current = false
 
       onPlayStimulus(decision.selectedNote, decision)
     },

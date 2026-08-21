@@ -127,4 +127,146 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
 
     expect(result.current.isSessionActive).toBe(true)
   })
+
+  describe('Timers: auto-advance, cleanup y sesiones por tiempo', () => {
+    it('el timer de auto-advance (modo smart, acierto) dispara advanceToNextSequence tras el delay', () => {
+      vi.useFakeTimers()
+      const onPlaySequence = vi.fn()
+      const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence }))
+
+      act(() => {
+        result.current.startSession([60, 62, 64], 3)
+      })
+
+      // Tocamos la secuencia REAL generada por el hook (no necesariamente
+      // [60, 62, 64] en ese orden), para garantizar un acierto exacto.
+      const generatedSequence = result.current.currentSequence
+
+      generatedSequence.forEach((note) => {
+        act(() => {
+          result.current.handleUserNotePlayed(note)
+        })
+      })
+
+      expect(result.current.currentQuestionIndex).toBe(1)
+      expect(result.current.isWaitingManualAdvance).toBe(false)
+
+      act(() => {
+        vi.advanceTimersByTime(1800)
+      })
+
+      expect(result.current.currentQuestionIndex).toBe(2)
+      expect(onPlaySequence).toHaveBeenCalledTimes(2)
+
+      vi.useRealTimers()
+    })
+
+    it('stopSession cancela el timer de auto-advance pendiente: no dispara una secuencia extra', () => {
+      vi.useFakeTimers()
+      const onPlaySequence = vi.fn()
+      const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence }))
+
+      act(() => {
+        result.current.startSession([60, 62, 64], 3)
+      })
+
+      const generatedSequence = result.current.currentSequence
+
+      generatedSequence.forEach((note) => {
+        act(() => {
+          result.current.handleUserNotePlayed(note)
+        })
+      })
+
+      act(() => {
+        result.current.stopSession()
+      })
+
+      expect(result.current.isSessionFinished).toBe(true)
+
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+
+      expect(onPlaySequence).toHaveBeenCalledTimes(1)
+
+      vi.useRealTimers()
+    })
+
+    it('una sesión de secuencias por tiempo finaliza sola al llegar a 0', () => {
+      vi.useFakeTimers()
+      const onPlaySequence = vi.fn()
+      const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence }))
+
+      act(() => {
+        result.current.setSessionLimitType('time')
+        result.current.setSessionDurationMinutes(1)
+      })
+
+      act(() => {
+        result.current.startSession([60, 62, 64], 3)
+      })
+
+      expect(result.current.timeRemainingSeconds).toBe(60)
+
+      act(() => {
+        vi.advanceTimersByTime(60000)
+      })
+
+      expect(result.current.isSessionActive).toBe(false)
+      expect(result.current.isSessionFinished).toBe(true)
+
+      vi.useRealTimers()
+    })
+
+    it('regression: si el pool de notas candidatas queda con menos de 2 al avanzar, advanceToNextSequence no debe quedar trabado luego de reponerlo', () => {
+      const onPlaySequence = vi.fn()
+      const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence }))
+
+      act(() => {
+        result.current.setAdvanceMode('manual')
+      })
+
+      act(() => {
+        result.current.startSession([60, 62, 64], 3)
+      })
+
+      act(() => {
+        result.current.handleUserNotePlayed(60)
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(62)
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(64)
+      })
+
+      expect(result.current.isWaitingManualAdvance).toBe(true)
+
+      // El usuario destildea notas candidatas y deja el pool en 1 justo antes de avanzar
+      act(() => {
+        result.current.toggleCustomNote(60)
+        result.current.toggleCustomNote(62)
+      })
+
+      act(() => {
+        result.current.advanceToNextSequence()
+      })
+
+      // triggerNextSequence cortó temprano por pool < 2: no hay secuencia nueva
+      expect(onPlaySequence).toHaveBeenCalledTimes(1)
+
+      // El usuario repone una nota (pool vuelve a tener 2: [60, 64])
+      act(() => {
+        result.current.toggleCustomNote(60)
+      })
+
+      act(() => {
+        result.current.advanceToNextSequence()
+      })
+
+      // Sin el fix, isAdvancingRef queda en true para siempre y esta llamada no hace nada
+      expect(onPlaySequence).toHaveBeenCalledTimes(2)
+    })
+  })
 })

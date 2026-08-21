@@ -147,4 +147,136 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
 
     expect(result.current.isSessionActive).toBe(true)
   })
+
+  describe('Timers: auto-advance, cleanup y sesiones por tiempo', () => {
+    it('el timer de auto-advance (modo smart, acierto) dispara advanceToNextInterval tras el delay', () => {
+      vi.useFakeTimers()
+      const onPlayInterval = vi.fn()
+      const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
+
+      act(() => {
+        result.current.startSession([4], [60])
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(60)
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(64)
+      })
+
+      expect(result.current.currentQuestionIndex).toBe(1)
+      expect(result.current.isWaitingManualAdvance).toBe(false)
+
+      act(() => {
+        vi.advanceTimersByTime(1600)
+      })
+
+      expect(result.current.currentQuestionIndex).toBe(2)
+      expect(onPlayInterval).toHaveBeenCalledTimes(2)
+
+      vi.useRealTimers()
+    })
+
+    it('stopSession cancela el timer de auto-advance pendiente: no dispara un intervalo extra', () => {
+      vi.useFakeTimers()
+      const onPlayInterval = vi.fn()
+      const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
+
+      act(() => {
+        result.current.startSession([4], [60])
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(60)
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(64)
+      })
+
+      act(() => {
+        result.current.stopSession()
+      })
+
+      expect(result.current.isSessionFinished).toBe(true)
+
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+
+      expect(onPlayInterval).toHaveBeenCalledTimes(1)
+
+      vi.useRealTimers()
+    })
+
+    it('una sesión de intervalos por tiempo finaliza sola al llegar a 0', () => {
+      vi.useFakeTimers()
+      const onPlayInterval = vi.fn()
+      const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
+
+      act(() => {
+        result.current.setSessionLimitType('time')
+        result.current.setSessionDurationMinutes(1)
+      })
+
+      act(() => {
+        result.current.startSession([4], [60])
+      })
+
+      expect(result.current.timeRemainingSeconds).toBe(60)
+
+      act(() => {
+        vi.advanceTimersByTime(60000)
+      })
+
+      expect(result.current.isSessionActive).toBe(false)
+      expect(result.current.isSessionFinished).toBe(true)
+
+      vi.useRealTimers()
+    })
+
+    it('regression: si el pool de intervalos queda vacío al avanzar, advanceToNextInterval no debe quedar trabado luego de reponerlo', () => {
+      const onPlayInterval = vi.fn()
+      const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
+
+      act(() => {
+        result.current.setAdvanceMode('manual')
+      })
+
+      act(() => {
+        result.current.startSession([4], [60])
+      })
+
+      act(() => {
+        result.current.handleUserNotePlayed(60)
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(64)
+      })
+
+      expect(result.current.isWaitingManualAdvance).toBe(true)
+
+      // El usuario destildea el único intervalo activo justo antes de avanzar
+      act(() => {
+        result.current.toggleInterval(4)
+      })
+
+      act(() => {
+        result.current.advanceToNextInterval()
+      })
+
+      // triggerNextInterval cortó temprano por pool vacío: no hay intervalo nuevo
+      expect(onPlayInterval).toHaveBeenCalledTimes(1)
+
+      // El usuario repone el intervalo
+      act(() => {
+        result.current.toggleInterval(4)
+      })
+
+      act(() => {
+        result.current.advanceToNextInterval()
+      })
+
+      // Sin el fix, isAdvancingRef queda en true para siempre y esta llamada no hace nada
+      expect(onPlayInterval).toHaveBeenCalledTimes(2)
+    })
+  })
 })

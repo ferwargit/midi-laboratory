@@ -167,6 +167,11 @@ export function useIntervalTrainer({
       const currentIntervals = intervalsPool || activeIntervalsBufferRef.current
       const currentRoots = rootsPool || rootRangeNotesBufferRef.current
 
+      // FIX: se resetea siempre, incluso si la función corta más abajo por
+      // pool insuficiente. Antes quedaba en `true` para siempre si el pool
+      // de intervalos o raíces quedaba vacío justo al avanzar, trabando la sesión.
+      isAdvancingRef.current = false
+
       if (currentIntervals.length === 0 || currentRoots.length === 0) return
 
       if (autoAdvanceTimerRef.current) {
@@ -199,8 +204,6 @@ export function useIntervalTrainer({
       setIsWaitingManualAdvance(false)
       isWaitingAnswerRef.current = true
       setStimulusStartTime(Date.now())
-
-      isAdvancingRef.current = false
 
       onPlayInterval(stimulus.rootNote, stimulus.targetNote, stimulus.direction)
     },

@@ -179,4 +179,153 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
 
     expect(result.current.isSessionActive).toBe(true)
   })
+
+  describe('Timers: auto-advance, cleanup y sesiones por tiempo', () => {
+    it('el timer de auto-advance (modo smart, acierto) dispara advanceToNextQuestion tras el delay', () => {
+      vi.useFakeTimers()
+      const onPlayStimulus = vi.fn()
+      const onInstrumentChanged = vi.fn()
+
+      const { result } = renderHook(() =>
+        useSingleNoteTrainer({ onPlayStimulus, onInstrumentChanged })
+      )
+
+      act(() => {
+        result.current.startSession([60, 62])
+      })
+
+      const expectedNote = result.current.currentExpectedNote as number
+
+      act(() => {
+        result.current.handleUserNotePlayed(expectedNote)
+      })
+
+      expect(result.current.isWaitingManualAdvance).toBe(false)
+      expect(result.current.currentQuestionIndex).toBe(1)
+
+      act(() => {
+        vi.advanceTimersByTime(1400)
+      })
+
+      expect(result.current.currentQuestionIndex).toBe(2)
+      expect(onPlayStimulus).toHaveBeenCalledTimes(2)
+
+      vi.useRealTimers()
+    })
+
+    it('stopSession cancela el timer de auto-advance pendiente: no dispara una pregunta extra', () => {
+      vi.useFakeTimers()
+      const onPlayStimulus = vi.fn()
+      const onInstrumentChanged = vi.fn()
+
+      const { result } = renderHook(() =>
+        useSingleNoteTrainer({ onPlayStimulus, onInstrumentChanged })
+      )
+
+      act(() => {
+        result.current.startSession([60, 62])
+      })
+
+      const expectedNote = result.current.currentExpectedNote as number
+
+      act(() => {
+        result.current.handleUserNotePlayed(expectedNote)
+      })
+
+      act(() => {
+        result.current.stopSession()
+      })
+
+      expect(result.current.isSessionFinished).toBe(true)
+
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+
+      expect(onPlayStimulus).toHaveBeenCalledTimes(1)
+      expect(result.current.currentQuestionIndex).toBe(1)
+
+      vi.useRealTimers()
+    })
+
+    it('una sesión por tiempo finaliza sola al llegar a 0 y guarda una única vez', () => {
+      vi.useFakeTimers()
+      const onPlayStimulus = vi.fn()
+      const onInstrumentChanged = vi.fn()
+
+      const { result } = renderHook(() =>
+        useSingleNoteTrainer({ onPlayStimulus, onInstrumentChanged })
+      )
+
+      act(() => {
+        result.current.setSessionLimitType('time')
+        result.current.setSessionDurationMinutes(1)
+      })
+
+      act(() => {
+        result.current.startSession([60, 62])
+      })
+
+      expect(result.current.timeRemainingSeconds).toBe(60)
+
+      act(() => {
+        vi.advanceTimersByTime(60000)
+      })
+
+      expect(result.current.isSessionActive).toBe(false)
+      expect(result.current.isSessionFinished).toBe(true)
+      expect(result.current.timeRemainingSeconds).toBe(0)
+
+      vi.useRealTimers()
+    })
+
+    it('regression: si el pool queda con menos de 2 notas al avanzar, advanceToNextQuestion no debe quedar trabado luego de reponerlo', () => {
+      const onPlayStimulus = vi.fn()
+      const onInstrumentChanged = vi.fn()
+
+      const { result } = renderHook(() =>
+        useSingleNoteTrainer({ onPlayStimulus, onInstrumentChanged })
+      )
+
+      act(() => {
+        result.current.setAdvanceMode('manual')
+      })
+
+      act(() => {
+        result.current.startSession([60, 62])
+      })
+
+      const firstExpected = result.current.currentExpectedNote as number
+
+      act(() => {
+        result.current.handleUserNotePlayed(firstExpected)
+      })
+
+      expect(result.current.isWaitingManualAdvance).toBe(true)
+
+      // El usuario destildea una nota y deja el pool en 1 justo antes de avanzar
+      act(() => {
+        result.current.toggleNote(62)
+      })
+
+      act(() => {
+        result.current.advanceToNextQuestion()
+      })
+
+      // triggerNextQuestion cortó temprano por pool < 2: no hay pregunta nueva
+      expect(onPlayStimulus).toHaveBeenCalledTimes(1)
+
+      // El usuario repone la nota
+      act(() => {
+        result.current.toggleNote(62)
+      })
+
+      act(() => {
+        result.current.advanceToNextQuestion()
+      })
+
+      // Sin el fix, isAdvancingRef queda en true para siempre y esta llamada no hace nada
+      expect(onPlayStimulus).toHaveBeenCalledTimes(2)
+    })
+  })
 })

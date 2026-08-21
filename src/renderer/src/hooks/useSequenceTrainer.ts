@@ -146,6 +146,12 @@ export function useSequenceTrainer({
       const currentPool = notesPool || customCandidateNotesBufferRef.current
       const currentLen = lengthToUse || sequenceLengthBufferRef.current
 
+      // FIX: se resetea siempre, incluso si la función corta más abajo por
+      // pool insuficiente. Antes quedaba en `true` para siempre si el pool
+      // de notas candidatas bajaba de 2 justo al momento de avanzar,
+      // trabando la sesión.
+      isAdvancingRef.current = false
+
       if (currentPool.length < 2) return
 
       if (autoAdvanceTimerRef.current) {
@@ -168,8 +174,6 @@ export function useSequenceTrainer({
       setIsWaitingManualAdvance(false)
       isWaitingAnswerRef.current = true
       setStimulusStartTime(Date.now())
-
-      isAdvancingRef.current = false
 
       onPlaySequence(sequence)
     },
