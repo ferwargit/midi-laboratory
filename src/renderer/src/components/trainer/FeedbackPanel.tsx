@@ -11,10 +11,10 @@ interface FeedbackPanelProps {
 }
 
 function getDeviationText(semitoneDistance: number): string {
-  if (semitoneDistance === 0) return 'Afinación exacta (0 st)'
+  if (semitoneDistance === 0) return 'Afinación exacta'
   const abs = Math.abs(semitoneDistance)
   const unit = abs === 1 ? 'semitono' : 'semitonos'
-  const direction = semitoneDistance > 0 ? '+agudo' : '-grave'
+  const direction = semitoneDistance > 0 ? 'más agudo (+st)' : 'más grave (-st)'
   return `${semitoneDistance > 0 ? `+${semitoneDistance}` : semitoneDistance} ${unit} (${direction})`
 }
 
@@ -34,11 +34,9 @@ export function FeedbackPanel({
           </div>
           <div className="text-left">
             <span className="text-zinc-100 text-sm md:text-base font-semibold block tracking-tight">
-              Escucha el tono y reprodúcelo en tu teclado MIDI
+              Escuchá la nota y tocala en tu Roland FP-8 o hacé clic en el piano
             </span>
-            <span className="text-[11px] text-zinc-500 font-mono">
-              Esperando entrada Note-On...
-            </span>
+            <span className="text-[11px] text-zinc-500 font-mono">Esperando respuesta...</span>
           </div>
         </div>
       ) : lastResult ? (
@@ -52,7 +50,7 @@ export function FeedbackPanel({
                     : 'bg-rose-950/70 border-rose-500/50 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
                 }`}
               >
-                {lastResult.correct ? 'ACIERTO EXACTO' : 'DESVIACIÓN DETECTADA'}
+                {lastResult.correct ? '✅ ¡Correcto!' : '❌ Incorrecto'}
               </span>
 
               <span className="text-xs font-mono text-zinc-400 bg-zinc-900/90 border border-zinc-800 px-2 py-0.5 rounded-md">
@@ -60,17 +58,18 @@ export function FeedbackPanel({
               </span>
 
               <span className="text-zinc-500 text-xs font-mono">
-                {(lastResult.responseTimeMs / 1000).toFixed(2)}s
+                ({(lastResult.responseTimeMs / 1000).toFixed(2)}s)
               </span>
             </div>
 
             {/* Fichas de comparación */}
             <div className="flex items-center gap-2 text-xs font-mono">
               <span className="px-3 py-1 rounded-lg bg-zinc-900/90 border border-sky-500/40 text-sky-300 flex items-center gap-1.5">
-                <span className="text-zinc-500">OBJETIVO:</span>
+                <span className="text-zinc-500">🎯 Esperada:</span>
                 <strong className="text-white text-sm">
                   {midiNoteToName(lastResult.expectedNote)}
                 </strong>
+                <span className="text-[10px] text-zinc-500">({lastResult.expectedNote})</span>
               </span>
 
               <span
@@ -80,29 +79,30 @@ export function FeedbackPanel({
                     : 'bg-zinc-900/90 border-rose-500/40 text-rose-300'
                 }`}
               >
-                <span className="text-zinc-500">TOCASTE:</span>
+                <span className="text-zinc-500">🎹 Tocaste:</span>
                 <strong className="text-white text-sm">
                   {midiNoteToName(lastResult.playedNote)}
                 </strong>
+                <span className="text-[10px] text-zinc-500">({lastResult.playedNote})</span>
               </span>
             </div>
           </div>
 
           {/* Botón de avance manual / automático */}
-          <div className="min-w-[200px] flex flex-col items-end justify-center">
+          <div className="min-w-[210px] flex flex-col items-end justify-center">
             {isWaitingManualAdvance && onAdvanceNext ? (
               <div className="space-y-1.5 text-right">
                 <Button
                   variant="primary"
-                  size="md"
+                  size="sm"
                   onClick={onAdvanceNext}
-                  className="font-bold text-xs"
+                  className="font-bold text-xs shadow-lg"
                 >
-                  Siguiente ➔
+                  Siguiente Pregunta ➔
                 </Button>
                 <span className="block text-[10px] text-zinc-400 font-mono">
-                  Presiona{' '}
-                  <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-200 font-sans text-[10px]">
+                  o presiona{' '}
+                  <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-sky-400 font-sans text-[10px] font-bold">
                     Espacio
                   </kbd>
                 </span>
@@ -117,7 +117,7 @@ export function FeedbackPanel({
         </>
       ) : (
         <div className="w-full text-center text-zinc-500 text-xs font-mono tracking-wider uppercase">
-          Listo para iniciar entrenamiento
+          Listo para comenzar
         </div>
       )}
     </div>

@@ -6,25 +6,22 @@ import { useSingleNoteTrainer } from './hooks/useSingleNoteTrainer'
 import { useIntervalTrainer } from './hooks/useIntervalTrainer'
 import { useSequenceTrainer } from './hooks/useSequenceTrainer'
 import { useDatabaseStore } from './stores/useDatabaseStore'
-import { Header } from './components/trainer/Header'
-import { MidiDeviceSelect } from './components/trainer/MidiDeviceSelect'
+import { StudioTopBar } from './components/trainer/StudioTopBar'
+import { StudioBottomDock } from './components/trainer/StudioBottomDock'
 import { MidiDisconnectAlert } from './components/trainer/MidiDisconnectAlert'
 import { SingleNoteView } from './components/views/SingleNoteView'
 import { IntervalsView } from './components/views/IntervalsView'
 import { SequencesView } from './components/views/SequencesView'
 import { AnalyticsView } from './components/views/AnalyticsView'
-import { DatabaseCard } from './components/views/DatabaseCard'
 import { ConfirmModal } from './components/ui/ConfirmModal'
-import { MidiMonitor } from './components/trainer/MidiMonitor'
 import { AiExercisePrescription } from './domain/ai/types'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
-
 type AppMode = 'single_note' | 'intervals' | 'sequences' | 'analytics'
 
 export default function App(): React.ReactElement {
   const [appMode, setAppMode] = useState<AppMode>('single_note')
-  const [visualCueMode, setVisualCueMode] = useState<VisualCueMode>('blind') // Por defecto oído puro
+  const [visualCueMode, setVisualCueMode] = useState<VisualCueMode>('blind')
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false)
   const handleNoteRef = useRef<(note: number) => void>(() => {})
 
@@ -129,7 +126,7 @@ export default function App(): React.ReactElement {
     sequenceTrainer.handleUserNotePlayed
   ])
 
-  // Atajos de Teclado Globales
+  // Atajos de Teclado
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.code === 'Space') {
@@ -218,137 +215,75 @@ export default function App(): React.ReactElement {
     setIsResetModalOpen(false)
   }
 
-  // Notas del estímulo que se iluminan según el modo pedagógico
   const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-4 font-sans">
-      <Header status={midi.status} />
-
-      <MidiDisconnectAlert isDisconnected={midi.isDeviceDisconnected} />
-
-      {/* BARRA DE NAVEGACIÓN Y SELECTOR DE PISTAS LED */}
-      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-2 rounded-2xl gap-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
-        {/* SELECTOR SEGMENTADO PRINCIPAL */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 flex-1">
-          {[
-            { id: 'single_note', label: 'Nota Individual', code: 'MODO 01' },
-            { id: 'intervals', label: 'Intervalos', code: 'MODO 02' },
-            { id: 'sequences', label: 'Secuencias', code: 'MODO 03' },
-            { id: 'analytics', label: 'Psicometría & IA', code: 'DIAGNÓSTICO' }
-          ].map((tab) => {
-            const isActive = appMode === tab.id
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                disabled={isAnySessionActive}
-                onClick={(): void => setAppMode(tab.id as AppMode)}
-                className={`py-2 px-3 rounded-xl font-medium transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center ${
-                  isActive
-                    ? tab.id === 'analytics'
-                      ? 'bg-purple-600/90 text-white shadow-[0_0_20px_rgba(168,85,247,0.35)] border border-purple-400/40'
-                      : 'bg-gradient-to-b from-sky-500 to-sky-600 text-white shadow-[0_0_20px_rgba(56,189,248,0.3)] border border-sky-400/40'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-                }`}
-              >
-                <span className="text-[9px] font-mono tracking-widest opacity-60 uppercase mb-0.5">
-                  {tab.code}
-                </span>
-                <span className="text-xs font-semibold">{tab.label}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* SELECTOR DE PISTAS VISUALES / AUDITIVAS */}
-        <div className="flex items-center justify-center gap-1 bg-zinc-950/80 p-1.5 rounded-xl border border-zinc-800/80 text-[11px] font-mono shrink-0">
-          <span className="text-zinc-500 px-2 text-[10px] tracking-wider uppercase font-semibold">
-            Pistas:
-          </span>
-          <button
-            type="button"
-            onClick={(): void => setVisualCueMode('blind')}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              visualCueMode === 'blind'
-                ? 'bg-amber-400/15 border border-amber-400/50 text-amber-300 font-bold shadow-[0_0_12px_rgba(251,191,36,0.2)]'
-                : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-            title="El piano no se ilumina al sonar la nota para entrenar la escucha real"
-          >
-            Oído Puro
-          </button>
-          <button
-            type="button"
-            onClick={(): void => setVisualCueMode('assisted')}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-              visualCueMode === 'assisted'
-                ? 'bg-cyan-400/15 border border-cyan-400/50 text-cyan-300 font-bold shadow-[0_0_12px_rgba(34,211,238,0.2)]'
-                : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-            title="La tecla se ilumina en cian sincronizada con el sonido"
-          >
-            Asistido LED
-          </button>
-        </div>
-      </div>
-
-      <MidiDeviceSelect
+    <div className="min-h-screen flex flex-col justify-between p-4 md:p-6 max-w-7xl mx-auto space-y-4 font-sans">
+      {/* 1. MASTER TOPBAR */}
+      <StudioTopBar
+        appMode={appMode}
+        onSelectMode={(m): void => setAppMode(m)}
+        isSessionActive={isAnySessionActive}
+        visualCueMode={visualCueMode}
+        onToggleVisualCue={(m): void => setVisualCueMode(m)}
+        status={midi.status}
         inputs={midi.inputs}
         outputs={midi.outputs}
         selectedInputId={midi.selectedInputId}
         selectedOutputId={midi.selectedOutputId}
         onSelectInput={midi.setSelectedInputId}
         onSelectOutput={midi.setSelectedOutputId}
-        disabled={isAnySessionActive}
       />
 
-      {/* VISTAS MODULARES DE ENTRENAMIENTO */}
-      {appMode === 'single_note' && (
-        <SingleNoteView
-          trainer={singleNoteTrainer}
-          pianoKeys={PIANO_KEYS}
-          pressedNotes={midi.pressedNotes}
-          stimulusNotes={liveStimulusNotes}
-          onVirtualKeyPress={handleVirtualKeyPress}
-        />
-      )}
+      <MidiDisconnectAlert isDisconnected={midi.isDeviceDisconnected} />
 
-      {appMode === 'intervals' && (
-        <IntervalsView
-          trainer={intervalTrainer}
-          pianoKeys={PIANO_KEYS}
-          pressedNotes={midi.pressedNotes}
-          stimulusNotes={liveStimulusNotes}
-          onVirtualKeyPress={handleVirtualKeyPress}
-        />
-      )}
+      {/* 2. MAIN STAGE (VISTAS ACTIVAS) */}
+      <main className="flex-1 flex flex-col justify-center">
+        {appMode === 'single_note' && (
+          <SingleNoteView
+            trainer={singleNoteTrainer}
+            pianoKeys={PIANO_KEYS}
+            pressedNotes={midi.pressedNotes}
+            stimulusNotes={liveStimulusNotes}
+            onVirtualKeyPress={handleVirtualKeyPress}
+          />
+        )}
 
-      {appMode === 'sequences' && (
-        <SequencesView
-          trainer={sequenceTrainer}
-          pianoKeys={PIANO_KEYS}
-          pressedNotes={midi.pressedNotes}
-          stimulusNotes={liveStimulusNotes}
-          onVirtualKeyPress={handleVirtualKeyPress}
-        />
-      )}
+        {appMode === 'intervals' && (
+          <IntervalsView
+            trainer={intervalTrainer}
+            pianoKeys={PIANO_KEYS}
+            pressedNotes={midi.pressedNotes}
+            stimulusNotes={liveStimulusNotes}
+            onVirtualKeyPress={handleVirtualKeyPress}
+          />
+        )}
 
-      {appMode === 'analytics' && <AnalyticsView onLoadPrescription={handleLoadPrescription} />}
+        {appMode === 'sequences' && (
+          <SequencesView
+            trainer={sequenceTrainer}
+            pianoKeys={PIANO_KEYS}
+            pressedNotes={midi.pressedNotes}
+            stimulusNotes={liveStimulusNotes}
+            onVirtualKeyPress={handleVirtualKeyPress}
+          />
+        )}
 
-      <DatabaseCard onOpenResetModal={(): void => setIsResetModalOpen(true)} />
+        {appMode === 'analytics' && <AnalyticsView onLoadPrescription={handleLoadPrescription} />}
+      </main>
+
+      {/* 3. DOCK INFERIOR PLEGABLE */}
+      <StudioBottomDock logs={midi.logs} onOpenResetModal={(): void => setIsResetModalOpen(true)} />
 
       <ConfirmModal
         isOpen={isResetModalOpen}
         title="¿Resetear Base de Datos de Prueba?"
-        message="Esta acción eliminará todas las sesiones y respuestas acumuladas en la memoria local para que puedas reiniciar tu historial desde cero. Esta operación no se puede deshacer."
+        message="Esta acción eliminará todas las sesiones y respuestas acumuladas en la memoria local. Esta operación no se puede deshacer."
         confirmText="Sí, Borrar Todo"
         cancelText="Cancelar"
         onConfirm={handleConfirmReset}
         onCancel={(): void => setIsResetModalOpen(false)}
       />
-
-      <MidiMonitor logs={midi.logs} />
     </div>
   )
 }
