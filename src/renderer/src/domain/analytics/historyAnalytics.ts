@@ -2,6 +2,16 @@ import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 import { midiNoteToName } from '../music/noteUtils'
 
 export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences'
+export type AnalyticsMasteryFilter = 'all' | 'mastered' | 'learning' | 'critical'
+
+export interface AnalyticsFilterOptions {
+  mode: AnalyticsModeFilter
+  instrumentId?: string
+  strategyId?: string
+  format?: 'all' | 'time' | 'questions' | 'mastery'
+  mastery?: AnalyticsMasteryFilter
+  searchQuery?: string
+}
 
 export interface ConfusionPair {
   expected: string
@@ -9,15 +19,20 @@ export interface ConfusionPair {
   count: number
 }
 
-export interface SessionPsychometrics {
-  sessionId: string
+export interface DetailedSessionAnalysis {
+  session: DbSessionRecord
   poolSize: number
   entropyBits: number
   chanceBaseline: number
-  rawAccuracy: number
   normalizedAccuracy: number
-  durationSeconds: number
   responsesPerMinute: number
+  fastPercent: number
+  mediumPercent: number
+  slowPercent: number
+  sharpBiasCount: number
+  flatBiasCount: number
+  dominantBias: 'sharp' | 'flat' | 'balanced'
+  formatType: 'time' | 'mastery' | 'questions' | 'infinite'
 }
 
 export interface AnalyticsMetrics {
@@ -26,8 +41,8 @@ export interface AnalyticsMetrics {
   totalAnswers: number
   totalCorrect: number
   overallAccuracy: number
-  normalizedOverallAccuracy: number // Corregida por probabilidad de azar
-  avgEntropyBits: number // Incertidumbre promedio del contexto
+  normalizedOverallAccuracy: number
+  avgEntropyBits: number
   avgResponseTimeMs: number
   fastResponsesCount: number
   mediumResponsesCount: number
@@ -37,11 +52,11 @@ export interface AnalyticsMetrics {
   topConfusions: ConfusionPair[]
   mostDifficultNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
   strongestNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
-  sessionPsychometricsList: SessionPsychometrics[]
+  sessionPsychometricsList: DetailedSessionAnalysis[]
 }
 
 export function isSequenceSession(s: DbSessionRecord): boolean {
-  const name = s.presetName.toLowerCase()
+  const name = (s.presetName || '').toLowerCase()
   return (
     s.strategyId.includes('sequences') ||
     s.instrumentId === 'piano_sequences' ||
@@ -50,7 +65,7 @@ export function isSequenceSession(s: DbSessionRecord): boolean {
 }
 
 export function isIntervalSession(s: DbSessionRecord): boolean {
-  const name = s.presetName.toLowerCase()
+  const name = (s.presetName || '').toLowerCase()
   return (
     s.strategyId.includes('intervals') ||
     s.instrumentId === 'piano_intervals' ||
@@ -59,37 +74,88 @@ export function isIntervalSession(s: DbSessionRecord): boolean {
 }
 
 export function isSingleNoteSession(s: DbSessionRecord): boolean {
-  if (isSequenceSession(s) || isIntervalSession(s)) {
-    return false
-  }
-  const name = s.presetName.toLowerCase()
+  if (isSequenceSession(s) || isIntervalSession(s)) return false
+  const name = (s.presetName || '').toLowerCase()
   return (
     s.strategyId === 'random' ||
     s.strategyId === 'adaptive_v1' ||
     s.strategyId === 'spaced_repetition' ||
     name.includes('nota') ||
     name.includes('maestría') ||
-    name.includes('tiempo')
+    name.includes('tiempo') ||
+    name.includes('cronometrado')
   )
+}
+
+export function filterSessionsAdvanced(
+  sessions: DbSessionRecord[],
+  filters: AnalyticsFilterOptions
+): DbSessionRecord[] {
+  return sessions.filter((s) => {
+    // 1. Filtro Modalidad
+    if (filters.mode === 'single_note' && !isSingleNoteSession(s)) return false
+    if (filters.mode === 'intervals' && !isIntervalSession(s)) return false
+    if (filters.mode === 'sequences' && !isSequenceSession(s)) return false
+
+    // 2. Filtro Instrumento
+    if (
+      filters.instrumentId &&
+      filters.instrumentId !== 'all' &&
+      s.instrumentId !== filters.instrumentId
+    ) {
+      return false
+    }
+
+    // 3. Filtro Estrategia
+    if (filters.strategyId && filters.strategyId !== 'all' && s.strategyId !== filters.strategyId) {
+      return false
+    }
+
+    // 4. Filtro Formato
+    const name = (s.presetName || '').toLowerCase()
+    const isTimed =
+      name.includes('tiempo') || name.includes('cronometrado') || s.durationSeconds >= 55
+    const isMastery = name.includes('maestría')
+
+    if (filters.format === 'time' && !isTimed) return false
+    if (filters.format === 'mastery' && !isMastery) return false
+    if (filters.format === 'questions' && (isTimed || isMastery)) return false
+
+    // 5. Filtro Nivel de Dominio
+    if (filters.mastery === 'mastered' && s.accuracyPercentage < 85) return false
+    if (filters.mastery === 'learning' && (s.accuracyPercentage < 50 || s.accuracyPercentage >= 85))
+      return false
+    if (filters.mastery === 'critical' && s.accuracyPercentage >= 50) return false
+
+    // 6. Búsqueda por texto
+    if (filters.searchQuery && filters.searchQuery.trim().length > 0) {
+      const q = filters.searchQuery.toLowerCase()
+      const matchName = s.presetName.toLowerCase().includes(q)
+      const matchInst = s.instrumentId.toLowerCase().includes(q)
+      if (!matchName && !matchInst) return false
+    }
+
+    return true
+  })
 }
 
 export function filterSessionsByMode(
   sessions: DbSessionRecord[],
   modeFilter: AnalyticsModeFilter
 ): DbSessionRecord[] {
-  if (modeFilter === 'all') return sessions
-  if (modeFilter === 'sequences') return sessions.filter(isSequenceSession)
-  if (modeFilter === 'intervals') return sessions.filter(isIntervalSession)
-  if (modeFilter === 'single_note') return sessions.filter(isSingleNoteSession)
-  return sessions
+  return filterSessionsAdvanced(sessions, { mode: modeFilter })
 }
 
 export function computeAnalyticsMetrics(
   sessions: DbSessionRecord[],
   answers: DbAnswerRecord[],
-  modeFilter: AnalyticsModeFilter = 'all'
+  modeFilter: AnalyticsModeFilter = 'all',
+  advancedFilters?: Omit<AnalyticsFilterOptions, 'mode'>
 ): AnalyticsMetrics {
-  const filteredSessions = filterSessionsByMode(sessions, modeFilter)
+  const filteredSessions = advancedFilters
+    ? filterSessionsAdvanced(sessions, { mode: modeFilter, ...advancedFilters })
+    : filterSessionsByMode(sessions, modeFilter)
+
   const validSessionIds = new Set(filteredSessions.map((s) => s.id))
   const filteredAnswers = answers.filter((a) => validSessionIds.has(a.sessionId))
 
@@ -127,8 +193,8 @@ export function computeAnalyticsMetrics(
   const noteStatsMap = new Map<number, { attempts: number; correct: number }>()
   const confusionMap = new Map<string, number>()
 
-  // Psicometría por sesión individual
-  const sessionPsychometricsList: SessionPsychometrics[] = filteredSessions.map((session) => {
+  // Análisis detallado por sesión
+  const sessionPsychometricsList: DetailedSessionAnalysis[] = filteredSessions.map((session) => {
     const sAnswers = filteredAnswers.filter((a) => a.sessionId === session.id)
     const uniqueExpected = new Set(sAnswers.map((a) => a.expectedNote))
     const poolSize = Math.max(2, uniqueExpected.size)
@@ -142,18 +208,55 @@ export function computeAnalyticsMetrics(
         ? 0
         : Math.round(((accDec - chanceBaseline) / (1 - chanceBaseline)) * 100)
 
-    const durSec = session.durationSeconds || 1
+    const durSec = Math.max(1, session.durationSeconds || 1)
     const responsesPerMinute = Number(((session.totalQuestions / durSec) * 60).toFixed(1))
 
+    let sFast = 0
+    let sMed = 0
+    let sSlow = 0
+    let sSharp = 0
+    let sFlat = 0
+
+    sAnswers.forEach((ans) => {
+      if (ans.responseTimeMs < 1200) sFast++
+      else if (ans.responseTimeMs <= 2800) sMed++
+      else sSlow++
+
+      if (!ans.isCorrect) {
+        if (ans.semitoneDistance > 0) sSharp++
+        else if (ans.semitoneDistance < 0) sFlat++
+      }
+    })
+
+    const totalAns = Math.max(1, sAnswers.length)
+    const fastPercent = Math.round((sFast / totalAns) * 100)
+    const mediumPercent = Math.round((sMed / totalAns) * 100)
+    const slowPercent = Math.round((sSlow / totalAns) * 100)
+
+    const dominantBias = sSharp > sFlat * 1.4 ? 'sharp' : sFlat > sSharp * 1.4 ? 'flat' : 'balanced'
+
+    const pName = (session.presetName || '').toLowerCase()
+    const formatType: 'time' | 'mastery' | 'questions' | 'infinite' =
+      pName.includes('tiempo') || pName.includes('cronometrado') || session.durationSeconds >= 55
+        ? 'time'
+        : pName.includes('maestría')
+          ? 'mastery'
+          : 'questions'
+
     return {
-      sessionId: session.id,
+      session,
       poolSize,
       entropyBits,
       chanceBaseline: Math.round(chanceBaseline * 100),
-      rawAccuracy,
       normalizedAccuracy,
-      durationSeconds: durSec,
-      responsesPerMinute
+      responsesPerMinute,
+      fastPercent,
+      mediumPercent,
+      slowPercent,
+      sharpBiasCount: sSharp,
+      flatBiasCount: sFlat,
+      dominantBias,
+      formatType
     }
   })
 

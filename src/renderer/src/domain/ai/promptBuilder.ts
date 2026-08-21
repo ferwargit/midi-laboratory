@@ -1,7 +1,7 @@
 import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 
 export function buildSystemPrompt(): string {
-  return `Eres un Profesor de Oído Musical y Psicoacústica de Élite (Item Response Theory & Auditory Perception Expert) especializado en piano y entrenamiento auditivo.
+  return `Eres un Profesor de Oído Musical y Psicoacústica de Élite (Item Response Theory & Auditory Perception Expert) especializado en piano y entrenamiento auditivo con hardware MIDI.
 Tu objetivo es analizar las métricas clínicas acumuladas de un alumno y devolver un JSON con:
 1. 'analysisText': Diagnóstico psicopedagógico profundo, clínico, empático y detallado en español.
 2. 'prescription': Configuración de ejercicio personalizada para corregir sus errores específicos.
@@ -46,15 +46,39 @@ export function buildUserPrompt(
   customQueryType: 'general' | 'fatigue' | 'weekly_plan' = 'general'
 ): string {
   let instruction =
-    'Analiza exhaustivamente los patrones de error, sesgos de semitono (+st / -st), la precisión corregida por azar y las latencias cognitivas, y genera la prescripción de ejercicio óptima.'
+    'Analiza los patrones de fatiga, diferencias de rendimiento según el timbre y la velocidad de reflejo. Emite un diagnóstico riguroso y genera la prescripción de ejercicio óptima para desbloquear sus puntos ciegos.'
 
   if (customQueryType === 'fatigue') {
     instruction =
-      'Enfócate en analizar la curva de fatiga temporal, velocidad de reflejo (RPM) y tiempo óptimo de estudio diario recomendado.'
+      'Enfócate prioritariamente en la curva de degradación por fatiga temporal, velocidad de reflejo (RPM) y tiempo óptimo de estudio diario recomendado.'
   } else if (customQueryType === 'weekly_plan') {
     instruction =
-      'Diseña un plan de estudio semanal estructurado de 7 días combinando Nota Aislada, Intervalos y Secuencias según mis puntos ciegos.'
+      'Diseña un plan de estudio semanal estructurado de 7 días combinando Nota Aislada, Intervalos y Secuencias según los puntos ciegos detectados.'
   }
+
+  // Construir matriz de sesiones detallada para la IA
+  const sessionsTelemetry = (metrics.sessionPsychometricsList || []).slice(0, 10).map((s) => ({
+    id: s.session.id,
+    fecha: s.session.createdAt,
+    timbre: s.session.instrumentId,
+    algoritmo: s.session.strategyId,
+    formato: s.formatType,
+    duracionSeg: s.session.durationSeconds,
+    preguntas: `${s.session.correctAnswers}/${s.session.totalQuestions}`,
+    precisionCruda: `${s.session.accuracyPercentage}%`,
+    oidoRealIRT: `${s.normalizedAccuracy}%`,
+    entropiaBits: s.entropyBits,
+    poolNotas: s.poolSize,
+    cadenciaRPM: s.responsesPerMinute,
+    tiempoMedioMs: s.session.avgResponseTimeMs,
+    reflejoInmediatoPct: `${s.fastPercent}%`,
+    sesgoDominante:
+      s.dominantBias === 'sharp'
+        ? 'Hacia lo Agudo (+st)'
+        : s.dominantBias === 'flat'
+          ? 'Hacia lo Grave (-st)'
+          : 'Equilibrado'
+  }))
 
   return `Métricas Psicométricas del Alumno (Filtro analizado: ${metrics.modeFilter}):
 - Total Ejercicios Analizados: ${metrics.totalAnswers} en ${metrics.filteredSessionsCount} sesiones
@@ -68,6 +92,9 @@ export function buildUserPrompt(
 - Notas con Mayor Dificultad (<80%): ${JSON.stringify(metrics.mostDifficultNotes)}
 - Notas Consolidadas (>=80%): ${JSON.stringify(metrics.strongestNotes)}
 - Muestras Psicométricas Recientes: ${JSON.stringify((metrics.sessionPsychometricsList || []).slice(0, 8))}
+
+TELEMETRÍA DETALLADA POR SESIÓN (ÚLTIMAS 10 SESIONES):
+${JSON.stringify(sessionsTelemetry, null, 2)}
 
 ${instruction}`
 }
