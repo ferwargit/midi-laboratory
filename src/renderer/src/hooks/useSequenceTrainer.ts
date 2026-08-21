@@ -109,6 +109,13 @@ export function useSequenceTrainer({
     }
   }, [])
 
+  // Limpieza de seguridad al desmontar el hook/componente
+  useEffect(() => {
+    return (): void => {
+      cleanupSessionTimers()
+    }
+  }, [cleanupSessionTimers])
+
   useEffect(() => {
     customCandidateNotesBufferRef.current = customCandidateNotes
   }, [customCandidateNotes])
@@ -170,7 +177,6 @@ export function useSequenceTrainer({
   )
 
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
-    console.debug('[useSequenceTrainer] finalizeAndSaveSession called for sessionId=', sessionIdRef.current)
     cleanupSessionTimers()
 
     questionTokenRef.current = null
@@ -215,11 +221,10 @@ export function useSequenceTrainer({
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
-    // clear session id so pending timers won't act on the finished session
     sessionIdRef.current = ''
   }, [cleanupSessionTimers, sessionLimitType, saveSessionToDb])
 
-  // Temporizador regresivo para sesiones por tiempo
+  // Temporizador regresivo único para sesiones por tiempo
   useEffect(() => {
     if (!isSessionActive || sessionLimitType !== 'time') return
 
@@ -228,13 +233,10 @@ export function useSequenceTrainer({
         if (prev <= 1) {
           clearInterval(interval)
           sessionCountdownTimerRef.current = null
-          // apply immediate UI state changes synchronously so tests see the finished state
-          const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
           setIsSessionActive(false)
           setIsSessionFinished(true)
           setIsWaitingManualAdvance(false)
           setCapturedNotes([])
-          // persist asynchronously
           void finalizeAndSaveSession()
           return 0
         }
@@ -279,37 +281,12 @@ export function useSequenceTrainer({
     setSessionHistory([])
     setCurrentQuestionIndex(1)
     setIsSessionFinished(false)
-    setIsSessionActive(true)
 
     if (sessionLimitType === 'time') {
       setTimeRemainingSeconds(sessionDurationMinutesBufferRef.current * 60)
-      // recreate countdown interval for the newly started session (ensure previous timers were cleaned)
-      if (sessionCountdownTimerRef.current) {
-        clearInterval(sessionCountdownTimerRef.current)
-        sessionCountdownTimerRef.current = null
-      }
-      const interval = setInterval(() => {
-        setTimeRemainingSeconds((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval)
-            sessionCountdownTimerRef.current = null
-            const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
-            setIsSessionActive(false)
-            setIsSessionFinished(true)
-            setIsWaitingManualAdvance(false)
-            setCapturedNotes([])
-            // persist asynchronously
-            void finalizeAndSaveSession()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-      sessionCountdownTimerRef.current = interval
-      // debug: indicate interval created for this session (tests use fake timers)
-      // console.debug('[useSequenceTrainer] countdown interval created, sessionId=', sessionIdRef.current)
     }
 
+    setIsSessionActive(true)
     triggerNextSequence(validNotes, validLength)
   }
 
@@ -358,6 +335,7 @@ export function useSequenceTrainer({
   const resetToConfig = (): void => {
     cleanupSessionTimers()
     questionTokenRef.current = null
+    isWaitingAnswerRef.current = false
     setIsSessionActive(false)
     setIsSessionFinished(false)
     setIsWaitingManualAdvance(false)
@@ -421,13 +399,11 @@ export function useSequenceTrainer({
           setIsWaitingManualAdvance(true)
         } else {
           const delay = advanceMode === 'auto_slow' ? 3500 : 1800
-          {
-            const scheduledSessionId = sessionIdRef.current
-            autoAdvanceTimerRef.current = setTimeout(() => {
-              if (sessionIdRef.current !== scheduledSessionId) return
-              advanceToNextSequence()
-            }, delay)
-          }
+          const scheduledSessionId = sessionIdRef.current
+          autoAdvanceTimerRef.current = setTimeout(() => {
+            if (sessionIdRef.current !== scheduledSessionId) return
+            advanceToNextSequence()
+          }, delay)
         }
       }
     },

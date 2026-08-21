@@ -115,6 +115,13 @@ export function useIntervalTrainer({
     }
   }, [])
 
+  // Limpieza de seguridad al desmontar el hook/componente
+  useEffect(() => {
+    return (): void => {
+      cleanupSessionTimers()
+    }
+  }, [cleanupSessionTimers])
+
   useEffect(() => {
     activeIntervalsBufferRef.current = activeIntervals
   }, [activeIntervals])
@@ -201,7 +208,6 @@ export function useIntervalTrainer({
   )
 
   const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
-    console.debug('[useIntervalTrainer] finalizeAndSaveSession called for sessionId=', sessionIdRef.current)
     cleanupSessionTimers()
 
     questionTokenRef.current = null
@@ -244,11 +250,10 @@ export function useIntervalTrainer({
     }
 
     await saveSessionToDb(sessionRecord, allAnswers)
-    // clear session id so any previously scheduled timers cannot affect subsequent sessions
     sessionIdRef.current = ''
   }, [cleanupSessionTimers, sessionLimitType, saveSessionToDb])
 
-  // Temporizador regresivo para sesiones por tiempo
+  // Temporizador regresivo único y sincronizado para sesiones por tiempo
   useEffect(() => {
     if (!isSessionActive || sessionLimitType !== 'time') return
 
@@ -257,15 +262,11 @@ export function useIntervalTrainer({
         if (prev <= 1) {
           clearInterval(interval)
           sessionCountdownTimerRef.current = null
-          // apply immediate UI state changes synchronously so tests see the finished state
-          const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
           setIsSessionActive(false)
           setIsSessionFinished(true)
           setIsWaitingManualAdvance(false)
           setWaitingNoteStep(1)
           setFirstNotePlayed(null)
-          setSessionElapsedSeconds(totalSeconds)
-          // persist asynchronously
           void finalizeAndSaveSession()
           return 0
         }
@@ -310,38 +311,12 @@ export function useIntervalTrainer({
     setSessionHistory([])
     setCurrentQuestionIndex(1)
     setIsSessionFinished(false)
-    setIsSessionActive(true)
 
     if (sessionLimitType === 'time') {
       setTimeRemainingSeconds(sessionDurationMinutesBufferRef.current * 60)
-      // recreate countdown interval for the newly started session (ensure previous timers were cleaned)
-      if (sessionCountdownTimerRef.current) {
-        clearInterval(sessionCountdownTimerRef.current)
-        sessionCountdownTimerRef.current = null
-      }
-      const interval = setInterval(() => {
-        setTimeRemainingSeconds((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval)
-            sessionCountdownTimerRef.current = null
-            // compute totalSeconds for persistence but do not rely on a dedicated state field here
-            const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
-            setIsSessionActive(false)
-            setIsSessionFinished(true)
-            setIsWaitingManualAdvance(false)
-            setWaitingNoteStep(1)
-            setFirstNotePlayed(null)
-            void finalizeAndSaveSession()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-      sessionCountdownTimerRef.current = interval
-      // debug: indicate interval created for this session (tests use fake timers)
-      // console.debug('[useIntervalTrainer] countdown interval created, sessionId=', sessionIdRef.current)
     }
 
+    setIsSessionActive(true)
     triggerNextInterval(validIntervals, validRoots)
   }
 
@@ -460,13 +435,11 @@ export function useIntervalTrainer({
           setIsWaitingManualAdvance(true)
         } else {
           const delay = advanceMode === 'auto_slow' ? 3500 : 1600
-          {
-            const scheduledSessionId = sessionIdRef.current
-            autoAdvanceTimerRef.current = setTimeout(() => {
-              if (sessionIdRef.current !== scheduledSessionId) return
-              advanceToNextInterval()
-            }, delay)
-          }
+          const scheduledSessionId = sessionIdRef.current
+          autoAdvanceTimerRef.current = setTimeout(() => {
+            if (sessionIdRef.current !== scheduledSessionId) return
+            advanceToNextInterval()
+          }, delay)
         }
       }
     },
