@@ -218,7 +218,7 @@ export default function App(): React.ReactElement {
   const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
 
   return (
-    <div className="min-h-screen flex flex-col justify-between p-4 md:p-6 max-w-7xl mx-auto space-y-4 font-sans">
+    <div className="min-h-screen flex flex-col justify-between p-4 md:p-5 max-w-7xl mx-auto space-y-3 font-sans">
       {/* 1. MASTER TOPBAR */}
       <StudioTopBar
         appMode={appMode}
@@ -237,8 +237,8 @@ export default function App(): React.ReactElement {
 
       <MidiDisconnectAlert isDisconnected={midi.isDeviceDisconnected} />
 
-      {/* 2. MAIN STAGE (VISTAS ACTIVAS) */}
-      <main className="flex-1 flex flex-col justify-center">
+      {/* 2. MAIN STAGE (ANCLADO CON JUSTIFY-START: CERO SALTOS) */}
+      <main className="flex-1 flex flex-col justify-start w-full">
         {appMode === 'single_note' && (
           <SingleNoteView
             trainer={singleNoteTrainer}
