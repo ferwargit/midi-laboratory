@@ -1,6 +1,6 @@
-import { AiExercisePrescription } from '../ai/types'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 import { midiNoteToName } from '../music/noteUtils'
+import { AiExercisePrescription } from '../ai/types'
 
 export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences'
 export type AnalyticsMasteryFilter = 'all' | 'mastered' | 'learning' | 'critical'
@@ -47,6 +47,18 @@ export interface DetailedSessionAnalysis {
   formatType: 'time' | 'mastery' | 'questions' | 'infinite'
 }
 
+export interface LongitudinalComparison {
+  contentName: string
+  baselineSession: DbSessionRecord
+  latestSession: DbSessionRecord
+  totalAttempts: number
+  rawAccuracyDelta: number // ej: +20%
+  normalizedAccuracyDelta: number // ej: +25%
+  responseTimeDeltaMs: number // ej: -450ms (negativo = más rápido)
+  rpmDelta: number // ej: +5.5 RPM
+  isImproved: boolean
+}
+
 export interface AnalyticsMetrics {
   modeFilter: AnalyticsModeFilter
   filteredSessionsCount: number
@@ -65,6 +77,7 @@ export interface AnalyticsMetrics {
   mostDifficultNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
   strongestNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
   sessionPsychometricsList: DetailedSessionAnalysis[]
+  longitudinalComparisons: LongitudinalComparison[]
 }
 
 export function isSequenceSession(s: DbSessionRecord): boolean {
@@ -104,12 +117,10 @@ export function filterSessionsAdvanced(
   filters: AnalyticsFilterOptions
 ): DbSessionRecord[] {
   return sessions.filter((s) => {
-    // 1. Filtro Modalidad
     if (filters.mode === 'single_note' && !isSingleNoteSession(s)) return false
     if (filters.mode === 'intervals' && !isIntervalSession(s)) return false
     if (filters.mode === 'sequences' && !isSequenceSession(s)) return false
 
-    // 2. Filtro Instrumento
     if (
       filters.instrumentId &&
       filters.instrumentId !== 'all' &&
@@ -118,12 +129,10 @@ export function filterSessionsAdvanced(
       return false
     }
 
-    // 3. Filtro Estrategia
     if (filters.strategyId && filters.strategyId !== 'all' && s.strategyId !== filters.strategyId) {
       return false
     }
 
-    // 4. Filtro Formato
     const name = (s.presetName || '').toLowerCase()
     const isTimed = name.includes('tiempo') || name.includes('cronometrado')
     const isMastery = name.includes('maestría') || name.includes('mastery')
@@ -132,13 +141,11 @@ export function filterSessionsAdvanced(
     if (filters.format === 'mastery' && !isMastery) return false
     if (filters.format === 'questions' && (isTimed || isMastery)) return false
 
-    // 5. Filtro Nivel de Dominio
     if (filters.mastery === 'mastered' && s.accuracyPercentage < 85) return false
     if (filters.mastery === 'learning' && (s.accuracyPercentage < 50 || s.accuracyPercentage >= 85))
       return false
     if (filters.mastery === 'critical' && s.accuracyPercentage >= 50) return false
 
-    // 6. Búsqueda por texto
     if (filters.searchQuery && filters.searchQuery.trim().length > 0) {
       const q = filters.searchQuery.toLowerCase()
       const matchName = s.presetName.toLowerCase().includes(q)
@@ -155,6 +162,132 @@ export function filterSessionsByMode(
   modeFilter: AnalyticsModeFilter
 ): DbSessionRecord[] {
   return filterSessionsAdvanced(sessions, { mode: modeFilter })
+}
+
+export function reconstructSessionConfig(
+  session: DbSessionRecord,
+  allAnswers: DbAnswerRecord[]
+): AiExercisePrescription {
+  const sessionAnswers = allAnswers.filter((a) => a.sessionId === session.id)
+
+  let targetMode: 'single_note' | 'intervals' | 'sequences' = 'single_note'
+  if (isIntervalSession(session)) targetMode = 'intervals'
+  else if (isSequenceSession(session)) targetMode = 'sequences'
+
+  let recommendedNotes: number[] = [60, 62, 64]
+  let recommendedIntervals: number[] | undefined = undefined
+  let sequenceLength: number | undefined = undefined
+
+  if (targetMode === 'single_note') {
+    const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
+      (a, b) => a - b
+    )
+    recommendedNotes = uniqueNotes.length >= 2 ? uniqueNotes : [60, 62, 64]
+  } else if (targetMode === 'intervals') {
+    const stList: number[] = []
+    sessionAnswers.forEach((a) => {
+      const match = a.reasonTelemetry.match(/(\d+)\s*st/i)
+      if (match) stList.push(parseInt(match[1], 10))
+    })
+    recommendedIntervals = Array.from(new Set(stList)).sort((a, b) => a - b)
+    if (recommendedIntervals.length === 0) recommendedIntervals = [2, 4, 5, 7, 12]
+  } else if (targetMode === 'sequences') {
+    const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
+      (a, b) => a - b
+    )
+    recommendedNotes = uniqueNotes.length >= 2 ? uniqueNotes : [60, 62, 64, 65, 67]
+    sequenceLength =
+      sessionAnswers.length > 0 ? Math.min(6, Math.max(3, session.totalQuestions > 0 ? 3 : 4)) : 3
+  }
+
+  const name = (session.presetName || '').toLowerCase()
+  const isTimed = name.includes('tiempo') || name.includes('cronometrado')
+  const isMastery = name.includes('maestría') || name.includes('mastery')
+
+  const limitType = isTimed ? 'time' : isMastery ? 'mastery' : 'questions'
+  const durationMinutes = Math.max(1, Math.round((session.durationSeconds || 60) / 60))
+  const questionsCount = session.totalQuestions || 10
+
+  const validInstruments = ['acoustic_grand_piano', 'flute', 'violin', 'clarinet', 'acoustic_bass']
+  const instrumentId = validInstruments.includes(session.instrumentId)
+    ? (session.instrumentId as AiExercisePrescription['instrumentId'])
+    : 'acoustic_grand_piano'
+
+  return {
+    title: `Re-testeo: ${session.presetName}`,
+    rationale: `Sesión clonada de tu registro histórico (${new Date(session.createdAt).toLocaleDateString('es-AR')}) para evaluar evolución longitudinal bajo las mismas condiciones.`,
+    targetMode,
+    instrumentId,
+    recommendedNotes,
+    recommendedIntervals,
+    sequenceLength,
+    limitType,
+    questionsCount,
+    durationMinutes,
+    advanceMode: 'smart',
+    noteDurationMs: 500
+  }
+}
+
+export function computeLongitudinalComparisons(
+  sessionDetails: DetailedSessionAnalysis[]
+): LongitudinalComparison[] {
+  const groups = new Map<string, DetailedSessionAnalysis[]>()
+
+  // Agrupar sesiones por su contenido normalizado (ej: "Nivel 1 (C, D, E)")
+  sessionDetails.forEach((item) => {
+    let contentKey = item.session.presetName || 'General'
+    if (contentKey.includes('•')) {
+      contentKey = contentKey.split('•')[0].trim()
+    }
+    const groupKey = `${item.session.instrumentId}_${contentKey}`
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, [])
+    }
+    groups.get(groupKey)!.push(item)
+  })
+
+  const comparisons: LongitudinalComparison[] = []
+
+  groups.forEach((items) => {
+    if (items.length < 2) return
+
+    // Ordenar cronológicamente (más antigua = baseline, más reciente = latest)
+    const sorted = [...items].sort(
+      (a, b) => new Date(a.session.createdAt).getTime() - new Date(b.session.createdAt).getTime()
+    )
+
+    const baseline = sorted[0]
+    const latest = sorted[sorted.length - 1]
+
+    let contentName = latest.session.presetName || ''
+    if (contentName.includes('•')) {
+      contentName = contentName.split('•')[0].trim()
+    }
+
+    const rawAccuracyDelta = latest.session.accuracyPercentage - baseline.session.accuracyPercentage
+    const normalizedAccuracyDelta = latest.normalizedAccuracy - baseline.normalizedAccuracy
+    const responseTimeDeltaMs =
+      latest.session.avgResponseTimeMs - baseline.session.avgResponseTimeMs
+    const rpmDelta = Number((latest.responsesPerMinute - baseline.responsesPerMinute).toFixed(1))
+
+    const isImproved =
+      rawAccuracyDelta > 0 || (rawAccuracyDelta === 0 && responseTimeDeltaMs < -100)
+
+    comparisons.push({
+      contentName,
+      baselineSession: baseline.session,
+      latestSession: latest.session,
+      totalAttempts: sorted.length,
+      rawAccuracyDelta,
+      normalizedAccuracyDelta,
+      responseTimeDeltaMs,
+      rpmDelta,
+      isImproved
+    })
+  })
+
+  return comparisons
 }
 
 export function computeAnalyticsMetrics(
@@ -189,7 +322,8 @@ export function computeAnalyticsMetrics(
       topConfusions: [],
       mostDifficultNotes: [],
       strongestNotes: [],
-      sessionPsychometricsList: []
+      sessionPsychometricsList: [],
+      longitudinalComparisons: []
     }
   }
 
@@ -204,7 +338,6 @@ export function computeAnalyticsMetrics(
   const noteStatsMap = new Map<number, { attempts: number; correct: number }>()
   const confusionMap = new Map<string, number>()
 
-  // Análisis detallado por sesión
   const sessionPsychometricsList: DetailedSessionAnalysis[] = filteredSessions.map((session) => {
     const sAnswers = filteredAnswers.filter((a) => a.sessionId === session.id)
     const uniqueExpected = new Set(sAnswers.map((a) => a.expectedNote))
@@ -339,6 +472,8 @@ export function computeAnalyticsMetrics(
         )
       : 0
 
+  const longitudinalComparisons = computeLongitudinalComparisons(sessionPsychometricsList)
+
   return {
     modeFilter,
     filteredSessionsCount: filteredSessions.length,
@@ -356,77 +491,7 @@ export function computeAnalyticsMetrics(
     topConfusions,
     mostDifficultNotes,
     strongestNotes,
-    sessionPsychometricsList
-  }
-}
-
-export function reconstructSessionConfig(
-  session: DbSessionRecord,
-  allAnswers: DbAnswerRecord[]
-): AiExercisePrescription {
-  const sessionAnswers = allAnswers.filter((a) => a.sessionId === session.id)
-
-  // 1. Detección de Modalidad
-  let targetMode: 'single_note' | 'intervals' | 'sequences' = 'single_note'
-  if (isIntervalSession(session)) targetMode = 'intervals'
-  else if (isSequenceSession(session)) targetMode = 'sequences'
-
-  // 2. Reconstrucción del Pool de Notas / Intervalos
-  let recommendedNotes: number[] = [60, 62, 64]
-  let recommendedIntervals: number[] | undefined = undefined
-  let sequenceLength: number | undefined = undefined
-
-  if (targetMode === 'single_note') {
-    const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
-      (a, b) => a - b
-    )
-    recommendedNotes = uniqueNotes.length >= 2 ? uniqueNotes : [60, 62, 64]
-  } else if (targetMode === 'intervals') {
-    // Si fue de intervalos, extraer los semitonos practicados
-    const stList: number[] = []
-    sessionAnswers.forEach((a) => {
-      const match = a.reasonTelemetry.match(/(\d+)\s*st/i)
-      if (match) stList.push(parseInt(match[1], 10))
-    })
-    recommendedIntervals = Array.from(new Set(stList)).sort((a, b) => a - b)
-    if (recommendedIntervals.length === 0) recommendedIntervals = [2, 4, 5, 7, 12]
-  } else if (targetMode === 'sequences') {
-    const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
-      (a, b) => a - b
-    )
-    recommendedNotes = uniqueNotes.length >= 2 ? uniqueNotes : [60, 62, 64, 65, 67]
-    sequenceLength =
-      sessionAnswers.length > 0 ? Math.min(6, Math.max(3, session.totalQuestions > 0 ? 3 : 4)) : 3
-  }
-
-  // 3. Reconstrucción del Formato y Límite
-  const name = (session.presetName || '').toLowerCase()
-  const isTimed =
-    name.includes('tiempo') || name.includes('cronometrado') || session.durationSeconds >= 55
-  const isMastery = name.includes('maestría')
-
-  const limitType = isTimed ? 'time' : isMastery ? 'mastery' : 'questions'
-  const durationMinutes = Math.max(1, Math.round((session.durationSeconds || 60) / 60))
-  const questionsCount = session.totalQuestions || 10
-
-  // 4. Mapeo de Instrumento
-  const validInstruments = ['acoustic_grand_piano', 'flute', 'violin', 'clarinet', 'acoustic_bass']
-  const instrumentId = validInstruments.includes(session.instrumentId)
-    ? (session.instrumentId as AiExercisePrescription['instrumentId'])
-    : 'acoustic_grand_piano'
-
-  return {
-    title: `Re-testeo: ${session.presetName}`,
-    rationale: `Sesión clonada de tu registro histórico (${new Date(session.createdAt).toLocaleDateString('es-AR')}) para evaluar evolución longitudinal bajo las mismas condiciones.`,
-    targetMode,
-    instrumentId,
-    recommendedNotes,
-    recommendedIntervals,
-    sequenceLength,
-    limitType,
-    questionsCount,
-    durationMinutes,
-    advanceMode: 'smart',
-    noteDurationMs: 500
+    sessionPsychometricsList,
+    longitudinalComparisons
   }
 }

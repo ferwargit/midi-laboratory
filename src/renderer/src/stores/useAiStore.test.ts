@@ -22,7 +22,8 @@ describe('useAiStore - Store del Asistente de IA Local Segregado por Modalidad',
     topConfusions: [],
     mostDifficultNotes: [],
     strongestNotes: [],
-    sessionPsychometricsList: []
+    sessionPsychometricsList: [],
+    longitudinalComparisons: []
   }
 
   beforeEach(() => {
@@ -106,7 +107,6 @@ describe('useAiStore - Store del Asistente de IA Local Segregado por Modalidad',
   it('runAiDiagnostic debe recurrir al fallback y actualizar el estado si el servicio falla o no conecta', async () => {
     const saveCallback = vi.fn().mockResolvedValue(undefined)
 
-    // Mockeamos analyzeAndPrescribe para simular rechazo inmediato sin llamar a la GPU real
     vi.spyOn(LmStudioService.prototype, 'analyzeAndPrescribe').mockRejectedValueOnce(
       new Error('LM Studio no disponible en prueba unitaria')
     )

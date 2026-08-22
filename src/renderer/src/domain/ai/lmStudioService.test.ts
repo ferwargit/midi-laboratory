@@ -23,7 +23,8 @@ describe('ai - Servicios de IA, Prescripción y Circuit Breaker', () => {
     topConfusions: [{ expected: 'C#4', played: 'D4', count: 1 }],
     mostDifficultNotes: [{ noteName: 'C#4', accuracy: 50, attempts: 2 }],
     strongestNotes: [{ noteName: 'C4', accuracy: 100, attempts: 4 }],
-    sessionPsychometricsList: []
+    sessionPsychometricsList: [],
+    longitudinalComparisons: []
   }
 
   it('buildSystemPrompt y buildUserPrompt generan prompts válidos con el catálogo formal', () => {

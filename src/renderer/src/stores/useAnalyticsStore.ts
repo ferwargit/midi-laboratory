@@ -34,7 +34,8 @@ const emptyMetrics: AnalyticsMetrics = {
   topConfusions: [],
   mostDifficultNotes: [],
   strongestNotes: [],
-  sessionPsychometricsList: []
+  sessionPsychometricsList: [],
+  longitudinalComparisons: []
 }
 
 export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({

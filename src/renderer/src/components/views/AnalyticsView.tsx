@@ -7,7 +7,8 @@ import {
   AnalyticsMasteryFilter,
   filterSessionsAdvanced,
   DetailedSessionAnalysis,
-  reconstructSessionConfig
+  reconstructSessionConfig,
+  LongitudinalComparison
 } from '../../domain/analytics/historyAnalytics'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { INSTRUMENT_CATALOG } from '../../domain/music/instruments'
@@ -42,6 +43,67 @@ function formatDuration(totalSeconds: number): string {
   return `${mins}m ${secs}s`
 }
 
+// Generador de Diagnóstico Psicoacústico Explicativo para la UI
+function getPsychoacousticInterpretation(c: LongitudinalComparison): {
+  badge: string
+  badgeColor: string
+  explanation: string
+  actionableTip: string
+} {
+  const isAccuracyHigher = c.rawAccuracyDelta > 0
+  const isAccuracyStable = c.rawAccuracyDelta === 0 || c.rawAccuracyDelta === -1
+  const isSlower = c.responseTimeDeltaMs > 150
+  const isFaster = c.responseTimeDeltaMs < -150
+
+  if (isAccuracyHigher && isFaster) {
+    return {
+      badge: '🌟 CONSOLIDACIÓN ÓPTIMA',
+      badgeColor: 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300',
+      explanation: `Tu cerebro mejoró su precisión (+${c.rawAccuracyDelta}%) reduciendo el tiempo de reacción (${Math.abs(c.responseTimeDeltaMs)}ms más rápido). Esto evidencia una representación mental del tono más sólida y un acceso directo sin sobrepensamiento.`,
+      actionableTip:
+        'Recomendación: Estás listo para ampliar el pool de notas o aumentar la entropía agregando alteraciones cromáticas.'
+    }
+  }
+
+  if (isAccuracyHigher && isSlower) {
+    return {
+      badge: '🎯 MAYOR PRECISIÓN CON DEDUCCIÓN ACTIVA',
+      badgeColor: 'bg-sky-950/80 border-sky-500/60 text-sky-300',
+      explanation: `Lograste mayor exactitud (+${c.rawAccuracyDelta}%), pero requirió +${c.responseTimeDeltaMs}ms de procesamiento mental. Tu oído está discriminando bien, pero aún utiliza deducción interválica en lugar de reconocimiento de reflejo instantáneo.`,
+      actionableTip:
+        'Recomendación: Realizar sesiones cronometradas cortas (1 minuto) para acelerar la velocidad de decisión.'
+    }
+  }
+
+  if (isAccuracyStable && isSlower) {
+    return {
+      badge: '⚠️ PRECISIÓN ESTABLE CON FATIGA AUDITIVA',
+      badgeColor: 'bg-amber-950/80 border-amber-500/60 text-amber-300',
+      explanation: `Tu oído mantuvo la precisión casi intacta (${c.baselineSession.accuracyPercentage}% ➔ ${c.latestSession.accuracyPercentage}%), pero tardó +${c.responseTimeDeltaMs}ms más por nota. En psicoacústica, cuando la precisión se sostiene pero la latencia sube tras varias sesiones, es el síntoma clínico primario de fatiga auditiva (el cerebro tarda más en decodificar los armónicos).`,
+      actionableTip:
+        'Recomendación: Realizar una pausa de descanso auditivo de 15 minutos antes de la siguiente sesión.'
+    }
+  }
+
+  if (isAccuracyStable && isFaster) {
+    return {
+      badge: '⚡ MAYOR VELOCIDAD DE FLUJO',
+      badgeColor: 'bg-cyan-950/80 border-cyan-500/60 text-cyan-300',
+      explanation: `Mantuviste la misma tasa de acierto respondiendo ${Math.abs(c.responseTimeDeltaMs)}ms más rápido y aumentando tu cadencia en +${c.rpmDelta} RPM. Tu reflejo auditivo se está automatizando.`,
+      actionableTip:
+        'Recomendación: Mantener este formato para fijar el reflejo antes de subir de nivel.'
+    }
+  }
+
+  return {
+    badge: '🔄 NECESIDAD DE ANCLAJE TONAL',
+    badgeColor: 'bg-rose-950/80 border-rose-500/60 text-rose-300',
+    explanation: `Se detectó una disminución en la tasa de acierto (${c.rawAccuracyDelta}%) con un cambio en la velocidad de respuesta. Las notas conflictivas están generando interferencia perceptual transitoria.`,
+    actionableTip:
+      'Recomendación: Entrenar en Modo Maestría focalizado exclusivamente en los pares de notas conflictivas.'
+  }
+}
+
 export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React.ReactElement {
   const sessions = useDatabaseStore((state) => state.sessions)
   const answers = useDatabaseStore((state) => state.answers)
@@ -72,9 +134,13 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const [selectedMastery, setSelectedMastery] = useState<AnalyticsMasteryFilter>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
 
-  // Estado del Motor de Ordenamiento (Por defecto: más recientes primero)
+  // Estado de Ordenamiento
   const [sortKey, setSortKey] = useState<SortColumnKey>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+
+  // Temporizador de inferencia en vivo
+  const [reasoningSeconds, setReasoningSeconds] = useState<number>(0)
+  const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null)
 
   useEffect(() => {
     recomputeMetrics(sessions, answers)
@@ -88,15 +154,38 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     hydrateReportsByMode(aiReports, metrics)
   }, [aiReports, metrics, hydrateReportsByMode])
 
+  // Cronómetro de razonamiento en GPU (100% compliant con las reglas de React)
+  useEffect(() => {
+    if (!isAiAnalyzing) return
+
+    const startTime = Date.now()
+    const interval = setInterval(() => {
+      setReasoningSeconds(Math.max(0, Math.floor((Date.now() - startTime) / 1000)))
+    }, 1000)
+
+    return (): void => {
+      clearInterval(interval)
+    }
+  }, [isAiAnalyzing])
+
   const currentAiResponse = aiResponsesByMode[modeFilter]
 
-  // Función para alternar o cambiar columna de ordenamiento
+  const handleRunDiagnostic = async (): Promise<void> => {
+    setReasoningSeconds(0)
+    await runAiDiagnostic(metrics, saveAiReport)
+    const nowStr = new Date().toLocaleTimeString('es-AR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+    setLastGeneratedAt(nowStr)
+  }
+
   const handleSortClick = (column: SortColumnKey): void => {
     if (sortKey === column) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
     } else {
       setSortKey(column)
-      // Por defecto descendente para métricas numéricas y fechas, ascendente para texto
       const defaultDescColumns: SortColumnKey[] = [
         'date',
         'accuracy',
@@ -111,7 +200,6 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     }
   }
 
-  // Filtrado + Ordenamiento Clínico Computado
   const displayedAnalysisList: DetailedSessionAnalysis[] = useMemo(() => {
     const filteredRaw = filterSessionsAdvanced(sessions, {
       mode: modeFilter,
@@ -187,7 +275,6 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     (r) => modeFilter === 'all' || r.modeFilter === modeFilter
   )
 
-  // Renderizador de flecha de ordenamiento
   const renderSortIndicator = (column: SortColumnKey): React.ReactElement => {
     if (sortKey !== column) {
       return <span className="opacity-0 group-hover:opacity-40 ml-1">⇅</span>
@@ -378,7 +465,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         })}
       </div>
 
-      {/* 4. TABLA CLÍNICA DE SESIONES CON ORDENAMIENTO INTERACTIVO */}
+      {/* 4. TABLA CLÍNICA DE SESIONES CON ORDENAMIENTO Y ACCIÓN DE RE-TESTEO */}
       {activeTab === 'sessions' && (
         <Card className="space-y-3 bg-zinc-900/80 backdrop-blur-2xl border-zinc-800/80 shadow-2xl">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/80">
@@ -387,11 +474,11 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                 Registro Histórico y Telemetría Clínica ({displayedAnalysisList.length} sesiones)
               </h3>
               <p className="text-[11px] text-zinc-400 mt-0.5">
-                Haz clic en cualquier cabecera de columna para ordenar ascendente/descendente:
+                Haz clic en cualquier cabecera para ordenar o en 🔁 Re-testar para evaluar tu
+                evolución:
               </p>
             </div>
 
-            {/* Badge de orden activo */}
             <div className="text-[10px] font-mono bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded-lg text-zinc-400 flex items-center gap-1.5">
               <span>Orden:</span>
               <strong className="text-sky-400 uppercase">{sortKey}</strong>
@@ -410,11 +497,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
               <table className="w-full text-left text-xs font-mono">
                 <thead>
                   <tr className="border-b border-zinc-800 text-zinc-500 text-[10px] uppercase tracking-wider select-none">
-                    {/* 1. Fecha */}
                     <th
                       onClick={(): void => handleSortClick('date')}
                       className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por fecha y hora de sesión"
                     >
                       <div className="flex items-center">
                         <span>Fecha</span>
@@ -422,11 +507,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 2. Contenido & Timbre */}
                     <th
                       onClick={(): void => handleSortClick('content')}
                       className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar alfabéticamente por contenido/preset"
                     >
                       <div className="flex items-center">
                         <span>Contenido & Timbre</span>
@@ -434,11 +517,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 3. Formato */}
                     <th
                       onClick={(): void => handleSortClick('format')}
                       className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por formato (tiempo, preguntas, maestría)"
                     >
                       <div className="flex items-center">
                         <span>Formato</span>
@@ -446,11 +527,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 4. Carga (Pool) */}
                     <th
                       onClick={(): void => handleSortClick('pool')}
                       className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por tamaño del pool y entropía de Shannon"
                     >
                       <div className="flex items-center justify-center">
                         <span>Carga (Pool)</span>
@@ -458,11 +537,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 5. Preguntas */}
                     <th
                       onClick={(): void => handleSortClick('questions')}
                       className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por volumen de preguntas"
                     >
                       <div className="flex items-center justify-center">
                         <span>Preguntas</span>
@@ -470,11 +547,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 6. Duración */}
                     <th
                       onClick={(): void => handleSortClick('duration')}
                       className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por duración total en segundos"
                     >
                       <div className="flex items-center justify-center">
                         <span>Duración</span>
@@ -482,11 +557,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 7. Precisión */}
                     <th
                       onClick={(): void => handleSortClick('accuracy')}
                       className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por porcentaje de acierto crudo"
                     >
                       <div className="flex items-center justify-center">
                         <span>Precisión</span>
@@ -494,11 +567,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 8. Oído Real IRT */}
                     <th
                       onClick={(): void => handleSortClick('normalizedAccuracy')}
                       className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por precisión normalizada libre de azar"
                     >
                       <div className="flex items-center justify-center">
                         <span>Oído Real (IRT)</span>
@@ -506,11 +577,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 9. Reflejo Inmediato */}
                     <th
                       onClick={(): void => handleSortClick('fastPercent')}
                       className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por porcentaje de respuestas en <1.2s"
                     >
                       <div className="flex items-center justify-center">
                         <span>Reflejo (&lt;1.2s)</span>
@@ -518,11 +587,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 10. Sesgo */}
                     <th
                       onClick={(): void => handleSortClick('bias')}
                       className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por sesgo direccional dominante"
                     >
                       <div className="flex items-center justify-center">
                         <span>Sesgo</span>
@@ -530,11 +597,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                       </div>
                     </th>
 
-                    {/* 11. Cadencia / RPM */}
                     <th
                       onClick={(): void => handleSortClick('rpm')}
                       className="pb-2.5 text-right cursor-pointer hover:text-zinc-200 transition-colors group"
-                      title="Ordenar por respuestas por minuto (velocidad de flujo)"
                     >
                       <div className="flex items-center justify-end">
                         <span>Cadencia</span>
@@ -695,44 +760,238 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         </Card>
       )}
 
-      {/* TAB 2: DIAGNÓSTICO IA */}
+      {/* TAB 2: DIAGNÓSTICO IA CON HUD DE RAZONAMIENTO EN VIVO Y DESGLOSE PSICOPEDAGÓGICO */}
       {activeTab === 'ai_report' && (
         <Card className="space-y-4 bg-zinc-900/80 backdrop-blur-2xl border-purple-900/40 shadow-2xl">
-          <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-zinc-800">
             <div>
-              <h3 className="text-base font-bold text-purple-400 m-0 tracking-tight">
-                ✨ Diagnóstico Psicoacústico ({modeFilter.toUpperCase()})
+              <h3 className="text-base font-bold text-purple-400 m-0 tracking-tight flex items-center gap-2">
+                <span>✨ Diagnóstico Psicoacústico ({modeFilter.toUpperCase()})</span>
               </h3>
-              <span className="text-[11px] text-zinc-500 font-mono">
-                Modelo: {currentAiResponse?.modelName || 'Iniciando...'}
-              </span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  Modelo: {currentAiResponse?.modelName || 'Qwen 3.5 en GPU NVIDIA'}
+                </span>
+                {lastGeneratedAt && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/80 text-emerald-300">
+                    ✅ Generado a las {lastGeneratedAt}
+                  </span>
+                )}
+              </div>
             </div>
 
             <Button
               size="sm"
               variant="primary"
               disabled={isAiAnalyzing}
-              onClick={(): void => {
-                runAiDiagnostic(metrics, saveAiReport)
-              }}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-[0_0_20px_rgba(168,85,247,0.3)] border border-purple-400/30"
+              onClick={handleRunDiagnostic}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-[0_0_20px_rgba(168,85,247,0.3)] border border-purple-400/30 shrink-0"
             >
               {isAiAnalyzing ? (
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                  <span>Razonando en GPU...</span>
+                  <span>Razonando en GPU ({reasoningSeconds}s)...</span>
                 </div>
               ) : (
-                '🔄 Generar Nueva Prescripción'
+                '🔄 Generar Diagnóstico & Comparativa'
               )}
             </Button>
           </div>
 
-          <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-800/80 text-xs text-zinc-300 leading-relaxed whitespace-pre-line font-sans">
-            {currentAiResponse?.analysisText || 'Generando informe...'}
-          </div>
+          {/* HUD VISUAL DE ESTADO EN TIEMPO REAL CUANDO EL MODELO ESTÁ PENSANDO EN LM STUDIO */}
+          {isAiAnalyzing && (
+            <div className="p-5 bg-purple-950/30 border border-purple-500/50 rounded-2xl space-y-3 font-mono animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="relative flex items-center justify-center">
+                  <span className="w-4 h-4 rounded-full bg-purple-400 animate-ping absolute" />
+                  <span className="w-3 h-3 rounded-full bg-purple-400" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-purple-200 m-0">
+                    🧠 El modelo de IA Local está razonando en GPU NVIDIA ({reasoningSeconds}{' '}
+                    segundos transcurridos)...
+                  </h4>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Analizando patrones de fatiga, velocidad de reflejo, correlación de sesgo
+                    direccional y calculando deltas de re-testeo.
+                  </p>
+                </div>
+              </div>
+              <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-purple-500 to-sky-400 animate-pulse" />
+              </div>
+            </div>
+          )}
 
-          {currentAiResponse?.prescription && (
+          {/* BANNER DE EVOLUCIÓN LONGITUDINAL CON DESGLOSE MATEMÁTICO Y EXPLICACIÓN PSICOPEDAGÓGICA */}
+          {metrics.longitudinalComparisons && metrics.longitudinalComparisons.length > 0 && (
+            <div className="p-4 bg-gradient-to-r from-sky-950/40 via-purple-950/40 to-zinc-900 rounded-2xl border border-sky-500/40 space-y-3 font-mono shadow-xl">
+              <div className="flex items-center justify-between text-xs pb-2 border-b border-sky-500/20">
+                <span className="font-bold text-sky-300 flex items-center gap-2">
+                  <span className="text-base">📈</span>
+                  <span className="tracking-wider uppercase">
+                    Evolución Longitudinal de Re-testeo (Test-Retest):
+                  </span>
+                </span>
+                <span className="text-[10px] text-zinc-400">
+                  {metrics.longitudinalComparisons.length} comparativa(s) activa(s)
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {metrics.longitudinalComparisons.map((c, i) => {
+                  const interp = getPsychoacousticInterpretation(c)
+                  const baselineDate = new Date(c.baselineSession.createdAt).toLocaleDateString(
+                    'es-AR',
+                    {
+                      day: '2-digit',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }
+                  )
+                  const latestDate = new Date(c.latestSession.createdAt).toLocaleDateString(
+                    'es-AR',
+                    {
+                      day: '2-digit',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }
+                  )
+
+                  return (
+                    <div
+                      key={i}
+                      className="p-4 bg-zinc-950/90 rounded-2xl border border-zinc-800 space-y-3 text-xs"
+                    >
+                      {/* Cabecera del Contenido */}
+                      <div className="flex justify-between items-center">
+                        <strong className="text-zinc-100 font-sans text-sm">{c.contentName}</strong>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-lg border text-[10px] font-bold font-mono ${interp.badgeColor}`}
+                        >
+                          {interp.badge}
+                        </span>
+                      </div>
+
+                      {/* Cuadrícula Comparativa: Baseline vs Retest vs Delta */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 p-3 bg-zinc-900/70 rounded-xl border border-zinc-800/80 text-[11px] font-mono">
+                        {/* 1. Baseline (Origen) */}
+                        <div className="space-y-1 p-2 bg-zinc-950 rounded-lg border border-zinc-800/60">
+                          <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold block">
+                            1. Baseline (Primer Intento: {baselineDate})
+                          </span>
+                          <div className="text-zinc-300">
+                            Precisión:{' '}
+                            <strong className="text-white">
+                              {c.baselineSession.accuracyPercentage}%
+                            </strong>{' '}
+                            ({c.baselineSession.correctAnswers}/{c.baselineSession.totalQuestions})
+                          </div>
+                          <div className="text-zinc-300">
+                            Latencia:{' '}
+                            <strong className="text-white">
+                              {(c.baselineSession.avgResponseTimeMs / 1000).toFixed(2)}s
+                            </strong>{' '}
+                            ({c.baselineSession.avgResponseTimeMs}ms)
+                          </div>
+                        </div>
+
+                        {/* 2. Retest (Último) */}
+                        <div className="space-y-1 p-2 bg-zinc-950 rounded-lg border border-zinc-800/60">
+                          <span className="text-[9px] uppercase tracking-wider text-sky-400 font-bold block">
+                            2. Retest (Último Intento: {latestDate})
+                          </span>
+                          <div className="text-zinc-300">
+                            Precisión:{' '}
+                            <strong className="text-white">
+                              {c.latestSession.accuracyPercentage}%
+                            </strong>{' '}
+                            ({c.latestSession.correctAnswers}/{c.latestSession.totalQuestions})
+                          </div>
+                          <div className="text-zinc-300">
+                            Latencia:{' '}
+                            <strong className="text-white">
+                              {(c.latestSession.avgResponseTimeMs / 1000).toFixed(2)}s
+                            </strong>{' '}
+                            ({c.latestSession.avgResponseTimeMs}ms)
+                          </div>
+                        </div>
+
+                        {/* 3. Deltas Matemáticos */}
+                        <div className="space-y-1 p-2 bg-zinc-950 rounded-lg border border-zinc-800/60">
+                          <span className="text-[9px] uppercase tracking-wider text-purple-400 font-bold block">
+                            3. Cálculo de Deltas (Δ)
+                          </span>
+                          <div className="text-zinc-300">
+                            Δ Precisión:{' '}
+                            <strong
+                              className={
+                                c.rawAccuracyDelta >= 0
+                                  ? 'text-emerald-400 font-bold'
+                                  : 'text-rose-400 font-bold'
+                              }
+                            >
+                              {c.latestSession.accuracyPercentage}% -{' '}
+                              {c.baselineSession.accuracyPercentage}% ={' '}
+                              {c.rawAccuracyDelta >= 0
+                                ? `+${c.rawAccuracyDelta}`
+                                : c.rawAccuracyDelta}
+                              %
+                            </strong>
+                          </div>
+                          <div className="text-zinc-300">
+                            Δ Latencia:{' '}
+                            <strong
+                              className={
+                                c.responseTimeDeltaMs <= 0
+                                  ? 'text-emerald-400 font-bold'
+                                  : 'text-amber-400 font-bold'
+                              }
+                            >
+                              {c.latestSession.avgResponseTimeMs}ms -{' '}
+                              {c.baselineSession.avgResponseTimeMs}ms ={' '}
+                              {c.responseTimeDeltaMs > 0
+                                ? `+${c.responseTimeDeltaMs}`
+                                : c.responseTimeDeltaMs}
+                              ms {c.responseTimeDeltaMs > 0 ? '(más lento)' : '(más rápido)'}
+                            </strong>
+                          </div>
+                          <div className="text-zinc-400 text-[10px]">
+                            Δ Cadencia: {c.rpmDelta >= 0 ? `+${c.rpmDelta}` : c.rpmDelta} RPM
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Interpretación Psicoacústica Detallada y Consejo */}
+                      <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800 space-y-1.5 font-sans">
+                        <div className="text-xs text-zinc-200 leading-relaxed">
+                          <strong className="text-sky-300 font-mono text-[11px] uppercase mr-1.5">
+                            Diagnóstico Clínico:
+                          </strong>
+                          {interp.explanation}
+                        </div>
+                        <div className="text-xs text-emerald-300/90 font-medium">
+                          💡 {interp.actionableTip}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* INFORME DE DIAGNÓSTICO EN LENGUAJE NATURAL EMITIDO POR LA IA */}
+          {!isAiAnalyzing && (
+            <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-800/80 text-xs text-zinc-300 leading-relaxed whitespace-pre-line font-sans shadow-inner">
+              {currentAiResponse?.analysisText || 'Generando informe psicométrico...'}
+            </div>
+          )}
+
+          {/* PRESCRIPCIÓN DE EJERCICIO ADAPTATIVO */}
+          {!isAiAnalyzing && currentAiResponse?.prescription && (
             <div className="p-4 bg-purple-950/30 border border-purple-800/60 rounded-2xl space-y-3.5 shadow-xl">
               <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
                 <div>
@@ -750,7 +1009,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
                 <Button
                   variant="success"
                   onClick={(): void => onLoadPrescription(currentAiResponse.prescription)}
-                  className="shrink-0 font-bold text-xs shadow-[0_0_20px_rgba(168,85,247,0.3)] cursor-pointer"
+                  className="shrink-0 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer"
                 >
                   🚀 Cargar y Ejecutar Ejercicio
                 </Button>

@@ -5,18 +5,18 @@ import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 describe('promptBuilder - Generación de Prompts Especializados y Telemetría Clínica', () => {
   const mockMetrics: AnalyticsMetrics = {
     modeFilter: 'single_note',
-    filteredSessionsCount: 1,
-    totalAnswers: 10,
-    totalCorrect: 8,
+    filteredSessionsCount: 2,
+    totalAnswers: 20,
+    totalCorrect: 16,
     overallAccuracy: 80,
     normalizedOverallAccuracy: 75,
     avgEntropyBits: 1.58,
     avgResponseTimeMs: 1350,
-    fastResponsesCount: 7,
-    mediumResponsesCount: 2,
-    slowResponsesCount: 1,
-    sharpBiasCount: 2,
-    flatBiasCount: 0,
+    fastResponsesCount: 14,
+    mediumResponsesCount: 4,
+    slowResponsesCount: 2,
+    sharpBiasCount: 3,
+    flatBiasCount: 1,
     topConfusions: [{ expected: 'C#4', played: 'D4', count: 2 }],
     mostDifficultNotes: [{ noteName: 'C#4', accuracy: 50, attempts: 4 }],
     strongestNotes: [{ noteName: 'C4', accuracy: 100, attempts: 6 }],
@@ -47,6 +47,42 @@ describe('promptBuilder - Generación de Prompts Especializados y Telemetría Cl
         dominantBias: 'sharp',
         formatType: 'time'
       }
+    ],
+    // Comparativa longitudinal de prueba (Baseline vs Retest)
+    longitudinalComparisons: [
+      {
+        contentName: 'Nivel 1 (C, D, E)',
+        baselineSession: {
+          id: 'session_base_1',
+          createdAt: new Date('2026-08-10T10:00:00Z').toISOString(),
+          strategyId: 'adaptive_v1',
+          instrumentId: 'acoustic_grand_piano',
+          presetName: 'Nivel 1 (C, D, E)',
+          totalQuestions: 10,
+          correctAnswers: 6,
+          accuracyPercentage: 60,
+          avgResponseTimeMs: 1800,
+          durationSeconds: 60
+        },
+        latestSession: {
+          id: 'session_test_1',
+          createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
+          strategyId: 'adaptive_v1',
+          instrumentId: 'acoustic_grand_piano',
+          presetName: 'Nivel 1 (C, D, E)',
+          totalQuestions: 10,
+          correctAnswers: 8,
+          accuracyPercentage: 80,
+          avgResponseTimeMs: 1350,
+          durationSeconds: 60
+        },
+        totalAttempts: 2,
+        rawAccuracyDelta: 20, // +20%
+        normalizedAccuracyDelta: 25,
+        responseTimeDeltaMs: -450, // 450ms más rápido
+        rpmDelta: 3.5, // +3.5 RPM
+        isImproved: true
+      }
     ]
   }
 
@@ -72,6 +108,11 @@ describe('promptBuilder - Generación de Prompts Especializados y Telemetría Cl
       expect(prompt).toContain('retención del contorno melódico')
       expect(prompt).toContain('sequenceLength')
     })
+
+    it('genera directivas globales integrales por defecto', () => {
+      const prompt = buildSystemPrompt('all')
+      expect(prompt).toContain('ENFOQUE CLÍNICO GLOBAL INTEGRAL')
+    })
   })
 
   describe('buildUserPrompt', () => {
@@ -85,6 +126,16 @@ describe('promptBuilder - Generación de Prompts Especializados y Telemetría Cl
       expect(prompt).toContain('"cadenciaRPM": 10')
       expect(prompt).toContain('"poolNotas": 3')
       expect(prompt).toContain('"sesgoDominante": "Hacia lo Agudo (+st)"')
+    })
+
+    it('empaqueta las comparativas longitudinales (Test-Retest) con sus Deltas calculados', () => {
+      const prompt = buildUserPrompt(mockMetrics)
+
+      expect(prompt).toContain('COMPARATIVAS LONGITUDINALES (TEST-RETEST DETECTADOS)')
+      expect(prompt).toContain('"contenido": "Nivel 1 (C, D, E)"')
+      expect(prompt).toContain('"deltaPrecision": "+20%"')
+      expect(prompt).toContain('"deltaLatenciaMs": "-450ms"')
+      expect(prompt).toContain('"deltaRPM": "+3.5 RPM"')
     })
 
     it('adapta las instrucciones clínicas según el customQueryType', () => {

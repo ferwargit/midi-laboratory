@@ -38,7 +38,8 @@ describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM', () 
     topConfusions: [],
     mostDifficultNotes: [],
     strongestNotes: [],
-    sessionPsychometricsList: []
+    sessionPsychometricsList: [],
+    longitudinalComparisons: []
   }
 
   it('valid payload accepted: debe aceptar y parsear un payload 100% válido', () => {
@@ -58,11 +59,9 @@ describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM', () 
   })
 
   it('missing prescription rejected: debe rechazar objetos que no tengan el bloque de prescripción o campos requeridos', () => {
-    // Falta prescription
     const missingPrescription = JSON.stringify({ analysisText: 'Solo texto' })
     expect(validateAndParseAiResponse(missingPrescription, 'qwen3.5')).toBeNull()
 
-    // Prescription con notas fuera de rango MIDI (< 21)
     const invalidNotes = JSON.stringify({
       analysisText: 'Texto',
       prescription: {
@@ -72,7 +71,6 @@ describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM', () 
     })
     expect(validateAndParseAiResponse(invalidNotes, 'qwen3.5')).toBeNull()
 
-    // Prescription con targetMode inventado
     const invalidMode = JSON.stringify({
       analysisText: 'Texto',
       prescription: {
@@ -87,7 +85,6 @@ describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM', () 
     const invalidPayload = 'corrupted data'
     const parsed = validateAndParseAiResponse(invalidPayload, 'qwen3.5')
 
-    // Si el validador da null, usamos generateAlgorithmicFallback
     const finalResponse = parsed || generateAlgorithmicFallback(mockMetrics)
 
     expect(finalResponse.source).toBe('algorithmic_fallback')

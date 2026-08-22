@@ -3,7 +3,8 @@ import {
   computeAnalyticsMetrics,
   filterSessionsByMode,
   filterSessionsAdvanced,
-  reconstructSessionConfig
+  reconstructSessionConfig,
+  computeLongitudinalComparisons
 } from './historyAnalytics'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
@@ -213,5 +214,72 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(prescription.limitType).toBe('time')
     expect(prescription.durationMinutes).toBe(3)
     expect(prescription.title).toContain('Re-testeo: Nivel 1')
+  })
+
+  it('computeLongitudinalComparisons calcula el Delta de mejora entre una sesión baseline y su retest', () => {
+    const session1: DbSessionRecord = {
+      id: 's_base',
+      createdAt: new Date('2026-08-10T10:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 1 (C, D, E) • Cronometrado 1m',
+      totalQuestions: 10,
+      correctAnswers: 6,
+      accuracyPercentage: 60,
+      avgResponseTimeMs: 1800,
+      durationSeconds: 60
+    }
+
+    const session2: DbSessionRecord = {
+      id: 's_latest',
+      createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 1 (C, D, E) • Cronometrado 1m',
+      totalQuestions: 15,
+      correctAnswers: 14,
+      accuracyPercentage: 93,
+      avgResponseTimeMs: 1200,
+      durationSeconds: 60
+    }
+
+    const comparisons = computeLongitudinalComparisons([
+      {
+        session: session1,
+        poolSize: 3,
+        entropyBits: 1.58,
+        chanceBaseline: 33,
+        normalizedAccuracy: 40,
+        responsesPerMinute: 10,
+        fastPercent: 20,
+        mediumPercent: 60,
+        slowPercent: 20,
+        sharpBiasCount: 2,
+        flatBiasCount: 0,
+        dominantBias: 'sharp',
+        formatType: 'time'
+      },
+      {
+        session: session2,
+        poolSize: 3,
+        entropyBits: 1.58,
+        chanceBaseline: 33,
+        normalizedAccuracy: 90,
+        responsesPerMinute: 15,
+        fastPercent: 80,
+        mediumPercent: 20,
+        slowPercent: 0,
+        sharpBiasCount: 0,
+        flatBiasCount: 0,
+        dominantBias: 'balanced',
+        formatType: 'time'
+      }
+    ])
+
+    expect(comparisons.length).toBe(1)
+    expect(comparisons[0].rawAccuracyDelta).toBe(33) // +33%
+    expect(comparisons[0].responseTimeDeltaMs).toBe(-600) // 600ms más rápido
+    expect(comparisons[0].rpmDelta).toBe(5) // +5 RPM
+    expect(comparisons[0].isImproved).toBe(true)
   })
 })

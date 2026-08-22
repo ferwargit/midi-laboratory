@@ -30,7 +30,7 @@ ENFOQUE CLÍNICO GLOBAL INTEGRAL:
 
   return `Eres un Profesor de Oído Musical y Psicoacústica de Élite (Item Response Theory & Auditory Perception Expert) especializado en piano y entrenamiento auditivo con hardware MIDI.
 Tu objetivo es analizar las métricas clínicas acumuladas de un alumno y devolver un JSON estricto con:
-1. 'analysisText': Diagnóstico psicopedagógico profundo, clínico, empático y detallado en español.
+1. 'analysisText': Diagnóstico psicopedagógico profundo, clínico, empático y detallado en español. Si detectas comparativas longitudinales (Test-Retest), debes felicitar o diagnosticar el Delta de evolución (Δ Precisión, Δ Latencia y Δ RPM).
 2. 'prescription': Configuración de ejercicio personalizada para corregir sus errores específicos.
 
 CATÁLOGO FORMAL DE PARÁMETROS DISPONIBLES EN EL SOFTWARE:
@@ -74,7 +74,7 @@ export function buildUserPrompt(
   customQueryType: 'general' | 'fatigue' | 'weekly_plan' = 'general'
 ): string {
   let instruction =
-    'Analiza exhaustivamente los patrones de error, sesgos de semitono (+st / -st), la precisión corregida por azar y las latencias cognitivas, y genera la prescripción de ejercicio óptima.'
+    'Analiza exhaustivamente los patrones de error, sesgos de semitono (+st / -st), la evolución longitudinal en los re-testeos y las latencias cognitivas, y genera la prescripción de ejercicio óptima.'
 
   if (customQueryType === 'fatigue') {
     instruction =
@@ -84,7 +84,7 @@ export function buildUserPrompt(
       'Diseña un plan de estudio semanal estructurado de 7 días combinando Nota Aislada, Intervalos y Secuencias según los puntos ciegos detectados.'
   }
 
-  // Telemetría clínica cronológica de sesiones de alta resolución
+  // Telemetría clínica cronológica de sesiones
   const sessionsTelemetry = (metrics.sessionPsychometricsList || []).slice(0, 10).map((s) => ({
     id: s.session.id,
     fecha: s.session.createdAt,
@@ -108,6 +108,22 @@ export function buildUserPrompt(
           : 'Equilibrado'
   }))
 
+  // Comparativas longitudinales de Re-testeo
+  const longitudinalTelemetry = (metrics.longitudinalComparisons || []).map((c) => ({
+    contenido: c.contentName,
+    intentosTotales: c.totalAttempts,
+    baselineFecha: c.baselineSession.createdAt,
+    baselinePrecision: `${c.baselineSession.accuracyPercentage}%`,
+    baselineLatenciaMs: c.baselineSession.avgResponseTimeMs,
+    retestFecha: c.latestSession.createdAt,
+    retestPrecision: `${c.latestSession.accuracyPercentage}%`,
+    retestLatenciaMs: c.latestSession.avgResponseTimeMs,
+    deltaPrecision: `${c.rawAccuracyDelta > 0 ? `+${c.rawAccuracyDelta}` : c.rawAccuracyDelta}%`,
+    deltaLatenciaMs: `${c.responseTimeDeltaMs > 0 ? `+${c.responseTimeDeltaMs}` : c.responseTimeDeltaMs}ms`,
+    deltaRPM: `${c.rpmDelta > 0 ? `+${c.rpmDelta}` : c.rpmDelta} RPM`,
+    estado: c.isImproved ? 'Progreso perceptual positivo' : 'Requiere consolidación'
+  }))
+
   return `Métricas Psicométricas del Alumno (Filtro analizado: ${metrics.modeFilter}):
 - Total Ejercicios Analizados: ${metrics.totalAnswers} en ${metrics.filteredSessionsCount} sesiones
 - Precisión Cruda Global: ${metrics.overallAccuracy}%
@@ -119,7 +135,9 @@ export function buildUserPrompt(
 - Top Pares de Confusión Recurrentes: ${JSON.stringify(metrics.topConfusions)}
 - Notas con Mayor Dificultad (<80%): ${JSON.stringify(metrics.mostDifficultNotes)}
 - Notas Consolidadas (>=80%): ${JSON.stringify(metrics.strongestNotes)}
-- Muestras Psicométricas Recientes: ${JSON.stringify((metrics.sessionPsychometricsList || []).slice(0, 8))}
+
+COMPARATIVAS LONGITUDINALES (TEST-RETEST DETECTADOS):
+${JSON.stringify(longitudinalTelemetry, null, 2)}
 
 TELEMETRÍA DETALLADA POR SESIÓN (ÚLTIMAS 10 SESIONES):
 ${JSON.stringify(sessionsTelemetry, null, 2)}
