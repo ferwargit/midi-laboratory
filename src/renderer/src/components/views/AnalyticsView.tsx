@@ -17,6 +17,7 @@ import { AnalyticsFilterBar } from './analytics/AnalyticsFilterBar'
 import { AnalyticsTabNav } from './analytics/AnalyticsTabNav'
 import { SessionsTableTab } from './analytics/SessionsTableTab'
 import { AiDiagnosticTab } from './analytics/AiDiagnosticTab'
+import { LongitudinalTab } from './analytics/LongitudinalTab'
 import { AiHistoryTab } from './analytics/AiHistoryTab'
 import { ConfusionMatrixTab } from './analytics/ConfusionMatrixTab'
 
@@ -213,11 +214,12 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         onMasteryChange={setSelectedMastery}
       />
 
-      {/* 3. Navegación de Pestañas */}
+      {/* 3. Navegación de 6 Pestañas Especializadas */}
       <AnalyticsTabNav
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         sessionsCount={displayedAnalysisList.length}
+        longitudinalCount={metrics.longitudinalComparisons?.length || 0}
         aiHistoryCount={filteredReports.length}
       />
 
@@ -246,12 +248,16 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         />
       )}
 
-      {activeTab === 'ai_history' && (
-        <AiHistoryTab
-          modeFilter={modeFilter}
-          filteredReports={filteredReports}
+      {activeTab === 'longitudinal' && (
+        <LongitudinalTab
+          comparisons={metrics.longitudinalComparisons || []}
+          answers={answers}
           onLoadPrescription={onLoadPrescription}
         />
+      )}
+
+      {activeTab === 'confusions' && (
+        <ConfusionMatrixTab modeFilter={modeFilter} metrics={metrics} />
       )}
 
       {activeTab === 'charts' && (
@@ -271,8 +277,12 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         />
       )}
 
-      {activeTab === 'confusions' && (
-        <ConfusionMatrixTab modeFilter={modeFilter} metrics={metrics} />
+      {activeTab === 'ai_history' && (
+        <AiHistoryTab
+          modeFilter={modeFilter}
+          filteredReports={filteredReports}
+          onLoadPrescription={onLoadPrescription}
+        />
       )}
     </div>
   )
