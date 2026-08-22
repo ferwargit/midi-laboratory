@@ -8,6 +8,7 @@ import { INSTRUMENT_CATALOG } from '../../../domain/music/instruments'
 import { Card } from '../../ui/Card'
 import { AiExercisePrescription } from '../../../domain/ai/types'
 import { SortColumnKey, SortDirection } from './types'
+import { PedagogicalTooltip } from '../../ui/PedagogicalTooltip'
 
 interface SessionsTableTabProps {
   displayedList: DetailedSessionAnalysis[]
@@ -50,7 +51,7 @@ export function SessionsTableTab({
             Registro Histórico y Telemetría Clínica ({displayedList.length} sesiones)
           </h3>
           <p className="text-[11px] text-zinc-400 mt-0.5">
-            Haz clic en cualquier cabecera para ordenar o en 🔁 Re-testar para evaluar tu evolución:
+            Pasa el mouse por los títulos con ⓘ para ver su explicación psicoacústica:
           </p>
         </div>
 
@@ -81,6 +82,7 @@ export function SessionsTableTab({
                     {renderSortIndicator('date')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('content')}
                   className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
@@ -90,6 +92,7 @@ export function SessionsTableTab({
                     {renderSortIndicator('content')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('format')}
                   className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
@@ -99,15 +102,19 @@ export function SessionsTableTab({
                     {renderSortIndicator('format')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('pool')}
                   className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
                 >
                   <div className="flex items-center justify-center">
-                    <span>Carga (Pool)</span>
+                    <PedagogicalTooltip conceptId="shannon_entropy">
+                      <span>Carga (Pool)</span>
+                    </PedagogicalTooltip>
                     {renderSortIndicator('pool')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('questions')}
                   className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
@@ -117,6 +124,7 @@ export function SessionsTableTab({
                     {renderSortIndicator('questions')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('duration')}
                   className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
@@ -126,6 +134,7 @@ export function SessionsTableTab({
                     {renderSortIndicator('duration')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('accuracy')}
                   className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
@@ -135,42 +144,55 @@ export function SessionsTableTab({
                     {renderSortIndicator('accuracy')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('normalizedAccuracy')}
                   className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
                 >
                   <div className="flex items-center justify-center">
-                    <span>Oído Real (IRT)</span>
+                    <PedagogicalTooltip conceptId="irt_normalized_accuracy">
+                      <span>Oído Real (IRT)</span>
+                    </PedagogicalTooltip>
                     {renderSortIndicator('normalizedAccuracy')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('fastPercent')}
                   className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
                 >
                   <div className="flex items-center justify-center">
-                    <span>Reflejo (&lt;1.2s)</span>
+                    <PedagogicalTooltip conceptId="cognitive_latency">
+                      <span>Reflejo (&lt;1.2s)</span>
+                    </PedagogicalTooltip>
                     {renderSortIndicator('fastPercent')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('bias')}
                   className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
                 >
                   <div className="flex items-center justify-center">
-                    <span>Sesgo</span>
+                    <PedagogicalTooltip conceptId="directional_bias">
+                      <span>Sesgo</span>
+                    </PedagogicalTooltip>
                     {renderSortIndicator('bias')}
                   </div>
                 </th>
+
                 <th
                   onClick={(): void => onSortClick('rpm')}
                   className="pb-2.5 text-right cursor-pointer hover:text-zinc-200 transition-colors group"
                 >
                   <div className="flex items-center justify-end">
-                    <span>Cadencia</span>
+                    <PedagogicalTooltip conceptId="responses_per_minute">
+                      <span>Cadencia</span>
+                    </PedagogicalTooltip>
                     {renderSortIndicator('rpm')}
                   </div>
                 </th>
+
                 <th className="pb-2.5 text-center">Acción</th>
               </tr>
             </thead>
@@ -260,13 +282,15 @@ export function SessionsTableTab({
                       </span>
                     </td>
                     <td className="py-3 text-center whitespace-nowrap">
-                      {item.dominantBias === 'sharp' ? (
-                        <span className="text-purple-400 text-[10px] font-bold">▲ +st Agudo</span>
-                      ) : item.dominantBias === 'flat' ? (
-                        <span className="text-amber-400 text-[10px] font-bold">▼ -st Grave</span>
-                      ) : (
-                        <span className="text-zinc-500 text-[10px]">● Neutro</span>
-                      )}
+                      <span className="text-zinc-300 text-[10px]">
+                        {item.dominantBias === 'sharp' ? (
+                          <span className="text-purple-400 font-bold">▲ +st Agudo</span>
+                        ) : item.dominantBias === 'flat' ? (
+                          <span className="text-amber-400 font-bold">▼ -st Grave</span>
+                        ) : (
+                          <span className="text-zinc-500">● Neutro</span>
+                        )}
+                      </span>
                     </td>
                     <td className="py-3 text-right text-sky-400 font-bold whitespace-nowrap">
                       {item.responsesPerMinute}{' '}
