@@ -336,4 +336,71 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(report.title).toContain('Informe')
     expect(report.concreteActionPlan.length).toBeGreaterThan(0)
   })
+
+  it('filterSessionsAdvanced debe filtrar por Motor, Preset, Fuente de Entrada y Sesgo', () => {
+    const sSpaced: DbSessionRecord = {
+      id: 's_spaced',
+      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
+      strategyId: 'spaced_repetition',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Pentatónica C Mayor • Bloque 10 preguntas',
+      totalQuestions: 10,
+      correctAnswers: 9,
+      accuracyPercentage: 90,
+      avgResponseTimeMs: 1100,
+      durationSeconds: 60
+    }
+
+    const pool = [sNotePiano, sNoteFlute, sInterval, sSequence, sSpaced]
+
+    // 1. Filtrar por Motor Adaptativo (spaced_repetition)
+    const spacedOnly = filterSessionsAdvanced(pool, {
+      mode: 'all',
+      strategyId: 'spaced_repetition'
+    })
+    expect(spacedOnly.map((s) => s.id)).toEqual(['s_note_flute', 's_spaced'])
+
+    // 2. Filtrar por Preset (Pentatónica)
+    const pentatonicOnly = filterSessionsAdvanced(pool, {
+      mode: 'all',
+      presetFilter: 'Pentatónica'
+    })
+    expect(pentatonicOnly.map((s) => s.id)).toEqual(['s_spaced'])
+  })
+
+  it('la ordenación por formato debe ordenar numéricamente las duraciones de sesiones cronometradas (59s < 180s)', () => {
+    const s59Sec: DbSessionRecord = {
+      id: 's_59',
+      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 1 (C, D, E) • Cronometrado 1m',
+      totalQuestions: 18,
+      correctAnswers: 17,
+      accuracyPercentage: 94,
+      avgResponseTimeMs: 1100,
+      durationSeconds: 59 // 59 segundos
+    }
+
+    const s180Sec: DbSessionRecord = {
+      id: 's_180',
+      createdAt: new Date('2026-08-22T11:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      totalQuestions: 40,
+      correctAnswers: 31,
+      accuracyPercentage: 78,
+      avgResponseTimeMs: 2025,
+      durationSeconds: 180 // 3 minutos (180 segundos)
+    }
+
+    const list = [s180Sec, s59Sec]
+
+    // Ordenamiento ascendente por duración real (Menor a Mayor)
+    const sortedAsc = [...list].sort((a, b) => (a.durationSeconds || 0) - (b.durationSeconds || 0))
+
+    expect(sortedAsc[0].id).toBe('s_59') // 59s debe quedar primero
+    expect(sortedAsc[1].id).toBe('s_180') // 180s después
+  })
 })

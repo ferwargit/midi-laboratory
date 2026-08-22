@@ -10,8 +10,11 @@ export interface AnalyticsFilterOptions {
   mode: AnalyticsModeFilter
   instrumentId?: string
   strategyId?: string
+  presetFilter?: string
   format?: 'all' | 'time' | 'questions' | 'mastery'
   mastery?: AnalyticsMasteryFilter
+  inputSource?: 'all' | 'hardware' | 'virtual'
+  biasFilter?: 'all' | 'sharp' | 'flat' | 'balanced'
   searchQuery?: string
 }
 
@@ -136,10 +139,12 @@ export function filterSessionsAdvanced(
   filters: AnalyticsFilterOptions
 ): DbSessionRecord[] {
   return sessions.filter((s) => {
+    // 1. Filtro Modalidad
     if (filters.mode === 'single_note' && !isSingleNoteSession(s)) return false
     if (filters.mode === 'intervals' && !isIntervalSession(s)) return false
     if (filters.mode === 'sequences' && !isSequenceSession(s)) return false
 
+    // 2. Filtro Instrumento
     if (
       filters.instrumentId &&
       filters.instrumentId !== 'all' &&
@@ -148,28 +153,39 @@ export function filterSessionsAdvanced(
       return false
     }
 
+    // 3. Filtro Estrategia / Motor
     if (filters.strategyId && filters.strategyId !== 'all' && s.strategyId !== filters.strategyId) {
       return false
     }
 
+    // 4. Filtro Preset / Contenido Musical
+    if (filters.presetFilter && filters.presetFilter !== 'all') {
+      const pName = (s.presetName || '').toLowerCase()
+      if (!pName.includes(filters.presetFilter.toLowerCase())) return false
+    }
+
+    // 5. Filtro Formato
     const name = (s.presetName || '').toLowerCase()
     const isTimed = name.includes('tiempo') || name.includes('cronometrado')
-    const isMastery = name.includes('maestría') || name.includes('mastery')
+    const isMastery = name.includes('maestría')
 
     if (filters.format === 'time' && !isTimed) return false
     if (filters.format === 'mastery' && !isMastery) return false
     if (filters.format === 'questions' && (isTimed || isMastery)) return false
 
+    // 6. Filtro Nivel de Dominio
     if (filters.mastery === 'mastered' && s.accuracyPercentage < 85) return false
     if (filters.mastery === 'learning' && (s.accuracyPercentage < 50 || s.accuracyPercentage >= 85))
       return false
     if (filters.mastery === 'critical' && s.accuracyPercentage >= 50) return false
 
+    // 7. Búsqueda por texto
     if (filters.searchQuery && filters.searchQuery.trim().length > 0) {
       const q = filters.searchQuery.toLowerCase()
-      const matchName = s.presetName.toLowerCase().includes(q)
-      const matchInst = s.instrumentId.toLowerCase().includes(q)
-      if (!matchName && !matchInst) return false
+      const matchName = (s.presetName || '').toLowerCase().includes(q)
+      const matchInst = (s.instrumentId || '').toLowerCase().includes(q)
+      const matchStrat = (s.strategyId || '').toLowerCase().includes(q)
+      if (!matchName && !matchInst && !matchStrat) return false
     }
 
     return true
@@ -411,7 +427,6 @@ export function computeAnalyticsMetrics(
     let virtualCount = 0
 
     sAnswers.forEach((ans) => {
-      // Calibración psicoacústica: < 1.4s es reflejo directo
       if (ans.responseTimeMs < 1400) sFast++
       else if (ans.responseTimeMs <= 2800) sMed++
       else sSlow++

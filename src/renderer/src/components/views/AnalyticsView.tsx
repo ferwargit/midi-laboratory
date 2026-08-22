@@ -17,10 +17,10 @@ import { AnalyticsFilterBar } from './analytics/AnalyticsFilterBar'
 import { AnalyticsTabNav } from './analytics/AnalyticsTabNav'
 import { SessionsTableTab } from './analytics/SessionsTableTab'
 import { AiDiagnosticTab } from './analytics/AiDiagnosticTab'
+import { AiConsultationTab } from './analytics/AiConsultationTab'
 import { LongitudinalTab } from './analytics/LongitudinalTab'
 import { AiHistoryTab } from './analytics/AiHistoryTab'
 import { ConfusionMatrixTab } from './analytics/ConfusionMatrixTab'
-import { AiConsultationTab } from './analytics/AiConsultationTab'
 
 interface AnalyticsViewProps {
   onLoadPrescription: (prescription: AiExercisePrescription) => void
@@ -30,7 +30,11 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const sessions = useDatabaseStore((state) => state.sessions)
   const answers = useDatabaseStore((state) => state.answers)
   const aiReports = useDatabaseStore((state) => state.aiReports)
+  const aiConsultations = useDatabaseStore((state) => state.aiConsultations)
   const saveAiReport = useDatabaseStore((state) => state.saveAiReport)
+  const saveAiConsultation = useDatabaseStore((state) => state.saveAiConsultation)
+  const deleteSession = useDatabaseStore((state) => state.deleteSession)
+  const deleteSessions = useDatabaseStore((state) => state.deleteSessions)
 
   const modeFilter = useAnalyticsStore((state) => state.modeFilter)
   const metrics = useAnalyticsStore((state) => state.metrics)
@@ -44,20 +48,20 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const checkLmStudioStatus = useAiStore((state) => state.checkLmStudioStatus)
   const hydrateReportsByMode = useAiStore((state) => state.hydrateReportsByMode)
 
-  const aiConsultations = useDatabaseStore((state) => state.aiConsultations)
-  const saveAiConsultation = useDatabaseStore((state) => state.saveAiConsultation)
-
-  const deleteSession = useDatabaseStore((state) => state.deleteSession)
-  const deleteSessions = useDatabaseStore((state) => state.deleteSessions)
-
   const [activeTab, setActiveTab] = useState<AnalyticsTabKey>('sessions')
 
-  // Filtros Secundarios
+  // Filtros Secundarios y de Estudio
   const [selectedInstrument, setSelectedInstrument] = useState<string>('all')
+  const [selectedStrategy, setSelectedStrategy] = useState<string>('all')
+  const [selectedPreset, setSelectedPreset] = useState<string>('all')
   const [selectedFormat, setSelectedFormat] = useState<'all' | 'time' | 'questions' | 'mastery'>(
     'all'
   )
   const [selectedMastery, setSelectedMastery] = useState<AnalyticsMasteryFilter>('all')
+  const [selectedInputSource, setSelectedInputSource] = useState<'all' | 'hardware' | 'virtual'>(
+    'all'
+  )
+  const [selectedBias, setSelectedBias] = useState<'all' | 'sharp' | 'flat' | 'balanced'>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
 
   // Estado de Ordenamiento
@@ -106,6 +110,17 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     setLastGeneratedAt(nowStr)
   }
 
+  const handleResetAllFilters = (): void => {
+    setSearchQuery('')
+    setSelectedInstrument('all')
+    setSelectedStrategy('all')
+    setSelectedPreset('all')
+    setSelectedFormat('all')
+    setSelectedMastery('all')
+    setSelectedInputSource('all')
+    setSelectedBias('all')
+  }
+
   const handleSortClick = (column: SortColumnKey): void => {
     if (sortKey === column) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
@@ -129,14 +144,26 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     const filteredRaw = filterSessionsAdvanced(sessions, {
       mode: modeFilter,
       instrumentId: selectedInstrument,
+      strategyId: selectedStrategy,
+      presetFilter: selectedPreset,
       format: selectedFormat,
       mastery: selectedMastery,
       searchQuery
     })
     const validIds = new Set(filteredRaw.map((s) => s.id))
-    const list = (metrics.sessionPsychometricsList || []).filter((item) =>
+    let list = (metrics.sessionPsychometricsList || []).filter((item) =>
       validIds.has(item.session.id)
     )
+
+    // Filtro por fuente de entrada (hardware vs virtual)
+    if (selectedInputSource !== 'all') {
+      list = list.filter((item) => item.inputMethod === selectedInputSource)
+    }
+
+    // Filtro por sesgo direccional
+    if (selectedBias !== 'all') {
+      list = list.filter((item) => item.dominantBias === selectedBias)
+    }
 
     return [...list].sort((a, b) => {
       let comparison = 0
@@ -149,9 +176,23 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         case 'content':
           comparison = (a.session.presetName || '').localeCompare(b.session.presetName || '')
           break
-        case 'format':
-          comparison = a.formatType.localeCompare(b.formatType)
+        case 'format': {
+          // CORRECCIÓN MATEMÁTICA: Cuando ambos son por tiempo, comparar la duración real en segundos (59s < 180s)
+          if (a.formatType === 'time' && b.formatType === 'time') {
+            comparison = (a.session.durationSeconds || 0) - (b.session.durationSeconds || 0)
+          } else if (a.formatType === 'questions' && b.formatType === 'questions') {
+            comparison = (a.session.totalQuestions || 0) - (b.session.totalQuestions || 0)
+          } else {
+            const formatRank: Record<string, number> = {
+              time: 1,
+              mastery: 2,
+              questions: 3,
+              infinite: 4
+            }
+            comparison = (formatRank[a.formatType] || 0) - (formatRank[b.formatType] || 0)
+          }
           break
+        }
         case 'pool':
           comparison = a.poolSize - b.poolSize || a.entropyBits - b.entropyBits
           break
@@ -188,8 +229,12 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     sessions,
     modeFilter,
     selectedInstrument,
+    selectedStrategy,
+    selectedPreset,
     selectedFormat,
     selectedMastery,
+    selectedInputSource,
+    selectedBias,
     searchQuery,
     metrics,
     sortKey,
@@ -205,7 +250,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       {/* 1. KPIs Psicométricos Superiores */}
       <AnalyticsKpiCards metrics={metrics} totalFilteredSessions={displayedAnalysisList.length} />
 
-      {/* 2. Barra de Filtros Multidimensionales */}
+      {/* 2. Barra de Filtros Multidimensionales con 3 Filas y Reset */}
       <AnalyticsFilterBar
         modeFilter={modeFilter}
         onSelectModeFilter={(m): void => setModeFilter(m, sessions, answers)}
@@ -215,13 +260,22 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         onSearchChange={setSearchQuery}
         selectedInstrument={selectedInstrument}
         onInstrumentChange={setSelectedInstrument}
+        selectedStrategy={selectedStrategy}
+        onStrategyChange={setSelectedStrategy}
+        selectedPreset={selectedPreset}
+        onPresetChange={setSelectedPreset}
         selectedFormat={selectedFormat}
         onFormatChange={setSelectedFormat}
         selectedMastery={selectedMastery}
         onMasteryChange={setSelectedMastery}
+        selectedInputSource={selectedInputSource}
+        onInputSourceChange={setSelectedInputSource}
+        selectedBias={selectedBias}
+        onBiasChange={setSelectedBias}
+        onResetAllFilters={handleResetAllFilters}
       />
 
-      {/* 3. Navegación de 6 Pestañas Especializadas */}
+      {/* 3. Navegación de Pestañas */}
       <AnalyticsTabNav
         activeTab={activeTab}
         onSelectTab={setActiveTab}
