@@ -61,12 +61,12 @@ export function IntervalsView({
   return (
     <div className="space-y-3">
       {/* 2. CABECERA DINÁMICA */}
-      <div className="flex justify-between items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-lg">
+      <div className="flex justify-between items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-lg h-14">
         <div className="flex items-center gap-3 font-mono">
-          <span className="px-2 py-0.5 rounded-md bg-sky-950/80 border border-sky-800 text-sky-300 text-[10px] font-bold">
+          <span className="px-2 py-0.5 rounded-md bg-sky-950/80 border border-sky-800 text-sky-300 text-xs font-bold">
             MODO 02
           </span>
-          <span className="text-xs text-zinc-300 font-semibold">
+          <span className="text-xs md:text-sm text-zinc-200 font-semibold">
             {trainer.isSessionActive
               ? getSessionProgressLabel()
               : `Reconocimiento Interválico (${trainer.activeIntervals.length} activos)`}

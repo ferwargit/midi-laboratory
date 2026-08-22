@@ -128,12 +128,12 @@ export function SingleNoteView({
   return (
     <div className="space-y-2.5">
       {/* 2. CABECERA DE SESIÓN DINÁMICA */}
-      <div className="flex justify-between items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2 rounded-2xl shadow-lg h-[52px]">
+      <div className="flex justify-between items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-lg h-14">
         <div className="flex items-center gap-3 font-mono">
-          <span className="px-2 py-0.5 rounded-md bg-sky-950/80 border border-sky-800 text-sky-300 text-[10px] font-bold">
+          <span className="px-2 py-0.5 rounded-md bg-sky-950/80 border border-sky-800 text-sky-300 text-xs font-bold">
             MODO 01
           </span>
-          <span className="text-xs text-zinc-300 font-semibold">
+          <span className="text-xs md:text-sm text-zinc-200 font-semibold">
             {trainer.isSessionActive
               ? getSessionProgressLabel()
               : `Discriminación de Altura Absoluta (${trainer.activeNotes.length} tonos activos)`}
@@ -146,7 +146,7 @@ export function SingleNoteView({
               variant="success"
               size="md"
               onClick={trainer.startSession}
-              className="px-5 py-1.5 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+              className="px-5 py-2 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)]"
             >
               ▶ COMENZAR SESIÓN
             </Button>
@@ -174,8 +174,8 @@ export function SingleNoteView({
       )}
 
       {/* 4. PIANO HERO CENTRAL (ANCLADO EN POSICIÓN IDÉNTICA) */}
-      <div className="space-y-1">
-        <div className="flex justify-between items-center text-[10px] font-mono text-zinc-400 px-1">
+      <div className="space-y-1.5">
+        <div className="flex justify-between items-center text-[11px] font-mono text-zinc-400 px-1">
           <span>
             {trainer.isSessionActive
               ? '🎹 ENTRADA MIDI EN VIVO (TOCA EN EL FP-8 O CLIC VIRTUAL):'
@@ -203,7 +203,7 @@ export function SingleNoteView({
 
       {/* 5. DECK DE CONFIGURACIÓN (CUANDO NO HAY SESIÓN ACTIVA) */}
       {!trainer.isSessionActive && (
-        <Card className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-3.5 space-y-3 rounded-2xl">
+        <Card className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-4 space-y-4 rounded-2xl">
           {/* PRESETS RÁPIDOS */}
           <div>
             <span className="block text-[10px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5 font-bold">

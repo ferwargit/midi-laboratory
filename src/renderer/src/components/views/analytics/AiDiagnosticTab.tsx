@@ -4,6 +4,7 @@ import { midiNoteToName } from '../../../domain/music/noteUtils'
 import { Card } from '../../ui/Card'
 import { Button } from '../../ui/Button'
 import { AiAnalysisResponse, AiExercisePrescription } from '../../../domain/ai/types'
+import { MarkdownRenderer } from '../../ui/MarkdownRenderer'
 
 interface AiDiagnosticTabProps {
   modeFilter: AnalyticsModeFilter
@@ -14,6 +15,13 @@ interface AiDiagnosticTabProps {
   metrics: AnalyticsMetrics
   onRunDiagnostic: () => void
   onLoadPrescription: (p: AiExercisePrescription) => void
+}
+
+function formatReasoningTime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
 export function AiDiagnosticTab({
@@ -27,18 +35,20 @@ export function AiDiagnosticTab({
 }: AiDiagnosticTabProps): React.ReactElement {
   return (
     <Card className="space-y-4 bg-zinc-900/80 backdrop-blur-2xl border-purple-900/40 shadow-2xl">
-      {/* Cabecera con botón de acción y modelo */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-zinc-800">
         <div>
           <h3 className="text-base font-bold text-purple-400 m-0 tracking-tight flex items-center gap-2">
             <span>✨ Diagnóstico Psicoacústico Actual ({modeFilter.toUpperCase()})</span>
           </h3>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-[11px] text-zinc-500 font-mono">
-              Modelo: {currentAiResponse?.modelName || 'Qwen 3.5 en GPU NVIDIA'}
+            <span className="text-xs text-zinc-400 font-mono">
+              🏷️ Modelo:{' '}
+              <strong className="text-zinc-200">
+                {currentAiResponse?.modelName || 'Qwen 3.5 en GPU NVIDIA'}
+              </strong>
             </span>
             {lastGeneratedAt && (
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/80 text-emerald-300">
+              <span className="text-xs font-mono px-2.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 font-semibold">
                 ✅ Generado a las {lastGeneratedAt}
               </span>
             )}
@@ -55,7 +65,7 @@ export function AiDiagnosticTab({
           {isAiAnalyzing ? (
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-              <span>Razonando en GPU ({reasoningSeconds}s)...</span>
+              <span>Razonando en GPU ({formatReasoningTime(reasoningSeconds)})...</span>
             </div>
           ) : (
             '🔄 Generar Nuevo Diagnóstico'
@@ -63,7 +73,7 @@ export function AiDiagnosticTab({
         </Button>
       </div>
 
-      {/* HUD de Razonamiento en GPU */}
+      {/* HUD de Razonamiento */}
       {isAiAnalyzing && (
         <div className="p-5 bg-purple-950/30 border border-purple-500/50 rounded-2xl space-y-3 font-mono animate-pulse">
           <div className="flex items-center gap-3">
@@ -73,7 +83,8 @@ export function AiDiagnosticTab({
             </div>
             <div>
               <h4 className="text-sm font-bold text-purple-200 m-0">
-                🧠 El modelo de IA Local está razonando en GPU NVIDIA ({reasoningSeconds}s)...
+                🧠 El modelo de IA Local está razonando en GPU NVIDIA (
+                {formatReasoningTime(reasoningSeconds)})...
               </h4>
               <p className="text-xs text-zinc-400 mt-0.5">
                 Analizando patrones de fatiga, velocidad de reflejo, correlación de sesgo
@@ -87,26 +98,30 @@ export function AiDiagnosticTab({
         </div>
       )}
 
-      {/* Informe Textual Clínico de la IA */}
+      {/* Informe Textual con Markdown Renderer */}
       {!isAiAnalyzing && (
-        <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-800/80 text-xs text-zinc-300 leading-relaxed whitespace-pre-line font-sans shadow-inner">
-          {currentAiResponse?.analysisText ||
-            'Presiona "Generar Nuevo Diagnóstico" para analizar las sesiones.'}
+        <div className="p-5 bg-zinc-950/80 rounded-2xl border border-zinc-800/80 shadow-inner">
+          <MarkdownRenderer
+            content={
+              currentAiResponse?.analysisText ||
+              'Presiona "Generar Nuevo Diagnóstico" para analizar las sesiones.'
+            }
+          />
         </div>
       )}
 
-      {/* Prescripción de Ejercicio Adaptativo */}
+      {/* Prescripción */}
       {!isAiAnalyzing && currentAiResponse?.prescription && (
         <div className="p-4 bg-purple-950/30 border border-purple-800/60 rounded-2xl space-y-3.5 shadow-xl">
           <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
             <div>
-              <span className="text-[10px] text-purple-400 font-mono uppercase tracking-wider font-bold block">
+              <span className="text-xs text-purple-400 font-mono uppercase tracking-wider font-bold block">
                 🎯 Prescripción Pedagógica Diseñada a Medida:
               </span>
               <h4 className="text-base font-bold text-zinc-100 mt-1 m-0">
                 {currentAiResponse.prescription.title}
               </h4>
-              <p className="text-xs text-zinc-400 mt-1 leading-normal">
+              <p className="text-xs md:text-sm text-zinc-300 mt-1 leading-normal">
                 {currentAiResponse.prescription.rationale}
               </p>
             </div>
@@ -120,28 +135,28 @@ export function AiDiagnosticTab({
             </Button>
           </div>
 
-          <div className="flex flex-wrap gap-2 text-[11px] font-mono pt-3 border-t border-purple-900/40">
-            <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
+          <div className="flex flex-wrap gap-2 text-xs font-mono pt-3 border-t border-purple-900/40">
+            <span className="px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
               Modo:{' '}
               <strong className="text-sky-300">{currentAiResponse.prescription.targetMode}</strong>
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
+            <span className="px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
               Timbre:{' '}
               <strong className="text-emerald-300">
                 {currentAiResponse.prescription.instrumentId}
               </strong>
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
+            <span className="px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
               Criterio:{' '}
               <strong className="text-amber-300">{currentAiResponse.prescription.limitType}</strong>
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
+            <span className="px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
               Avance:{' '}
               <strong className="text-purple-300">
                 {currentAiResponse.prescription.advanceMode}
               </strong>
             </span>
-            <span className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
+            <span className="px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
               Tonos:{' '}
               <strong className="text-white">
                 {currentAiResponse.prescription.recommendedNotes
