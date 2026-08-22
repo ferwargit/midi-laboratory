@@ -6,6 +6,8 @@ import {
 import { INSTRUMENT_CATALOG } from '../../../domain/music/instruments'
 import { AVAILABLE_STRATEGIES } from '../../../domain/adaptation/adaptiveEngine'
 import { EXERCISE_PRESETS } from '../../../domain/music/presets'
+import { INTERVAL_PRESETS } from '../../../domain/music/intervals'
+import { SEQUENCE_PRESETS } from '../../../domain/music/sequences'
 import { KnowledgeGuideModal } from '../guide/KnowledgeGuideModal'
 
 interface AnalyticsFilterBarProps {
@@ -66,6 +68,14 @@ export function AnalyticsFilterBar({
     selectedMastery !== 'all' ||
     selectedInputSource !== 'all' ||
     selectedBias !== 'all'
+
+  // Presets dinámicos según la modalidad activa
+  const dynamicPresets =
+    modeFilter === 'intervals'
+      ? INTERVAL_PRESETS.map((p) => ({ id: p.id, name: p.name }))
+      : modeFilter === 'sequences'
+        ? SEQUENCE_PRESETS.map((p) => ({ id: p.id, name: p.name }))
+        : EXERCISE_PRESETS.map((p) => ({ id: p.id, name: p.name }))
 
   return (
     <>
@@ -141,10 +151,10 @@ export function AnalyticsFilterBar({
           <select
             value={selectedPreset}
             onChange={(e): void => onPresetChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
             <option value="all">🎵 Todos los Presets</option>
-            {EXERCISE_PRESETS.map((p) => (
+            {dynamicPresets.map((p) => (
               <option key={p.id} value={p.name}>
                 {p.name}
               </option>
@@ -155,7 +165,7 @@ export function AnalyticsFilterBar({
           <select
             value={selectedInstrument}
             onChange={(e): void => onInstrumentChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
             <option value="all">🎹 Todos los Timbres</option>
             {INSTRUMENT_CATALOG.map((inst) => (
@@ -168,7 +178,7 @@ export function AnalyticsFilterBar({
           <select
             value={selectedStrategy}
             onChange={(e): void => onStrategyChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
             <option value="all">🧠 Todos los Motores</option>
             {AVAILABLE_STRATEGIES.map((st) => (
@@ -226,7 +236,6 @@ export function AnalyticsFilterBar({
             <option value="balanced">● Neutro / Equilibrado</option>
           </select>
 
-          {/* Botón de Limpieza Rápida */}
           <button
             type="button"
             disabled={!hasActiveFilters}

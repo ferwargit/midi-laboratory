@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { AnalyticsFilterBar } from './AnalyticsFilterBar'
 
-describe('AnalyticsFilterBar - Barra de Filtros Multidimensionales y Botón de Limpieza', () => {
+describe('AnalyticsFilterBar - Barra de Filtros Multidimensionales y Presets Dinámicos', () => {
   const defaultProps = {
     modeFilter: 'all' as const,
     onSelectModeFilter: vi.fn(),
@@ -54,7 +54,6 @@ describe('AnalyticsFilterBar - Barra de Filtros Multidimensionales y Botón de L
     const resetBtn = screen.getByTitle(/Restablecer todos los filtros/i)
     expect(resetBtn.hasAttribute('disabled')).toBe(true)
 
-    // Simulamos un filtro activo (ej: búsqueda)
     const onResetAllFilters = vi.fn()
     rerender(
       <AnalyticsFilterBar
@@ -67,5 +66,19 @@ describe('AnalyticsFilterBar - Barra de Filtros Multidimensionales y Botón de L
     expect(resetBtn.hasAttribute('disabled')).toBe(false)
     fireEvent.click(resetBtn)
     expect(onResetAllFilters).toHaveBeenCalledTimes(1)
+  })
+
+  it('debe adaptar dinámicamente las opciones del selector de presets según la modalidad activa', () => {
+    // 1. Modalidad Single Note -> Muestra "Nivel 3 (Octava Diatónica C4-C5)"
+    const { rerender } = render(<AnalyticsFilterBar {...defaultProps} modeFilter="single_note" />)
+    expect(screen.getByText('Nivel 3 (Octava Diatónica C4-C5)')).toBeDefined()
+
+    // 2. Modalidad Intervalos -> Muestra "Nivel 1.1: Intervalos Clásicos (2M, 3M, 4J, 5J, 8J)"
+    rerender(<AnalyticsFilterBar {...defaultProps} modeFilter="intervals" />)
+    expect(screen.getByText('Nivel 1.1: Intervalos Clásicos (2M, 3M, 4J, 5J, 8J)')).toBeDefined()
+
+    // 3. Modalidad Secuencias -> Muestra "Nivel 2.0: 3 Notas por Grados Conjuntos"
+    rerender(<AnalyticsFilterBar {...defaultProps} modeFilter="sequences" />)
+    expect(screen.getByText('Nivel 2.0: 3 Notas por Grados Conjuntos')).toBeDefined()
   })
 })

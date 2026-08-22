@@ -403,4 +403,57 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(sortedAsc[0].id).toBe('s_59') // 59s debe quedar primero
     expect(sortedAsc[1].id).toBe('s_180') // 180s después
   })
+
+  it('filterSessionsAdvanced debe coincidir semánticamente Nivel 3 con nombres canónicos y alias históricos', () => {
+    const sLegacyOctavaDiatonica: DbSessionRecord = {
+      id: 's_legacy_1',
+      createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      totalQuestions: 40,
+      correctAnswers: 31,
+      accuracyPercentage: 78,
+      avgResponseTimeMs: 2025,
+      durationSeconds: 180
+    }
+
+    const sCanonicalName: DbSessionRecord = {
+      id: 's_canon_1',
+      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
+      totalQuestions: 40,
+      correctAnswers: 35,
+      accuracyPercentage: 88,
+      avgResponseTimeMs: 1400,
+      durationSeconds: 180
+    }
+
+    const sLegacyC4aC5: DbSessionRecord = {
+      id: 's_legacy_2',
+      createdAt: new Date('2026-08-20T10:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 3 (C4 a C5) • Cronometrado 3m',
+      totalQuestions: 40,
+      correctAnswers: 30,
+      accuracyPercentage: 75,
+      avgResponseTimeMs: 1900,
+      durationSeconds: 180
+    }
+
+    const pool = [sLegacyOctavaDiatonica, sCanonicalName, sLegacyC4aC5]
+
+    // Al filtrar por el nombre canónico del selector:
+    const matched = filterSessionsAdvanced(pool, {
+      mode: 'single_note',
+      presetFilter: 'Nivel 3 (Octava Diatónica C4-C5)'
+    })
+
+    // Debe coincidir con las 3 variaciones históricas sin perder ninguna sesión
+    expect(matched.length).toBe(3)
+    expect(matched.map((s) => s.id)).toEqual(['s_legacy_1', 's_canon_1', 's_legacy_2'])
+  })
 })

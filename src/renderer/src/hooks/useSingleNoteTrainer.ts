@@ -11,6 +11,7 @@ import { createStrategy } from '../domain/adaptation/adaptiveEngine'
 import { InstrumentProfile, getInstrumentById } from '../domain/music/instruments'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
+import { resolveNotePresetName } from '../domain/music/presets'
 
 interface TrainerOptions {
   onPlayStimulus: (noteNumber: number, decision: SelectionDecision) => void
@@ -406,22 +407,8 @@ export function useSingleNoteTrainer({
     const finalInstrument = activeSessionInstrumentRef.current
 
     const activePool = activeNotesBufferRef.current
-    let contentName = `Notas Personalizadas (${activePool.length})`
-
-    if (
-      activePool.length === 3 &&
-      activePool.includes(60) &&
-      activePool.includes(62) &&
-      activePool.includes(64)
-    ) {
-      contentName = 'Nivel 1 (C, D, E)'
-    } else if (activePool.length === 5 && activePool.includes(60) && activePool.includes(67)) {
-      contentName = 'Nivel 2 (C a G)'
-    } else if (activePool.length === 8 && activePool.includes(60) && activePool.includes(72)) {
-      contentName = 'Nivel 3 (Octava Diatónica)'
-    } else if (activePool.length === 13) {
-      contentName = 'Nivel 4 (Cromático C4-C5)'
-    }
+    // Resolución automática canónica desde la fuente única de verdad
+    const contentName = resolveNotePresetName(activePool)
 
     const formatTag =
       finalLimitType === 'time'

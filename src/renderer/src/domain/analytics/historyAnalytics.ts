@@ -158,10 +158,39 @@ export function filterSessionsAdvanced(
       return false
     }
 
-    // 4. Filtro Preset / Contenido Musical
+    // 4. Filtro Preset / Contenido Musical con Normalización Semántica
     if (filters.presetFilter && filters.presetFilter !== 'all') {
       const pName = (s.presetName || '').toLowerCase()
-      if (!pName.includes(filters.presetFilter.toLowerCase())) return false
+      const target = filters.presetFilter.toLowerCase()
+
+      // Normalización de tokens clave para máxima robustez
+      const isLevel3 =
+        (target.includes('nivel 3') || target.includes('octava diatónica')) &&
+        (pName.includes('nivel 3') ||
+          pName.includes('octava diatónica') ||
+          pName.includes('c4 a c5'))
+      const isLevel1 = target.includes('nivel 1') && pName.includes('nivel 1')
+      const isLevel2 = target.includes('nivel 2') && pName.includes('nivel 2')
+      const isLevel4 =
+        (target.includes('nivel 4') || target.includes('cromático')) &&
+        (pName.includes('nivel 4') || pName.includes('cromático'))
+      const isPentatonic = target.includes('pentatónica') && pName.includes('pentatónica')
+      const isCustom =
+        target.includes('personalizadas') &&
+        (pName.includes('personalizadas') || pName.includes('notas ('))
+      const isDirectMatch = pName.includes(target)
+
+      if (
+        !isLevel3 &&
+        !isLevel1 &&
+        !isLevel2 &&
+        !isLevel4 &&
+        !isPentatonic &&
+        !isCustom &&
+        !isDirectMatch
+      ) {
+        return false
+      }
     }
 
     // 5. Filtro Formato

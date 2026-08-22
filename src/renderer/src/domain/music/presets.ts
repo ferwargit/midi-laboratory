@@ -22,13 +22,13 @@ export const EXERCISE_PRESETS: MusicPreset[] = [
   },
   {
     id: 'level_3_octave_diatonic',
-    name: 'Nivel 3 (C4 a C5)',
+    name: 'Nivel 3 (Octava Diatónica C4-C5)',
     description: 'Octava completa de notas naturales',
     notes: [60, 62, 64, 65, 67, 69, 71, 72]
   },
   {
     id: 'level_4_octave_chromatic',
-    name: 'Nivel 4 (C4-C5 Cromático)',
+    name: 'Nivel 4 (Cromático C4-C5)',
     description: 'Todas las 12 notas (blancas y negras) de la 4ta octava',
     notes: generateMidiRange(60, 72)
   },
@@ -45,3 +45,26 @@ export const EXERCISE_PRESETS: MusicPreset[] = [
     notes: generateMidiRange(67, 79)
   }
 ]
+
+/**
+ * Resuelve automáticamente el nombre canónico de un pool de notas comparándolo con los presets formales.
+ */
+export function resolveNotePresetName(notes: number[]): string {
+  if (!Array.isArray(notes) || notes.length === 0) {
+    return 'Notas Personalizadas (0)'
+  }
+
+  const sortedNotes = [...notes].sort((a, b) => a - b)
+
+  for (const preset of EXERCISE_PRESETS) {
+    const presetSorted = [...preset.notes].sort((a, b) => a - b)
+    if (
+      sortedNotes.length === presetSorted.length &&
+      sortedNotes.every((val, idx) => val === presetSorted[idx])
+    ) {
+      return preset.name
+    }
+  }
+
+  return `Notas Personalizadas (${notes.length})`
+}
