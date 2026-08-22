@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { AnalyticsMetrics, AnalyticsModeFilter } from '../../../domain/analytics/historyAnalytics'
-import { DbAiConsultationRecord } from '../../../domain/database/types'
+import { DbAiConsultationRecord, DbAiReportRecord } from '../../../domain/database/types'
 import { Card } from '../../ui/Card'
 import { Button } from '../../ui/Button'
 import { LmStudioService } from '../../../domain/ai/lmStudioService'
@@ -10,6 +10,7 @@ interface AiConsultationTabProps {
   modeFilter: AnalyticsModeFilter
   metrics: AnalyticsMetrics
   consultations: DbAiConsultationRecord[]
+  aiReports?: DbAiReportRecord[]
   onSaveConsultation: (c: DbAiConsultationRecord) => Promise<void>
 }
 
@@ -26,6 +27,7 @@ export function AiConsultationTab({
   modeFilter,
   metrics,
   consultations,
+  aiReports = [],
   onSaveConsultation
 }: AiConsultationTabProps): React.ReactElement {
   const [userQuery, setUserQuery] = useState('')
@@ -54,7 +56,14 @@ export function AiConsultationTab({
     }, 1000)
 
     try {
-      const res = await aiService.askCustomConsultation(textToSend, metrics)
+      // INFERENCIA MULTI-TURN: Envía la pregunta actual + el historial de consultas y prescripciones
+      const res = await aiService.askCustomConsultation(
+        textToSend,
+        metrics,
+        undefined,
+        consultations,
+        aiReports
+      )
       clearInterval(timer)
       setIsAnswering(false)
       setCurrentResponse(res.content)
@@ -91,11 +100,11 @@ export function AiConsultationTab({
       <div className="flex justify-between items-center pb-2.5 border-b border-zinc-800 font-mono">
         <div>
           <h3 className="text-base font-bold text-purple-400 m-0 tracking-tight flex items-center gap-2">
-            <span>💬 Tutor Psicoacústico Interactivo (Consultas con IA Local)</span>
+            <span>💬 Tutor Psicoacústico Interactivo (Memoria Continua con IA)</span>
           </h3>
           <p className="text-xs text-zinc-400 mt-0.5">
-            Hazle cualquier pregunta teórica o consulta sobre tu oído. Qwen utilizará tus métricas
-            reales para responder:
+            Hazle cualquier pregunta teórica o dale seguimiento a tus dudas. Qwen recuerda tus
+            conversaciones y prescripciones previas:
           </p>
         </div>
         <span className="text-xs text-zinc-400 bg-zinc-950 px-3 py-1 rounded-lg border border-zinc-800 font-bold">
@@ -109,7 +118,7 @@ export function AiConsultationTab({
           <textarea
             value={userQuery}
             onChange={(e): void => setUserQuery(e.target.value)}
-            placeholder="Escribe tu duda psicoacústica aquí (ej: ¿Por qué tengo sesgo hacia lo agudo en Piano Acústico?)..."
+            placeholder="Escribe tu duda o repregúntale algo sobre la respuesta anterior (ej: ¿Y cómo puedo aplicar esa técnica en el FP-8?)..."
             rows={3}
             disabled={isAnswering}
             className="w-full bg-zinc-950/90 border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-sans transition-all resize-none shadow-inner"
@@ -160,7 +169,7 @@ export function AiConsultationTab({
           <div className="flex items-center gap-2.5">
             <span className="w-3 h-3 rounded-full bg-purple-400 animate-ping" />
             <span className="text-sm font-bold text-purple-200">
-              Qwen 3.5 en GPU NVIDIA está analizando tu telemetría y razonando la respuesta (
+              Qwen 3.5 en GPU NVIDIA está analizando tu diálogo previo y razonando la respuesta (
               {formatReasoningTime(reasoningSeconds)})...
             </span>
           </div>
@@ -183,7 +192,7 @@ export function AiConsultationTab({
         </div>
       )}
 
-      {/* 4. HISTORIAL PERSISTENTE CON PARSER MARKDOWN */}
+      {/* 4. HISTORIAL PERSISTENTE */}
       <div className="space-y-3 pt-3 border-t border-zinc-800/80 font-mono">
         <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider m-0">
           Historial de Consultas Guardadas ({filteredConsultations.length})

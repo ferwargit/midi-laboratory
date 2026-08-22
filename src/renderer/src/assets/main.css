@@ -1,7 +1,11 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
-  --bg-studio-radial: radial-gradient(circle at 50% -10%, rgba(56, 189, 248, 0.08) 0%, rgba(9, 9, 11, 1) 60%);
+  --bg-studio-radial: radial-gradient(
+    circle at 50% -10%,
+    rgba(56, 189, 248, 0.08) 0%,
+    rgba(9, 9, 11, 1) 60%
+  );
 }
 
 body {
@@ -9,10 +13,32 @@ body {
   background-image: var(--bg-studio-radial);
   background-attachment: fixed;
   color: #f4f4f5;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
-  user-select: none;
   min-height: 100vh;
+}
+
+/* Permitir selección de texto en párrafos, bloques de código, tablas y chats */
+p,
+span,
+h1,
+h2,
+h3,
+h4,
+strong,
+td,
+th,
+textarea,
+input,
+pre,
+code {
+  user-select: text;
 }
 
 /* Scrollbar ultrafino estilo Pro Audio */

@@ -3,7 +3,8 @@ import {
   buildSystemPrompt,
   buildUserPrompt,
   buildConsultationSystemPrompt,
-  buildConsultationUserPrompt
+  buildConsultationUserPrompt,
+  buildConversationalMessages
 } from './promptBuilder'
 import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 
@@ -154,6 +155,64 @@ describe('promptBuilder - Generación de Prompts Especializados y Tutor Psicoac�
       expect(userPrompt).toContain('Oído Real (IRT Normalizado)')
       expect(userPrompt).toContain('PERFIL Y TELEMETRÍA DEL ALUMNO')
       expect(userPrompt).toContain('Precisión Cruda: 80%')
+    })
+  })
+
+  describe('buildConversationalMessages (Memoria Multi-Turn)', () => {
+    it('debe construir una secuencia de mensajes alternando user y assistant con contexto de prescripciones', () => {
+      const pastConsultations = [
+        {
+          id: 'c1',
+          createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
+          modelName: 'qwen3.5-9b',
+          modeFilter: 'single_note',
+          userQuery: '¿Por qué fallo en F4?',
+          aiResponse: 'F4 tiene armónicos cercanos a E4...'
+        }
+      ]
+
+      const pastReports = [
+        {
+          id: 'rep_1',
+          createdAt: new Date('2026-08-21T09:00:00Z').toISOString(),
+          modelName: 'qwen3.5-9b',
+          modeFilter: 'single_note',
+          analysisText: 'Reporte previo',
+          prescription: {
+            title: 'Refuerzo F4/E4',
+            rationale: 'Foco en semitonos',
+            targetMode: 'single_note' as const,
+            instrumentId: 'acoustic_grand_piano' as const,
+            recommendedNotes: [64, 65],
+            limitType: 'mastery' as const,
+            questionsCount: 10,
+            durationMinutes: 5,
+            advanceMode: 'smart' as const
+          }
+        }
+      ]
+
+      const messages = buildConversationalMessages(
+        '¿Y cómo practico ese semitono?',
+        mockMetrics,
+        pastConsultations,
+        pastReports,
+        'irt_normalized_accuracy'
+      )
+
+      // 1. Mensaje de Sistema con prescripción previa
+      expect(messages[0].role).toBe('system')
+      expect(messages[0].content).toContain('Refuerzo F4/E4')
+
+      // 2. Historial de Diálogo anterior
+      expect(messages[1].role).toBe('user')
+      expect(messages[1].content).toBe('¿Por qué fallo en F4?')
+      expect(messages[2].role).toBe('assistant')
+      expect(messages[2].content).toBe('F4 tiene armónicos cercanos a E4...')
+
+      // 3. Consulta actual
+      expect(messages[3].role).toBe('user')
+      expect(messages[3].content).toContain('¿Y cómo practico ese semitono?')
     })
   })
 })

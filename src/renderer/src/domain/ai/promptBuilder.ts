@@ -1,5 +1,11 @@
 import { AnalyticsMetrics, AnalyticsModeFilter } from '../analytics/historyAnalytics'
 import { getConcept } from '../analytics/pedagogicalDictionary'
+import { DbAiConsultationRecord, DbAiReportRecord } from '../database/types'
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
 
 export function buildSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
   let specializedInstructions = ''
@@ -85,7 +91,6 @@ export function buildUserPrompt(
       'Diseña un plan de estudio semanal estructurado de 7 días combinando Nota Aislada, Intervalos y Secuencias según los puntos ciegos detectados.'
   }
 
-  // Telemetría clínica cronológica de sesiones
   const sessionsTelemetry = (metrics.sessionPsychometricsList || []).slice(0, 10).map((s) => ({
     id: s.session.id,
     fecha: s.session.createdAt,
@@ -109,7 +114,6 @@ export function buildUserPrompt(
           : 'Equilibrado'
   }))
 
-  // Comparativas longitudinales de Re-testeo
   const longitudinalTelemetry = (metrics.longitudinalComparisons || []).map((c) => ({
     contenido: c.contentName,
     intentosTotales: c.totalAttempts,
@@ -146,15 +150,32 @@ ${JSON.stringify(sessionsTelemetry, null, 2)}
 ${instruction}`
 }
 
-export function buildConsultationSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
+export function buildConsultationSystemPrompt(
+  mode: AnalyticsModeFilter = 'all',
+  recentReports: DbAiReportRecord[] = []
+): string {
+  let pastPrescriptionsContext = ''
+  if (recentReports.length > 0) {
+    const reportsSummary = recentReports.slice(0, 3).map((r) => ({
+      fecha: r.createdAt,
+      ejercicioPrescrito: r.prescription.title,
+      objetivo: r.prescription.rationale,
+      modo: r.prescription.targetMode,
+      timbre: r.prescription.instrumentId
+    }))
+    pastPrescriptionsContext = `\nHISTORIAL DE PRESCRIPCIONES PREVIAS ASIGNADAS AL ALUMNO:\n${JSON.stringify(reportsSummary, null, 2)}`
+  }
+
   return `Eres un Profesor de Oído Musical y Neurociencia Auditiva de Élite (Item Response Theory & Psychoacoustics Tutor).
-Tu objetivo es responder de forma didáctica, clara, profunda y personalizada a las dudas y preguntas del alumno sobre su oído, la psicoacústica o sus métricas.
+Tu objetivo es responder de forma didáctica, clara, profunda y personalizada a las dudas del alumno, manteniendo la continuidad pedagógica de las conversaciones previas.
 Modalidad activa de estudio: ${mode.toUpperCase()}.
+${pastPrescriptionsContext}
 
 DIRECTIVAS PEDAGÓGICAS PARA TUS RESPUESTAS:
 1. Responde en español con un tono cercano, pedagógico, motivador y riguroso.
-2. Utiliza los datos psicométricos reales del alumno (sesiones, tiempos de reacción, confusiones de semitonos, fatiga) para ejemplificar la explicación.
-3. Concluye siempre con un consejo de práctica aplicable al teclado MIDI físico.`
+2. Si el alumno hace referencia a explicaciones o dudas anteriores, mantén la coherencia de la conversación.
+3. Utiliza los datos psicométricos reales del alumno (sesiones, tiempos de reacción, confusiones de semitonos, fatiga) para ejemplificar la explicación.
+4. Concluye siempre con un consejo de práctica aplicable al teclado MIDI físico.`
 }
 
 export function buildConsultationUserPrompt(
@@ -189,4 +210,47 @@ PERFIL Y TELEMETRÍA DEL ALUMNO (Contexto clínico):
 - Tonos Críticos: ${JSON.stringify(metrics.mostDifficultNotes)}
 
 Por favor, respóndele en detalle explicando la teoría y conectándola con sus datos personales.`
+}
+
+/**
+ * Construye la secuencia completa de mensajes Multi-Turn con historial conversacional para LM Studio.
+ */
+export function buildConversationalMessages(
+  userQuery: string,
+  metrics: AnalyticsMetrics,
+  pastConsultations: DbAiConsultationRecord[],
+  recentReports: DbAiReportRecord[] = [],
+  conceptId?: string
+): ChatMessage[] {
+  const messages: ChatMessage[] = []
+
+  // 1. Mensaje de Sistema con directivas y contexto de prescripciones
+  messages.push({
+    role: 'system',
+    content: buildConsultationSystemPrompt(metrics.modeFilter, recentReports)
+  })
+
+  // 2. Historial de Diálogos Previos (Últimas 4 consultas en orden cronológico)
+  const historySlice = [...pastConsultations]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-4)
+
+  historySlice.forEach((c) => {
+    messages.push({
+      role: 'user',
+      content: c.userQuery
+    })
+    messages.push({
+      role: 'assistant',
+      content: c.aiResponse
+    })
+  })
+
+  // 3. Consulta Actual del Alumno con Telemetría Psicométrica
+  messages.push({
+    role: 'user',
+    content: buildConsultationUserPrompt(userQuery, metrics, conceptId)
+  })
+
+  return messages
 }

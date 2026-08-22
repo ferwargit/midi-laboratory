@@ -257,6 +257,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           modeFilter={modeFilter}
           metrics={metrics}
           consultations={aiConsultations}
+          aiReports={aiReports}
           onSaveConsultation={saveAiConsultation}
         />
       )}

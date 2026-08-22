@@ -2,13 +2,14 @@ import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 import {
   buildSystemPrompt,
   buildUserPrompt,
-  buildConsultationSystemPrompt,
-  buildConsultationUserPrompt
+  buildConversationalMessages,
+  ChatMessage
 } from './promptBuilder'
 import { generateAlgorithmicFallback } from './fallbackGenerator'
 import { validateAndParseAiResponse } from './schemaValidator'
 import { CircuitBreaker } from './circuitBreaker'
 import { AiAnalysisResponse } from './types'
+import { DbAiConsultationRecord, DbAiReportRecord } from '../database/types'
 
 const LM_STUDIO_DEFAULT_URL = 'http://127.0.0.1:1234'
 
@@ -59,8 +60,7 @@ export class LmStudioService {
         throw new Error('No hay modelo cargado en LM Studio')
       }
 
-      // AQUÍ SE CONSTRUYEN LOS MENSAJES CON EL MODO ESPECÍFICO
-      const messages = [
+      const messages: ChatMessage[] = [
         { role: 'system', content: buildSystemPrompt(metrics.modeFilter) },
         { role: 'user', content: buildUserPrompt(metrics) }
       ]
@@ -108,7 +108,9 @@ export class LmStudioService {
   async askCustomConsultation(
     userQuery: string,
     metrics: AnalyticsMetrics,
-    conceptId?: string
+    conceptId?: string,
+    pastConsultations: DbAiConsultationRecord[] = [],
+    recentReports: DbAiReportRecord[] = []
   ): Promise<{ content: string; modelName: string }> {
     const fallbackOp = (): { content: string; modelName: string } => ({
       content: `### Tutor Local (Respuesta Heurística)\n\nSobre tu consulta: "${userQuery}".\n\nEn base a tus ${metrics.totalAnswers} ejercicios analizados con una precisión real del ${metrics.normalizedOverallAccuracy}%, te recomendamos mantener sesiones cortas de 3 minutos para afianzar el reflejo sin fatiga auditiva.`,
@@ -121,10 +123,14 @@ export class LmStudioService {
         throw new Error('No hay modelo cargado en LM Studio')
       }
 
-      const messages = [
-        { role: 'system', content: buildConsultationSystemPrompt(metrics.modeFilter) },
-        { role: 'user', content: buildConsultationUserPrompt(userQuery, metrics, conceptId) }
-      ]
+      // SECUENCIA MULTI-TURN CON HISTORIAL CONVERSACIONAL Y PRESCRIPCIONES
+      const messages: ChatMessage[] = buildConversationalMessages(
+        userQuery,
+        metrics,
+        pastConsultations,
+        recentReports,
+        conceptId
+      )
 
       let rawContent = ''
       let returnedModel = loadedModelId
