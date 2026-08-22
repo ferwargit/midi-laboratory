@@ -258,7 +258,7 @@ export function SessionsTableTab({
                     <td className="py-3 text-center whitespace-nowrap">
                       <span
                         className={`font-bold ${
-                          item.normalizedAccuracy >= 80
+                          item.normalizedAccuracy >= 85
                             ? 'text-emerald-400'
                             : item.normalizedAccuracy >= 50
                               ? 'text-amber-400'

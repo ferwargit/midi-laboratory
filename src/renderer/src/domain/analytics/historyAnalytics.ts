@@ -1,5 +1,6 @@
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 import { midiNoteToName } from '../music/noteUtils'
+import { EXERCISE_PRESETS } from '../music/presets'
 import { AiExercisePrescription } from '../ai/types'
 
 export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences'
@@ -52,10 +53,10 @@ export interface LongitudinalComparison {
   baselineSession: DbSessionRecord
   latestSession: DbSessionRecord
   totalAttempts: number
-  rawAccuracyDelta: number // ej: +20%
-  normalizedAccuracyDelta: number // ej: +25%
-  responseTimeDeltaMs: number // ej: -450ms (negativo = más rápido)
-  rpmDelta: number // ej: +5.5 RPM
+  rawAccuracyDelta: number
+  normalizedAccuracyDelta: number
+  responseTimeDeltaMs: number
+  rpmDelta: number
   isImproved: boolean
 }
 
@@ -78,6 +79,25 @@ export interface AnalyticsMetrics {
   strongestNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
   sessionPsychometricsList: DetailedSessionAnalysis[]
   longitudinalComparisons: LongitudinalComparison[]
+}
+
+// Función auxiliar para determinar el tamaño del pool nominal según el preset
+function resolveNominalPoolSize(session: DbSessionRecord, empiricalUniqueCount: number): number {
+  const name = (session.presetName || '').toLowerCase()
+
+  if (name.includes('nivel 3') || name.includes('octava diatónica')) return 8
+  if (name.includes('nivel 1')) return 3
+  if (name.includes('nivel 2')) return 5
+  if (name.includes('nivel 4') || name.includes('cromático')) return 13
+  if (name.includes('pentatónica')) return 6
+
+  // Extraer número de "Notas (X)" o "Notas Personalizadas (X)"
+  const match = name.match(/notas\s*(?:personalizadas)?\s*\((\d+)\)/i)
+  if (match) {
+    return parseInt(match[1], 10)
+  }
+
+  return Math.max(2, empiricalUniqueCount)
 }
 
 export function isSequenceSession(s: DbSessionRecord): boolean {
@@ -178,11 +198,42 @@ export function reconstructSessionConfig(
   let recommendedIntervals: number[] | undefined = undefined
   let sequenceLength: number | undefined = undefined
 
+  const pName = (session.presetName || '').toLowerCase()
+
+  // 1. Reconstrucción fiel del pool si coincide con un preset formal de notas
   if (targetMode === 'single_note') {
-    const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
-      (a, b) => a - b
-    )
-    recommendedNotes = uniqueNotes.length >= 2 ? uniqueNotes : [60, 62, 64]
+    if (pName.includes('nivel 1')) {
+      recommendedNotes = [
+        ...(EXERCISE_PRESETS.find((p) => p.id === 'level_1_c_d_e')?.notes || [60, 62, 64])
+      ]
+    } else if (pName.includes('nivel 2')) {
+      recommendedNotes = [
+        ...(EXERCISE_PRESETS.find((p) => p.id === 'level_2_c_to_g')?.notes || [60, 62, 64, 65, 67])
+      ]
+    } else if (pName.includes('nivel 3') || pName.includes('octava diatónica')) {
+      recommendedNotes = [
+        ...(EXERCISE_PRESETS.find((p) => p.id === 'level_3_octave_diatonic')?.notes || [
+          60, 62, 64, 65, 67, 69, 71, 72
+        ])
+      ]
+    } else if (pName.includes('nivel 4') || pName.includes('cromático')) {
+      recommendedNotes = [
+        ...(EXERCISE_PRESETS.find((p) => p.id === 'level_4_octave_chromatic')?.notes || [
+          60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72
+        ])
+      ]
+    } else if (pName.includes('pentatónica')) {
+      recommendedNotes = [
+        ...(EXERCISE_PRESETS.find((p) => p.id === 'pentatonic_c_major')?.notes || [
+          60, 62, 64, 67, 69, 72
+        ])
+      ]
+    } else {
+      const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
+        (a, b) => a - b
+      )
+      recommendedNotes = uniqueNotes.length >= 2 ? uniqueNotes : [60, 62, 64]
+    }
   } else if (targetMode === 'intervals') {
     const stList: number[] = []
     sessionAnswers.forEach((a) => {
@@ -200,9 +251,8 @@ export function reconstructSessionConfig(
       sessionAnswers.length > 0 ? Math.min(6, Math.max(3, session.totalQuestions > 0 ? 3 : 4)) : 3
   }
 
-  const name = (session.presetName || '').toLowerCase()
-  const isTimed = name.includes('tiempo') || name.includes('cronometrado')
-  const isMastery = name.includes('maestría') || name.includes('mastery')
+  const isTimed = pName.includes('tiempo') || pName.includes('cronometrado')
+  const isMastery = pName.includes('maestría')
 
   const limitType = isTimed ? 'time' : isMastery ? 'mastery' : 'questions'
   const durationMinutes = Math.max(1, Math.round((session.durationSeconds || 60) / 60))
@@ -234,7 +284,6 @@ export function computeLongitudinalComparisons(
 ): LongitudinalComparison[] {
   const groups = new Map<string, DetailedSessionAnalysis[]>()
 
-  // Agrupar sesiones por su contenido normalizado (ej: "Nivel 1 (C, D, E)")
   sessionDetails.forEach((item) => {
     let contentKey = item.session.presetName || 'General'
     if (contentKey.includes('•')) {
@@ -252,7 +301,6 @@ export function computeLongitudinalComparisons(
   groups.forEach((items) => {
     if (items.length < 2) return
 
-    // Ordenar cronológicamente (más antigua = baseline, más reciente = latest)
     const sorted = [...items].sort(
       (a, b) => new Date(a.session.createdAt).getTime() - new Date(b.session.createdAt).getTime()
     )
@@ -341,7 +389,9 @@ export function computeAnalyticsMetrics(
   const sessionPsychometricsList: DetailedSessionAnalysis[] = filteredSessions.map((session) => {
     const sAnswers = filteredAnswers.filter((a) => a.sessionId === session.id)
     const uniqueExpected = new Set(sAnswers.map((a) => a.expectedNote))
-    const poolSize = Math.max(2, uniqueExpected.size)
+
+    // RESOLUCIÓN EXACTA DEL POOL REAL NOMINAL
+    const poolSize = resolveNominalPoolSize(session, uniqueExpected.size)
     const chanceBaseline = 1 / poolSize
     const entropyBits = Number(Math.log2(poolSize).toFixed(2))
 

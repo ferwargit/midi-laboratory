@@ -163,7 +163,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(report.concreteActionPlan.length).toBeGreaterThan(0)
   })
 
-  it('reconstructSessionConfig debe reconstruir con precisión el pool de notas y formato de una sesión pasada', () => {
+  it('reconstructSessionConfig debe reconstruir con precisión el pool de notas canónicas y formato de una sesión pasada', () => {
     const pastSession: DbSessionRecord = {
       id: 's_hist_1',
       createdAt: new Date('2026-08-20T15:00:00Z').toISOString(),
@@ -177,6 +177,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       durationSeconds: 180
     }
 
+    // Aunque solo hayan salido 2 de las 3 notas en el array de respuestas:
     const pastAnswers: DbAnswerRecord[] = [
       {
         id: 'ans_1',
@@ -210,7 +211,8 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
 
     expect(prescription.targetMode).toBe('single_note')
     expect(prescription.instrumentId).toBe('flute')
-    expect(prescription.recommendedNotes).toEqual([60, 64]) // Pool reconstruido
+    // Debe restaurar las 3 notas canónicas del Nivel 1 ([60, 62, 64]), no solo las 2 que salieron
+    expect(prescription.recommendedNotes).toEqual([60, 62, 64])
     expect(prescription.limitType).toBe('time')
     expect(prescription.durationMinutes).toBe(3)
     expect(prescription.title).toContain('Re-testeo: Nivel 1')
@@ -281,5 +283,60 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(comparisons[0].responseTimeDeltaMs).toBe(-600) // 600ms más rápido
     expect(comparisons[0].rpmDelta).toBe(5) // +5 RPM
     expect(comparisons[0].isImproved).toBe(true)
+  })
+
+  it('los filtros de maestría deben clasificar estrictamente: >=85% Dominada, 50-84% En Progreso, <50% Crítica', () => {
+    const s82Percent: DbSessionRecord = {
+      id: 's_82',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      totalQuestions: 44,
+      correctAnswers: 37,
+      accuracyPercentage: 84, // 84% crudo -> 82% normalizado
+      avgResponseTimeMs: 1400,
+      durationSeconds: 180
+    }
+
+    const s86Percent: DbSessionRecord = {
+      id: 's_86',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      totalQuestions: 44,
+      correctAnswers: 38,
+      accuracyPercentage: 86, // >=85%
+      avgResponseTimeMs: 1400,
+      durationSeconds: 180
+    }
+
+    const s45Percent: DbSessionRecord = {
+      id: 's_45',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      totalQuestions: 44,
+      correctAnswers: 20,
+      accuracyPercentage: 45, // <50%
+      avgResponseTimeMs: 2500,
+      durationSeconds: 180
+    }
+
+    const pool = [s82Percent, s86Percent, s45Percent]
+
+    // 1. Dominadas (>= 85%) -> Solo s86Percent
+    const mastered = filterSessionsAdvanced(pool, { mode: 'all', mastery: 'mastered' })
+    expect(mastered.map((s) => s.id)).toEqual(['s_86'])
+
+    // 2. En Progreso (50% - 84%) -> Solo s82Percent (debe ser amarillo, NO verde)
+    const learning = filterSessionsAdvanced(pool, { mode: 'all', mastery: 'learning' })
+    expect(learning.map((s) => s.id)).toEqual(['s_82'])
+
+    // 3. Críticas (< 50%) -> Solo s45Percent
+    const critical = filterSessionsAdvanced(pool, { mode: 'all', mastery: 'critical' })
+    expect(critical.map((s) => s.id)).toEqual(['s_45'])
   })
 })

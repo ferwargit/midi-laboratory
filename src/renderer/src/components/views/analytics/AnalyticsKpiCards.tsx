@@ -30,7 +30,7 @@ export function AnalyticsKpiCards({
         </span>
         <strong
           className={`text-lg ${
-            metrics.normalizedOverallAccuracy >= 80
+            metrics.normalizedOverallAccuracy >= 85
               ? 'text-emerald-400'
               : metrics.normalizedOverallAccuracy >= 50
                 ? 'text-amber-400'
