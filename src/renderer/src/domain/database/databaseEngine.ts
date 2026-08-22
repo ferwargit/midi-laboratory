@@ -1,11 +1,23 @@
-import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord, DatabaseSummary } from './types'
-import { isValidSessionRecord, isValidAnswerRecord, isValidAiReportRecord } from './recordValidator'
+import {
+  DbAnswerRecord,
+  DbSessionRecord,
+  DbAiReportRecord,
+  DbAiConsultationRecord,
+  DatabaseSummary
+} from './types'
+import {
+  isValidSessionRecord,
+  isValidAnswerRecord,
+  isValidAiReportRecord,
+  isValidAiConsultationRecord
+} from './recordValidator'
 
 export const DB_NAME = 'MusicalEarTrainerDB'
-export const DB_VERSION = 3
+export const DB_VERSION = 4
 export const SESSIONS_STORE = 'sessions'
 export const ANSWERS_STORE = 'exercise_answers'
 export const AI_REPORTS_STORE = 'ai_diagnostics'
+export const AI_CONSULTATIONS_STORE = 'ai_consultations'
 
 export class DatabaseEngine {
   private db: IDBDatabase | null = null
@@ -29,6 +41,11 @@ export class DatabaseEngine {
 
         if (!db.objectStoreNames.contains(AI_REPORTS_STORE)) {
           db.createObjectStore(AI_REPORTS_STORE, { keyPath: 'id' })
+        }
+
+        // TABLA PERSISTENTE PARA CONSULTAS AL TUTOR IA
+        if (!db.objectStoreNames.contains(AI_CONSULTATIONS_STORE)) {
+          db.createObjectStore(AI_CONSULTATIONS_STORE, { keyPath: 'id' })
         }
       }
 
@@ -90,6 +107,41 @@ export class DatabaseEngine {
       store.put(report)
       tx.oncomplete = (): void => resolve()
       tx.onerror = (): void => reject(tx.error)
+    })
+  }
+
+  async saveAiConsultation(consultation: DbAiConsultationRecord): Promise<void> {
+    if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    if (!isValidAiConsultationRecord(consultation)) {
+      throw new Error('Registro de consulta de IA inválido o corrupto.')
+    }
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(AI_CONSULTATIONS_STORE, 'readwrite')
+      const store = tx.objectStore(AI_CONSULTATIONS_STORE)
+      store.put(consultation)
+      tx.oncomplete = (): void => resolve()
+      tx.onerror = (): void => reject(tx.error)
+    })
+  }
+
+  async getAllAiConsultations(): Promise<DbAiConsultationRecord[]> {
+    if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(AI_CONSULTATIONS_STORE, 'readonly')
+      const store = tx.objectStore(AI_CONSULTATIONS_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = (): void => {
+        const consultations: DbAiConsultationRecord[] = request.result || []
+        consultations.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+        resolve(consultations)
+      }
+      request.onerror = (): void => reject(request.error)
     })
   }
 
@@ -169,7 +221,6 @@ export class DatabaseEngine {
         const totalCorrect = sessions.reduce((acc, s) => acc + s.correctAnswers, 0)
         const totalDuration = sessions.reduce((acc, s) => acc + (s.durationSeconds || 0), 0)
 
-        // Promedio ponderado real por volumen de preguntas
         const overallAccuracy =
           totalExercises > 0 ? Math.round((totalCorrect / totalExercises) * 100) : 0
 
@@ -198,12 +249,13 @@ export class DatabaseEngine {
 
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(
-        [SESSIONS_STORE, ANSWERS_STORE, AI_REPORTS_STORE],
+        [SESSIONS_STORE, ANSWERS_STORE, AI_REPORTS_STORE, AI_CONSULTATIONS_STORE],
         'readwrite'
       )
       tx.objectStore(SESSIONS_STORE).clear()
       tx.objectStore(ANSWERS_STORE).clear()
       tx.objectStore(AI_REPORTS_STORE).clear()
+      tx.objectStore(AI_CONSULTATIONS_STORE).clear()
 
       tx.oncomplete = (): void => resolve()
       tx.onerror = (): void => reject(tx.error)

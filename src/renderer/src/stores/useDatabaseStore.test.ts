@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { useDatabaseStore } from './useDatabaseStore'
 import { useAiStore } from './useAiStore'
-import { DbSessionRecord, DbAiReportRecord } from '../domain/database/types'
+import { DbSessionRecord, DbAiReportRecord, DbAiConsultationRecord } from '../domain/database/types'
 
 describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Cascada', () => {
   beforeEach(async () => {
@@ -10,7 +10,7 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     await useDatabaseStore.getState().clearDatabase()
   })
 
-  it('debe inicializarse con contadores en 0 (incluyendo totalDurationSeconds) y arrays vacíos', () => {
+  it('debe inicializarse con contadores en 0 y colecciones vacías (incluyendo aiConsultations)', () => {
     const state = useDatabaseStore.getState()
     expect(state.summary.totalSessions).toBe(0)
     expect(state.summary.totalExercises).toBe(0)
@@ -18,6 +18,7 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(state.sessions).toEqual([])
     expect(state.answers).toEqual([])
     expect(state.aiReports).toEqual([])
+    expect(state.aiConsultations).toEqual([])
   })
 
   it('debe guardar y recargar sesiones en el estado reactivo con duración calculada', async () => {
@@ -70,8 +71,34 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(state.aiReports[0].modelName).toBe('qwen3.5-9b')
   })
 
-  it('clearDatabase debe vaciar las tablas y purgar la memoria de IA en cascada', async () => {
-    // 1. Cargamos una sesión y un informe de IA
+  // TEST ESPECÍFICO DE CONSULTAS AL TUTOR IA
+  it('debe guardar y recuperar consultas del tutor IA en la colección reactiva (saveAiConsultation)', async () => {
+    const mockConsultation: DbAiConsultationRecord = {
+      id: 'consult_store_1',
+      createdAt: new Date().toISOString(),
+      modelName: 'qwen3.5-9b',
+      modeFilter: 'single_note',
+      topicConceptId: 'irt_normalized_accuracy',
+      userQuery: '¿Por qué aumenta mi latencia en notas agudas?',
+      aiResponse: 'La latencia se incrementa por búsqueda interválica en registros altos...',
+      associatedMetricsSnapshot: {
+        overallAccuracy: 88,
+        normalizedAccuracy: 84,
+        avgLatencyMs: 1750,
+        poolEntropyBits: 2.57
+      }
+    }
+
+    await useDatabaseStore.getState().saveAiConsultation(mockConsultation)
+
+    const state = useDatabaseStore.getState()
+    expect(state.aiConsultations.length).toBe(1)
+    expect(state.aiConsultations[0].id).toBe('consult_store_1')
+    expect(state.aiConsultations[0].userQuery).toBe('¿Por qué aumenta mi latencia en notas agudas?')
+    expect(state.aiConsultations[0].associatedMetricsSnapshot?.normalizedAccuracy).toBe(84)
+  })
+
+  it('clearDatabase debe vaciar las tablas y purgar la memoria de IA en cascada (incluyendo aiConsultations)', async () => {
     const mockSession: DbSessionRecord = {
       id: 'session_temp',
       createdAt: new Date().toISOString(),
@@ -86,33 +113,26 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     }
     await useDatabaseStore.getState().saveSession(mockSession, [])
 
-    useAiStore.getState().setAiResponseForMode('single_note', {
-      source: 'lm_studio_ai',
-      modelName: 'Qwen',
-      analysisText: 'Memoria previa',
-      prescription: {
-        title: 'T',
-        rationale: 'R',
-        targetMode: 'single_note',
-        instrumentId: 'acoustic_grand_piano',
-        recommendedNotes: [60, 62],
-        limitType: 'questions',
-        questionsCount: 5,
-        durationMinutes: 3,
-        advanceMode: 'smart'
-      }
-    })
+    const mockConsultation: DbAiConsultationRecord = {
+      id: 'consult_temp_1',
+      createdAt: new Date().toISOString(),
+      modelName: 'qwen3.5',
+      modeFilter: 'all',
+      userQuery: 'Duda temporal',
+      aiResponse: 'Respuesta temporal'
+    }
+    await useDatabaseStore.getState().saveAiConsultation(mockConsultation)
 
     expect(useDatabaseStore.getState().summary.totalSessions).toBe(1)
-    expect(useAiStore.getState().aiResponsesByMode.single_note).not.toBeNull()
+    expect(useDatabaseStore.getState().aiConsultations.length).toBe(1)
 
-    // 2. Ejecutamos reseteo total
+    // Ejecutamos limpieza completa de la base de datos
     await useDatabaseStore.getState().clearDatabase()
 
-    // 3. Todo debe quedar en 0 y la memoria de IA purgada
     expect(useDatabaseStore.getState().summary.totalSessions).toBe(0)
     expect(useDatabaseStore.getState().sessions).toEqual([])
     expect(useDatabaseStore.getState().aiReports).toEqual([])
+    expect(useDatabaseStore.getState().aiConsultations).toEqual([])
     expect(useAiStore.getState().aiResponsesByMode.single_note).toBeNull()
   })
 })

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { DatabaseEngine, DB_VERSION } from './databaseEngine'
-import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord } from './types'
+import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord, DbAiConsultationRecord } from './types'
 
 describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
   let engine: DatabaseEngine
@@ -169,5 +169,29 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
     const summaryAfter = await engine.getSummary()
     expect(summaryAfter.totalSessions).toBe(0)
     expect(summaryAfter.totalExercises).toBe(0)
+  })
+
+  it('debe guardar y recuperar consultas del tutor IA de forma persistente', async () => {
+    const mockConsultation: DbAiConsultationRecord = {
+      id: 'consult_test_1',
+      createdAt: new Date().toISOString(),
+      modelName: 'qwen3.5-9b',
+      modeFilter: 'single_note',
+      userQuery: '¿Por qué aumenta mi latencia en notas agudas?',
+      aiResponse: 'Explicación clínica detallada sobre fatiga y armónicos...',
+      associatedMetricsSnapshot: {
+        overallAccuracy: 85,
+        normalizedAccuracy: 82,
+        avgLatencyMs: 1450,
+        poolEntropyBits: 2.5
+      }
+    }
+
+    await engine.saveAiConsultation(mockConsultation)
+    const consultations = await engine.getAllAiConsultations()
+
+    expect(consultations.length).toBe(1)
+    expect(consultations[0].userQuery).toBe('¿Por qué aumenta mi latencia en notas agudas?')
+    expect(consultations[0].associatedMetricsSnapshot?.normalizedAccuracy).toBe(82)
   })
 })

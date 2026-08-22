@@ -5,7 +5,7 @@ import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 import { LmStudioService } from './lmStudioService'
 import { CircuitBreaker } from './circuitBreaker'
 
-describe('ai - Servicios de IA, Prescripción y Circuit Breaker', () => {
+describe('ai - Servicios de IA, Prescripción y Tutor Psicoacústico', () => {
   const mockMetrics: AnalyticsMetrics = {
     modeFilter: 'single_note',
     filteredSessionsCount: 2,
@@ -58,5 +58,22 @@ describe('ai - Servicios de IA, Prescripción y Circuit Breaker', () => {
 
     expect(result.source).toBe('algorithmic_fallback')
     expect(result.prescription).toBeDefined()
+  })
+
+  it('askCustomConsultation debe retornar respuesta heurística si el servidor está desconectado', async () => {
+    const fastCircuitBreaker = new CircuitBreaker({
+      failureThreshold: 2,
+      cooldownPeriodMs: 1000,
+      requestTimeoutMs: 100
+    })
+    const service = new LmStudioService('http://127.0.0.1:9999', fastCircuitBreaker)
+    const consultation = await service.askCustomConsultation(
+      '¿Por qué tengo fatiga auditiva?',
+      mockMetrics
+    )
+
+    expect(consultation.modelName).toBe('Motor Heurístico Local')
+    expect(consultation.content).toContain('Tutor Local')
+    expect(consultation.content).toContain('fatiga auditiva')
   })
 })

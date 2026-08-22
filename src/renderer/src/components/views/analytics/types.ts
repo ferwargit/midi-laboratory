@@ -14,4 +14,10 @@ export type SortColumnKey =
 export type SortDirection = 'asc' | 'desc'
 
 export type AnalyticsTabKey =
-  'sessions' | 'ai_report' | 'longitudinal' | 'confusions' | 'charts' | 'ai_history'
+  | 'sessions'
+  | 'ai_report'
+  | 'ai_consultation'
+  | 'longitudinal'
+  | 'confusions'
+  | 'charts'
+  | 'ai_history'

@@ -10,7 +10,7 @@ export interface DbSessionRecord {
   correctAnswers: number
   accuracyPercentage: number
   avgResponseTimeMs: number
-  durationSeconds: number // Duración real total de la sesión en segundos
+  durationSeconds: number
 }
 
 export interface DbAnswerRecord {
@@ -34,6 +34,22 @@ export interface DbAiReportRecord {
   modeFilter: string
   analysisText: string
   prescription: AiExercisePrescription
+}
+
+export interface DbAiConsultationRecord {
+  id: string
+  createdAt: string
+  modelName: string
+  modeFilter: string
+  topicConceptId?: string
+  userQuery: string
+  aiResponse: string
+  associatedMetricsSnapshot?: {
+    overallAccuracy: number
+    normalizedAccuracy: number
+    avgLatencyMs: number
+    poolEntropyBits: number
+  }
 }
 
 export interface DatabaseSummary {

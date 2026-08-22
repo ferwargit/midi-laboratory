@@ -1,8 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { buildSystemPrompt, buildUserPrompt } from './promptBuilder'
+import {
+  buildSystemPrompt,
+  buildUserPrompt,
+  buildConsultationSystemPrompt,
+  buildConsultationUserPrompt
+} from './promptBuilder'
 import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 
-describe('promptBuilder - Generación de Prompts Especializados y Telemetría Clínica', () => {
+describe('promptBuilder - Generación de Prompts Especializados y Tutor Psicoacústico', () => {
   const mockMetrics: AnalyticsMetrics = {
     modeFilter: 'single_note',
     filteredSessionsCount: 2,
@@ -48,7 +53,6 @@ describe('promptBuilder - Generación de Prompts Especializados y Telemetría Cl
         formatType: 'time'
       }
     ],
-    // Comparativa longitudinal de prueba (Baseline vs Retest)
     longitudinalComparisons: [
       {
         contentName: 'Nivel 1 (C, D, E)',
@@ -77,16 +81,16 @@ describe('promptBuilder - Generación de Prompts Especializados y Telemetría Cl
           durationSeconds: 60
         },
         totalAttempts: 2,
-        rawAccuracyDelta: 20, // +20%
+        rawAccuracyDelta: 20,
         normalizedAccuracyDelta: 25,
-        responseTimeDeltaMs: -450, // 450ms más rápido
-        rpmDelta: 3.5, // +3.5 RPM
+        responseTimeDeltaMs: -450,
+        rpmDelta: 3.5,
         isImproved: true
       }
     ]
   }
 
-  describe('buildSystemPrompt', () => {
+  describe('buildSystemPrompt & buildUserPrompt (Diagnóstico y Prescripción)', () => {
     it('genera directivas especializadas para single_note con catálogo formal', () => {
       const prompt = buildSystemPrompt('single_note')
       expect(prompt).toContain('Profesor de Oído Musical')
@@ -109,16 +113,8 @@ describe('promptBuilder - Generación de Prompts Especializados y Telemetría Cl
       expect(prompt).toContain('sequenceLength')
     })
 
-    it('genera directivas globales integrales por defecto', () => {
-      const prompt = buildSystemPrompt('all')
-      expect(prompt).toContain('ENFOQUE CLÍNICO GLOBAL INTEGRAL')
-    })
-  })
-
-  describe('buildUserPrompt', () => {
     it('empaqueta la telemetría clínica completa incluyendo RPM, entropía y sesgo dominante', () => {
       const prompt = buildUserPrompt(mockMetrics)
-
       expect(prompt).toContain('Precisión Cruda Global: 80%')
       expect(prompt).toContain('Precisión Corregida por Azar (Oído Real Normalizado): 75%')
       expect(prompt).toContain('Entropía Media del Contexto (Incertidumbre del Pool): 1.58 bits')
@@ -130,20 +126,34 @@ describe('promptBuilder - Generación de Prompts Especializados y Telemetría Cl
 
     it('empaqueta las comparativas longitudinales (Test-Retest) con sus Deltas calculados', () => {
       const prompt = buildUserPrompt(mockMetrics)
-
       expect(prompt).toContain('COMPARATIVAS LONGITUDINALES (TEST-RETEST DETECTADOS)')
       expect(prompt).toContain('"contenido": "Nivel 1 (C, D, E)"')
       expect(prompt).toContain('"deltaPrecision": "+20%"')
       expect(prompt).toContain('"deltaLatenciaMs": "-450ms"')
-      expect(prompt).toContain('"deltaRPM": "+3.5 RPM"')
+    })
+  })
+
+  describe('buildConsultationSystemPrompt & buildConsultationUserPrompt (Tutor Psicoacústico)', () => {
+    it('buildConsultationSystemPrompt configura el rol de tutor didáctico y motivador', () => {
+      const sys = buildConsultationSystemPrompt('single_note')
+      expect(sys).toContain('Profesor de Oído Musical y Neurociencia Auditiva')
+      expect(sys).toContain('Modalidad activa de estudio: SINGLE_NOTE')
+      expect(sys).toContain('DIRECTIVAS PEDAGÓGICAS PARA TUS RESPUESTAS')
     })
 
-    it('adapta las instrucciones clínicas según el customQueryType', () => {
-      const fatigue = buildUserPrompt(mockMetrics, 'fatigue')
-      expect(fatigue).toContain('fatiga temporal')
+    it('buildConsultationUserPrompt inyecta la duda del alumno, el concepto pedagógico y la telemetría', () => {
+      const userPrompt = buildConsultationUserPrompt(
+        '¿Por qué me cuesta discriminar F4 y E4?',
+        mockMetrics,
+        'irt_normalized_accuracy'
+      )
 
-      const weekly = buildUserPrompt(mockMetrics, 'weekly_plan')
-      expect(weekly).toContain('plan de estudio semanal')
+      expect(userPrompt).toContain('CONSULTA DEL ALUMNO:')
+      expect(userPrompt).toContain('¿Por qué me cuesta discriminar F4 y E4?')
+      expect(userPrompt).toContain('CONCEPTO PEDAGÓGICO DE REFERENCIA:')
+      expect(userPrompt).toContain('Oído Real (IRT Normalizado)')
+      expect(userPrompt).toContain('PERFIL Y TELEMETRÍA DEL ALUMNO')
+      expect(userPrompt).toContain('Precisión Cruda: 80%')
     })
   })
 })

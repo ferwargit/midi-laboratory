@@ -1,5 +1,10 @@
 import { AnalyticsMetrics } from '../analytics/historyAnalytics'
-import { buildSystemPrompt, buildUserPrompt } from './promptBuilder'
+import {
+  buildSystemPrompt,
+  buildUserPrompt,
+  buildConsultationSystemPrompt,
+  buildConsultationUserPrompt
+} from './promptBuilder'
 import { generateAlgorithmicFallback } from './fallbackGenerator'
 import { validateAndParseAiResponse } from './schemaValidator'
 import { CircuitBreaker } from './circuitBreaker'
@@ -97,6 +102,65 @@ export class LmStudioService {
       }
 
       return validatedResponse
+    }, fallbackOp)
+  }
+
+  async askCustomConsultation(
+    userQuery: string,
+    metrics: AnalyticsMetrics,
+    conceptId?: string
+  ): Promise<{ content: string; modelName: string }> {
+    const fallbackOp = (): { content: string; modelName: string } => ({
+      content: `### Tutor Local (Respuesta Heurística)\n\nSobre tu consulta: "${userQuery}".\n\nEn base a tus ${metrics.totalAnswers} ejercicios analizados con una precisión real del ${metrics.normalizedOverallAccuracy}%, te recomendamos mantener sesiones cortas de 3 minutos para afianzar el reflejo sin fatiga auditiva.`,
+      modelName: 'Motor Heurístico Local'
+    })
+
+    return this.circuitBreaker.execute(async () => {
+      const loadedModelId = await this.getLoadedModelId()
+      if (!loadedModelId) {
+        throw new Error('No hay modelo cargado en LM Studio')
+      }
+
+      const messages = [
+        { role: 'system', content: buildConsultationSystemPrompt(metrics.modeFilter) },
+        { role: 'user', content: buildConsultationUserPrompt(userQuery, metrics, conceptId) }
+      ]
+
+      let rawContent = ''
+      let returnedModel = loadedModelId
+
+      if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
+        const result = await window.customAPI.chatLmStudio({
+          model: loadedModelId,
+          messages
+        })
+        if (!result.success || !result.content) {
+          throw new Error(result.error || 'Respuesta vacía de IPC')
+        }
+        rawContent = result.content
+        returnedModel = result.model || loadedModelId
+      } else {
+        const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: loadedModelId,
+            messages,
+            temperature: 0.5
+          })
+        })
+
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`)
+        const data = await res.json()
+        const message = data.choices[0]?.message
+        rawContent = message?.content || message?.reasoning_content || ''
+        returnedModel = data.model || loadedModelId
+      }
+
+      return {
+        content: rawContent.trim(),
+        modelName: returnedModel
+      }
     }, fallbackOp)
   }
 }

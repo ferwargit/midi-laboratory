@@ -1,4 +1,4 @@
-import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord } from './types'
+import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord, DbAiConsultationRecord } from './types'
 
 export function isValidSessionRecord(session: unknown): session is DbSessionRecord {
   if (!session || typeof session !== 'object') return false
@@ -81,6 +81,22 @@ export function isValidAiReportRecord(report: unknown): report is DbAiReportReco
   if (typeof r.modeFilter !== 'string' || r.modeFilter.trim().length === 0) return false
   if (typeof r.analysisText !== 'string' || r.analysisText.trim().length === 0) return false
   if (!r.prescription || typeof r.prescription !== 'object') return false
+
+  return true
+}
+
+export function isValidAiConsultationRecord(
+  consultation: unknown
+): consultation is DbAiConsultationRecord {
+  if (!consultation || typeof consultation !== 'object') return false
+  const c = consultation as Record<string, unknown>
+
+  if (typeof c.id !== 'string' || c.id.trim().length === 0) return false
+  if (typeof c.createdAt !== 'string' || Number.isNaN(Date.parse(c.createdAt))) return false
+  if (typeof c.modelName !== 'string' || c.modelName.trim().length === 0) return false
+  if (typeof c.modeFilter !== 'string' || c.modeFilter.trim().length === 0) return false
+  if (typeof c.userQuery !== 'string' || c.userQuery.trim().length === 0) return false
+  if (typeof c.aiResponse !== 'string' || c.aiResponse.trim().length === 0) return false
 
   return true
 }

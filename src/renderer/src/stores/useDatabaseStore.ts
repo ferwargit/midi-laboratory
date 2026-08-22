@@ -4,7 +4,8 @@ import {
   DatabaseSummary,
   DbAnswerRecord,
   DbSessionRecord,
-  DbAiReportRecord
+  DbAiReportRecord,
+  DbAiConsultationRecord
 } from '../domain/database/types'
 import { useAiStore } from './useAiStore'
 
@@ -14,10 +15,12 @@ interface DatabaseState {
   sessions: DbSessionRecord[]
   answers: DbAnswerRecord[]
   aiReports: DbAiReportRecord[]
+  aiConsultations: DbAiConsultationRecord[]
   isInitialized: boolean
   initialize: () => Promise<void>
   saveSession: (session: DbSessionRecord, answers: DbAnswerRecord[]) => Promise<void>
   saveAiReport: (report: DbAiReportRecord) => Promise<void>
+  saveAiConsultation: (consultation: DbAiConsultationRecord) => Promise<void>
   clearDatabase: () => Promise<void>
   reloadAllData: () => Promise<void>
 }
@@ -34,6 +37,7 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   sessions: [],
   answers: [],
   aiReports: [],
+  aiConsultations: [],
   isInitialized: false,
 
   initialize: async (): Promise<void> => {
@@ -57,8 +61,9 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
     const sessions = await engine.getAllSessions()
     const answers = await engine.getAllAnswers()
     const aiReports = await engine.getAllAiReports()
+    const aiConsultations = await engine.getAllAiConsultations()
 
-    set({ summary, sessions, answers, aiReports })
+    set({ summary, sessions, answers, aiReports, aiConsultations })
   },
 
   saveSession: async (session: DbSessionRecord, answers: DbAnswerRecord[]): Promise<void> => {
@@ -75,12 +80,18 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
     await reloadAllData()
   },
 
+  saveAiConsultation: async (consultation: DbAiConsultationRecord): Promise<void> => {
+    const { engine, reloadAllData } = get()
+    if (!engine) return
+    await engine.saveAiConsultation(consultation)
+    await reloadAllData()
+  },
+
   clearDatabase: async (): Promise<void> => {
     const { engine } = get()
     if (!engine) return
     await engine.clearDatabase()
 
-    // 1. Limpia el estado de la base de datos
     set({
       summary: {
         totalSessions: 0,
@@ -91,10 +102,10 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
       },
       sessions: [],
       answers: [],
-      aiReports: []
+      aiReports: [],
+      aiConsultations: []
     })
 
-    // 2. Purga inmediatamente la memoria residual del store de IA
     useAiStore.getState().resetAiMemory()
   }
 }))

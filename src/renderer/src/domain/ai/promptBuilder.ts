@@ -1,4 +1,5 @@
 import { AnalyticsMetrics, AnalyticsModeFilter } from '../analytics/historyAnalytics'
+import { getConcept } from '../analytics/pedagogicalDictionary'
 
 export function buildSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
   let specializedInstructions = ''
@@ -143,4 +144,49 @@ TELEMETRÍA DETALLADA POR SESIÓN (ÚLTIMAS 10 SESIONES):
 ${JSON.stringify(sessionsTelemetry, null, 2)}
 
 ${instruction}`
+}
+
+export function buildConsultationSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
+  return `Eres un Profesor de Oído Musical y Neurociencia Auditiva de Élite (Item Response Theory & Psychoacoustics Tutor).
+Tu objetivo es responder de forma didáctica, clara, profunda y personalizada a las dudas y preguntas del alumno sobre su oído, la psicoacústica o sus métricas.
+Modalidad activa de estudio: ${mode.toUpperCase()}.
+
+DIRECTIVAS PEDAGÓGICAS PARA TUS RESPUESTAS:
+1. Responde en español con un tono cercano, pedagógico, motivador y riguroso.
+2. Utiliza los datos psicométricos reales del alumno (sesiones, tiempos de reacción, confusiones de semitonos, fatiga) para ejemplificar la explicación.
+3. Concluye siempre con un consejo de práctica aplicable al teclado MIDI físico.`
+}
+
+export function buildConsultationUserPrompt(
+  userQuery: string,
+  metrics: AnalyticsMetrics,
+  conceptId?: string
+): string {
+  let conceptContext = ''
+  if (conceptId) {
+    const concept = getConcept(conceptId)
+    if (concept) {
+      conceptContext = `\nCONCEPTO PEDAGÓGICO DE REFERENCIA:
+- Título: ${concept.title} (${concept.subtitle})
+- Definición: ${concept.shortDefinition}
+- Cálculo/Fórmula: ${concept.formulaOrCalculation}
+- En la práctica: ${concept.practicalTakeaway}`
+    }
+  }
+
+  return `CONSULTA DEL ALUMNO:
+"${userQuery}"
+${conceptContext}
+
+PERFIL Y TELEMETRÍA DEL ALUMNO (Contexto clínico):
+- Modalidad: ${metrics.modeFilter}
+- Total Ejercicios: ${metrics.totalAnswers} en ${metrics.filteredSessionsCount} sesiones.
+- Precisión Cruda: ${metrics.overallAccuracy}% | Oído Real IRT: ${metrics.normalizedOverallAccuracy}%
+- Entropía Media: ${metrics.avgEntropyBits} bits.
+- Latencia Media: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s (Reflejo: ${metrics.fastResponsesCount} resp, Deducción: ${metrics.mediumResponsesCount} resp, Fatiga/Lentas: ${metrics.slowResponsesCount} resp).
+- Sesgos: +st Agudo (${metrics.sharpBiasCount}) vs -st Grave (${metrics.flatBiasCount}).
+- Pares Confundidos: ${JSON.stringify(metrics.topConfusions)}
+- Tonos Críticos: ${JSON.stringify(metrics.mostDifficultNotes)}
+
+Por favor, respóndele en detalle explicando la teoría y conectándola con sus datos personales.`
 }

@@ -126,9 +126,22 @@ export default function App(): React.ReactElement {
     sequenceTrainer.handleUserNotePlayed
   ])
 
-  // Atajos de Teclado
+  // Atajos de Teclado con filtro inteligente de campos de texto
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
+      const target = e.target as HTMLElement | null
+      const isTyping =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+
+      // Si el usuario está escribiendo en el chat o buscador, no capturar las teclas
+      if (isTyping) {
+        return
+      }
+
       if (e.code === 'Space') {
         e.preventDefault()
         if (appMode === 'single_note' && singleNoteTrainer.isWaitingManualAdvance) {
@@ -218,7 +231,8 @@ export default function App(): React.ReactElement {
   const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
 
   return (
-    <div className="min-h-screen flex flex-col justify-between p-4 md:p-5 max-w-7xl mx-auto space-y-3 font-sans">
+    // Ampliado a max-w-[1540px] para ocupar con elegancia los monitores panorámicos
+    <div className="min-h-screen flex flex-col justify-between p-4 md:p-6 max-w-[1540px] w-full mx-auto space-y-3 font-sans">
       {/* 1. MASTER TOPBAR */}
       <StudioTopBar
         appMode={appMode}
@@ -237,7 +251,7 @@ export default function App(): React.ReactElement {
 
       <MidiDisconnectAlert isDisconnected={midi.isDeviceDisconnected} />
 
-      {/* 2. MAIN STAGE (ANCLADO CON JUSTIFY-START: CERO SALTOS) */}
+      {/* 2. MAIN STAGE */}
       <main className="flex-1 flex flex-col justify-start w-full">
         {appMode === 'single_note' && (
           <SingleNoteView

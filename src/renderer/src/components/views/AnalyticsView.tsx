@@ -20,6 +20,7 @@ import { AiDiagnosticTab } from './analytics/AiDiagnosticTab'
 import { LongitudinalTab } from './analytics/LongitudinalTab'
 import { AiHistoryTab } from './analytics/AiHistoryTab'
 import { ConfusionMatrixTab } from './analytics/ConfusionMatrixTab'
+import { AiConsultationTab } from './analytics/AiConsultationTab'
 
 interface AnalyticsViewProps {
   onLoadPrescription: (prescription: AiExercisePrescription) => void
@@ -42,6 +43,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const runAiDiagnostic = useAiStore((state) => state.runAiDiagnostic)
   const checkLmStudioStatus = useAiStore((state) => state.checkLmStudioStatus)
   const hydrateReportsByMode = useAiStore((state) => state.hydrateReportsByMode)
+
+  const aiConsultations = useDatabaseStore((state) => state.aiConsultations)
+  const saveAiConsultation = useDatabaseStore((state) => state.saveAiConsultation)
 
   const [activeTab, setActiveTab] = useState<AnalyticsTabKey>('sessions')
 
@@ -245,6 +249,15 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           metrics={metrics}
           onRunDiagnostic={handleRunDiagnostic}
           onLoadPrescription={onLoadPrescription}
+        />
+      )}
+
+      {activeTab === 'ai_consultation' && (
+        <AiConsultationTab
+          modeFilter={modeFilter}
+          metrics={metrics}
+          consultations={aiConsultations}
+          onSaveConsultation={saveAiConsultation}
         />
       )}
 
