@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   DetailedSessionAnalysis,
   reconstructSessionConfig
@@ -6,6 +6,8 @@ import {
 import { DbAnswerRecord } from '../../../domain/database/types'
 import { INSTRUMENT_CATALOG } from '../../../domain/music/instruments'
 import { Card } from '../../ui/Card'
+import { Button } from '../../ui/Button'
+import { ConfirmModal } from '../../ui/ConfirmModal'
 import { AiExercisePrescription } from '../../../domain/ai/types'
 import { SortColumnKey, SortDirection } from './types'
 import { PedagogicalTooltip } from '../../ui/PedagogicalTooltip'
@@ -17,6 +19,8 @@ interface SessionsTableTabProps {
   sortDirection: SortDirection
   onSortClick: (key: SortColumnKey) => void
   onLoadPrescription: (p: AiExercisePrescription) => void
+  onDeleteSession: (sessionId: string) => Promise<void>
+  onDeleteSessions: (sessionIds: string[]) => Promise<void>
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -32,8 +36,49 @@ export function SessionsTableTab({
   sortKey,
   sortDirection,
   onSortClick,
-  onLoadPrescription
+  onLoadPrescription,
+  onDeleteSession,
+  onDeleteSessions
 }: SessionsTableTabProps): React.ReactElement {
+  // Estado de selección múltiple (Set de IDs)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [sessionToDeleteSingle, setSessionToDeleteSingle] = useState<string | null>(null)
+
+  const allVisibleIds = displayedList.map((d) => d.session.id)
+  const isAllSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedIds.has(id))
+
+  const toggleSelectAll = (): void => {
+    if (isAllSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(allVisibleIds))
+    }
+  }
+
+  const toggleSelectOne = (id: string): void => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const handleConfirmDelete = async (): Promise<void> => {
+    if (sessionToDeleteSingle) {
+      await onDeleteSession(sessionToDeleteSingle)
+      setSessionToDeleteSingle(null)
+    } else if (selectedIds.size > 0) {
+      await onDeleteSessions(Array.from(selectedIds))
+      setSelectedIds(new Set())
+    }
+    setIsDeleteModalOpen(false)
+  }
+
   const renderSortIndicator = (column: SortColumnKey): React.ReactElement => {
     if (sortKey !== column) {
       return <span className="opacity-0 group-hover:opacity-40 ml-1">⇅</span>
@@ -44,295 +89,418 @@ export function SessionsTableTab({
   }
 
   return (
-    <Card className="space-y-3 bg-zinc-900/80 backdrop-blur-2xl border-zinc-800/80 shadow-2xl">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/80">
-        <div>
-          <h3 className="text-sm font-bold text-zinc-100 font-mono uppercase tracking-wider m-0">
-            Registro Histórico y Telemetría Clínica ({displayedList.length} sesiones)
-          </h3>
-          <p className="text-[11px] text-zinc-400 mt-0.5">
-            Pasa el mouse por los títulos con ⓘ para ver su explicación psicoacústica:
-          </p>
+    <>
+      <Card className="space-y-3 bg-zinc-900/80 backdrop-blur-2xl border-zinc-800/80 shadow-2xl relative">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/80">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-100 font-mono uppercase tracking-wider m-0">
+              Registro Histórico y Telemetría Clínica ({displayedList.length} sesiones)
+            </h3>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              Marca las casillas para comparar o borrar sesiones en lote:
+            </p>
+          </div>
+
+          <div className="text-[10px] font-mono bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded-lg text-zinc-400 flex items-center gap-1.5">
+            <span>Orden:</span>
+            <strong className="text-sky-400 uppercase">{sortKey}</strong>
+            <span className="text-zinc-200 font-bold">
+              {sortDirection === 'asc' ? '▲ (Menor a Mayor)' : '▼ (Mayor a Menor)'}
+            </span>
+          </div>
         </div>
 
-        <div className="text-[10px] font-mono bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded-lg text-zinc-400 flex items-center gap-1.5">
-          <span>Orden:</span>
-          <strong className="text-sky-400 uppercase">{sortKey}</strong>
-          <span className="text-zinc-200 font-bold">
-            {sortDirection === 'asc' ? '▲ (Menor a Mayor)' : '▼ (Mayor a Menor)'}
-          </span>
-        </div>
-      </div>
+        {/* BARRA FLOTANTE DE ACCIONES POR LOTE */}
+        {selectedIds.size > 0 && (
+          <div className="p-2.5 bg-gradient-to-r from-sky-950/90 via-purple-950/90 to-zinc-950 border border-sky-500/50 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3 font-mono text-xs shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse" />
+              <span className="font-bold text-white">
+                {selectedIds.size}{' '}
+                {selectedIds.size === 1 ? 'sesión seleccionada' : 'sesiones seleccionadas'}
+              </span>
+            </div>
 
-      {displayedList.length === 0 ? (
-        <div className="text-center py-8 text-zinc-600 text-xs italic font-mono">
-          No hay sesiones que coincidan con los filtros aplicados.
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
-            <thead>
-              <tr className="border-b border-zinc-800 text-zinc-500 text-[10px] uppercase tracking-wider select-none">
-                <th
-                  onClick={(): void => onSortClick('date')}
-                  className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center">
-                    <span>Fecha</span>
-                    {renderSortIndicator('date')}
-                  </div>
-                </th>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={(): void => {
+                  setSessionToDeleteSingle(null)
+                  setIsDeleteModalOpen(true)
+                }}
+                className="font-bold text-xs shadow-md cursor-pointer"
+              >
+                🗑️ Eliminar Seleccionadas ({selectedIds.size})
+              </Button>
 
-                <th
-                  onClick={(): void => onSortClick('content')}
-                  className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center">
-                    <span>Contenido & Timbre</span>
-                    {renderSortIndicator('content')}
-                  </div>
-                </th>
+              <button
+                type="button"
+                onClick={(): void => setSelectedIds(new Set())}
+                className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white text-xs cursor-pointer"
+              >
+                ✕ Desmarcar
+              </button>
+            </div>
+          </div>
+        )}
 
-                <th
-                  onClick={(): void => onSortClick('format')}
-                  className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center">
-                    <span>Formato</span>
-                    {renderSortIndicator('format')}
-                  </div>
-                </th>
+        {displayedList.length === 0 ? (
+          <div className="text-center py-8 text-zinc-600 text-xs italic font-mono">
+            No hay sesiones que coincidan con los filtros aplicados.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs font-mono">
+              <thead>
+                <tr className="border-b border-zinc-800 text-zinc-500 text-[10px] uppercase tracking-wider select-none">
+                  {/* Checkbox Maestro */}
+                  <th className="pb-2.5 pl-2 w-8 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded bg-zinc-950 border-zinc-700 text-sky-500 focus:ring-0 cursor-pointer"
+                      title="Seleccionar todas las visibles"
+                    />
+                  </th>
 
-                <th
-                  onClick={(): void => onSortClick('pool')}
-                  className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center justify-center">
-                    <PedagogicalTooltip conceptId="shannon_entropy">
-                      <span>Carga (Pool)</span>
-                    </PedagogicalTooltip>
-                    {renderSortIndicator('pool')}
-                  </div>
-                </th>
+                  <th
+                    onClick={(): void => onSortClick('date')}
+                    className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center">
+                      <span>Fecha</span>
+                      {renderSortIndicator('date')}
+                    </div>
+                  </th>
 
-                <th
-                  onClick={(): void => onSortClick('questions')}
-                  className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center justify-center">
-                    <span>Preguntas</span>
-                    {renderSortIndicator('questions')}
-                  </div>
-                </th>
+                  <th
+                    onClick={(): void => onSortClick('content')}
+                    className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center">
+                      <span>Contenido & Timbre</span>
+                      {renderSortIndicator('content')}
+                    </div>
+                  </th>
 
-                <th
-                  onClick={(): void => onSortClick('duration')}
-                  className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center justify-center">
-                    <span>Duración</span>
-                    {renderSortIndicator('duration')}
-                  </div>
-                </th>
+                  <th
+                    onClick={(): void => onSortClick('format')}
+                    className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center">
+                      <span>Formato</span>
+                      {renderSortIndicator('format')}
+                    </div>
+                  </th>
 
-                <th
-                  onClick={(): void => onSortClick('accuracy')}
-                  className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center justify-center">
-                    <span>Precisión</span>
-                    {renderSortIndicator('accuracy')}
-                  </div>
-                </th>
+                  <th
+                    onClick={(): void => onSortClick('pool')}
+                    className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center justify-center">
+                      <PedagogicalTooltip conceptId="shannon_entropy">
+                        <span>Carga (Pool)</span>
+                      </PedagogicalTooltip>
+                      {renderSortIndicator('pool')}
+                    </div>
+                  </th>
 
-                <th
-                  onClick={(): void => onSortClick('normalizedAccuracy')}
-                  className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center justify-center">
-                    <PedagogicalTooltip conceptId="irt_normalized_accuracy">
-                      <span>Oído Real (IRT)</span>
-                    </PedagogicalTooltip>
-                    {renderSortIndicator('normalizedAccuracy')}
-                  </div>
-                </th>
+                  <th
+                    onClick={(): void => onSortClick('questions')}
+                    className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center justify-center">
+                      <span>Preguntas</span>
+                      {renderSortIndicator('questions')}
+                    </div>
+                  </th>
 
-                <th
-                  onClick={(): void => onSortClick('fastPercent')}
-                  className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center justify-center">
-                    <PedagogicalTooltip conceptId="cognitive_latency">
-                      <span>Reflejo (&lt;1.4s)</span>
-                    </PedagogicalTooltip>
-                    {renderSortIndicator('fastPercent')}
-                  </div>
-                </th>
+                  <th
+                    onClick={(): void => onSortClick('duration')}
+                    className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center justify-center">
+                      <span>Duración</span>
+                      {renderSortIndicator('duration')}
+                    </div>
+                  </th>
 
-                <th
-                  onClick={(): void => onSortClick('bias')}
-                  className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center justify-center">
-                    <PedagogicalTooltip conceptId="directional_bias">
-                      <span>Sesgo</span>
-                    </PedagogicalTooltip>
-                    {renderSortIndicator('bias')}
-                  </div>
-                </th>
+                  <th
+                    onClick={(): void => onSortClick('accuracy')}
+                    className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center justify-center">
+                      <span>Precisión</span>
+                      {renderSortIndicator('accuracy')}
+                    </div>
+                  </th>
 
-                <th
-                  onClick={(): void => onSortClick('rpm')}
-                  className="pb-2.5 text-right cursor-pointer hover:text-zinc-200 transition-colors group"
-                >
-                  <div className="flex items-center justify-end">
-                    <PedagogicalTooltip conceptId="responses_per_minute">
-                      <span>Cadencia</span>
-                    </PedagogicalTooltip>
-                    {renderSortIndicator('rpm')}
-                  </div>
-                </th>
+                  <th
+                    onClick={(): void => onSortClick('normalizedAccuracy')}
+                    className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center justify-center">
+                      <PedagogicalTooltip conceptId="irt_normalized_accuracy">
+                        <span>Oído Real (IRT)</span>
+                      </PedagogicalTooltip>
+                      {renderSortIndicator('normalizedAccuracy')}
+                    </div>
+                  </th>
 
-                <th className="pb-2.5 text-center">Acción</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
-              {displayedList.map((item) => {
-                const s = item.session
-                const inst = INSTRUMENT_CATALOG.find((i) => i.id === s.instrumentId)
+                  <th
+                    onClick={(): void => onSortClick('fastPercent')}
+                    className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center justify-center">
+                      <PedagogicalTooltip conceptId="cognitive_latency">
+                        <span>Reflejo (&lt;1.4s)</span>
+                      </PedagogicalTooltip>
+                      {renderSortIndicator('fastPercent')}
+                    </div>
+                  </th>
 
-                let displayContent = s.presetName || ''
-                if (displayContent.includes('•')) {
-                  displayContent = displayContent.split('•')[0].trim()
-                }
+                  <th
+                    onClick={(): void => onSortClick('bias')}
+                    className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center justify-center">
+                      <PedagogicalTooltip conceptId="directional_bias">
+                        <span>Sesgo</span>
+                      </PedagogicalTooltip>
+                      {renderSortIndicator('bias')}
+                    </div>
+                  </th>
 
-                return (
-                  <tr key={s.id} className="hover:bg-zinc-950/50 transition-colors">
-                    <td className="py-3 text-zinc-400 text-[11px] whitespace-nowrap">
-                      {new Date(s.createdAt).toLocaleDateString('es-AR', {
-                        day: '2-digit',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </td>
-                    <td className="py-3 font-sans">
-                      <div className="font-semibold text-zinc-100 text-xs">{displayContent}</div>
-                      <div className="text-[10px] font-mono text-zinc-500 mt-0.5 flex items-center gap-2">
-                        <span>{inst?.name || s.instrumentId}</span>
-                        <span>•</span>
+                  <th
+                    onClick={(): void => onSortClick('rpm')}
+                    className="pb-2.5 text-right cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center justify-end">
+                      <PedagogicalTooltip conceptId="responses_per_minute">
+                        <span>Cadencia</span>
+                      </PedagogicalTooltip>
+                      {renderSortIndicator('rpm')}
+                    </div>
+                  </th>
+
+                  <th className="pb-2.5 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
+                {displayedList.map((item) => {
+                  const s = item.session
+                  const inst = INSTRUMENT_CATALOG.find((i) => i.id === s.instrumentId)
+                  const isSelected = selectedIds.has(s.id)
+
+                  let displayContent = s.presetName || ''
+                  if (displayContent.includes('•')) {
+                    displayContent = displayContent.split('•')[0].trim()
+                  }
+
+                  return (
+                    <tr
+                      key={s.id}
+                      className={`transition-colors ${
+                        isSelected ? 'bg-sky-950/40 border-sky-800/60' : 'hover:bg-zinc-950/50'
+                      }`}
+                    >
+                      {/* Checkbox de fila */}
+                      <td className="py-3 pl-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(): void => toggleSelectOne(s.id)}
+                          className="rounded bg-zinc-950 border-zinc-700 text-sky-500 focus:ring-0 cursor-pointer"
+                        />
+                      </td>
+
+                      {/* 1. Fecha */}
+                      <td className="py-3 text-zinc-400 text-[11px] whitespace-nowrap">
+                        {new Date(s.createdAt).toLocaleDateString('es-AR', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </td>
+
+                      {/* 2. Contenido, Timbre y Fuente */}
+                      <td className="py-3 font-sans">
+                        <div className="font-semibold text-zinc-100 text-xs">{displayContent}</div>
+                        <div className="text-[10px] font-mono text-zinc-500 mt-0.5 flex items-center gap-2">
+                          <span>{inst?.name || s.instrumentId}</span>
+                          <span>•</span>
+                          <span
+                            className={
+                              item.inputMethod === 'hardware'
+                                ? 'text-emerald-400 font-bold'
+                                : item.inputMethod === 'virtual'
+                                  ? 'text-purple-400'
+                                  : 'text-amber-400'
+                            }
+                          >
+                            {item.inputMethod === 'hardware'
+                              ? '🎹 Roland FP-8'
+                              : item.inputMethod === 'virtual'
+                                ? '🖱️ Ratón Virtual'
+                                : '🔀 Mixto'}
+                          </span>
+                          <span>•</span>
+                          <span className="text-zinc-400">{s.strategyId}</span>
+                        </div>
+                      </td>
+
+                      {/* 3. Formato */}
+                      <td className="py-3 whitespace-nowrap">
+                        {item.formatType === 'time' ? (
+                          <span className="px-2 py-0.5 rounded-md bg-amber-950/70 border border-amber-800 text-amber-300 text-[10px] font-bold">
+                            ⏱️ {formatDuration(s.durationSeconds || 60)}
+                          </span>
+                        ) : item.formatType === 'mastery' ? (
+                          <span className="px-2 py-0.5 rounded-md bg-purple-950/70 border border-purple-800 text-purple-300 text-[10px] font-bold">
+                            🎯 Maestría
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">
+                            🔢 Serie {s.totalQuestions}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 4. Carga (Pool) */}
+                      <td className="py-3 text-center whitespace-nowrap">
+                        <span className="text-zinc-300 font-bold">{item.poolSize} notas</span>
+                        <span className="block text-[10px] text-purple-400">
+                          {item.entropyBits} bits
+                        </span>
+                      </td>
+
+                      {/* 5. Preguntas */}
+                      <td className="py-3 text-center whitespace-nowrap">
+                        <span className="text-emerald-400 font-bold">{s.correctAnswers}</span> /{' '}
+                        {s.totalQuestions}
+                      </td>
+
+                      {/* 6. Duración */}
+                      <td className="py-3 text-center text-zinc-400 whitespace-nowrap">
+                        {formatDuration(s.durationSeconds || 0)}
+                      </td>
+
+                      {/* 7. Precisión Cruda */}
+                      <td className="py-3 text-center text-zinc-200 font-bold whitespace-nowrap">
+                        {s.accuracyPercentage}%
+                      </td>
+
+                      {/* 8. Oído Real IRT */}
+                      <td className="py-3 text-center whitespace-nowrap">
+                        <span
+                          className={`font-bold ${
+                            item.normalizedAccuracy >= 85
+                              ? 'text-emerald-400'
+                              : item.normalizedAccuracy >= 50
+                                ? 'text-amber-400'
+                                : 'text-rose-400'
+                          }`}
+                        >
+                          {item.normalizedAccuracy}%
+                        </span>
+                      </td>
+
+                      {/* 9. Reflejo Inmediato (<1.4s) */}
+                      <td className="py-3 text-center whitespace-nowrap">
                         <span
                           className={
-                            item.inputMethod === 'hardware'
+                            item.fastPercent >= 60
                               ? 'text-emerald-400 font-bold'
-                              : item.inputMethod === 'virtual'
-                                ? 'text-purple-400'
-                                : 'text-amber-400'
+                              : item.fastPercent >= 30
+                                ? 'text-amber-400'
+                                : 'text-zinc-400'
                           }
                         >
-                          {item.inputMethod === 'hardware'
-                            ? '🎹 Roland FP-8'
-                            : item.inputMethod === 'virtual'
-                              ? '🖱️ Ratón Virtual'
-                              : '🔀 Mixto'}
+                          {item.fastPercent}%
                         </span>
-                        <span>•</span>
-                        <span className="text-zinc-400">{s.strategyId}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 whitespace-nowrap">
-                      {item.formatType === 'time' ? (
-                        <span className="px-2 py-0.5 rounded-md bg-amber-950/70 border border-amber-800 text-amber-300 text-[10px] font-bold">
-                          ⏱️ {formatDuration(s.durationSeconds || 60)}
+                      </td>
+
+                      {/* 10. Sesgo Direccional */}
+                      <td className="py-3 text-center whitespace-nowrap">
+                        <span className="text-zinc-300 text-[10px]">
+                          {item.dominantBias === 'sharp' ? (
+                            <span className="text-purple-400 font-bold">▲ +st Agudo</span>
+                          ) : item.dominantBias === 'flat' ? (
+                            <span className="text-amber-400 font-bold">▼ -st Grave</span>
+                          ) : (
+                            <span className="text-zinc-500">● Neutro</span>
+                          )}
                         </span>
-                      ) : item.formatType === 'mastery' ? (
-                        <span className="px-2 py-0.5 rounded-md bg-purple-950/70 border border-purple-800 text-purple-300 text-[10px] font-bold">
-                          🎯 Maestría
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">
-                          🔢 Serie {s.totalQuestions}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 text-center whitespace-nowrap">
-                      <span className="text-zinc-300 font-bold">{item.poolSize} notas</span>
-                      <span className="block text-[10px] text-purple-400">
-                        {item.entropyBits} bits
-                      </span>
-                    </td>
-                    <td className="py-3 text-center whitespace-nowrap">
-                      <span className="text-emerald-400 font-bold">{s.correctAnswers}</span> /{' '}
-                      {s.totalQuestions}
-                    </td>
-                    <td className="py-3 text-center text-zinc-400 whitespace-nowrap">
-                      {formatDuration(s.durationSeconds || 0)}
-                    </td>
-                    <td className="py-3 text-center text-zinc-200 font-bold whitespace-nowrap">
-                      {s.accuracyPercentage}%
-                    </td>
-                    <td className="py-3 text-center whitespace-nowrap">
-                      <span
-                        className={`font-bold ${
-                          item.normalizedAccuracy >= 85
-                            ? 'text-emerald-400'
-                            : item.normalizedAccuracy >= 50
-                              ? 'text-amber-400'
-                              : 'text-rose-400'
-                        }`}
-                      >
-                        {item.normalizedAccuracy}%
-                      </span>
-                    </td>
-                    <td className="py-3 text-center whitespace-nowrap">
-                      <span
-                        className={
-                          item.fastPercent >= 60
-                            ? 'text-emerald-400 font-bold'
-                            : item.fastPercent >= 30
-                              ? 'text-amber-400'
-                              : 'text-zinc-400'
-                        }
-                      >
-                        {item.fastPercent}%
-                      </span>
-                    </td>
-                    <td className="py-3 text-center whitespace-nowrap">
-                      <span className="text-zinc-300 text-[10px]">
-                        {item.dominantBias === 'sharp' ? (
-                          <span className="text-purple-400 font-bold">▲ +st Agudo</span>
-                        ) : item.dominantBias === 'flat' ? (
-                          <span className="text-amber-400 font-bold">▼ -st Grave</span>
-                        ) : (
-                          <span className="text-zinc-500">● Neutro</span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="py-3 text-right text-sky-400 font-bold whitespace-nowrap">
-                      {item.responsesPerMinute}{' '}
-                      <span className="text-[9px] font-normal text-zinc-500">RPM</span>
-                    </td>
-                    <td className="py-3 text-center whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={(): void => {
-                          const config = reconstructSessionConfig(s, answers)
-                          onLoadPrescription(config)
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 hover:border-sky-400 text-sky-200 text-[10px] font-mono font-bold transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95 flex items-center gap-1 mx-auto"
-                        title={`Clonar y repetir esta sesión idéntica (${s.presetName})`}
-                      >
-                        <span>🔁</span>
-                        <span>Re-testar</span>
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
+                      </td>
+
+                      {/* 11. Cadencia / RPM */}
+                      <td className="py-3 text-right text-sky-400 font-bold whitespace-nowrap">
+                        {item.responsesPerMinute}{' '}
+                        <span className="text-[9px] font-normal text-zinc-500">RPM</span>
+                      </td>
+
+                      {/* Acciones: Re-testar + Eliminar Individual */}
+                      <td className="py-3 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(): void => {
+                              const config = reconstructSessionConfig(s, answers)
+                              onLoadPrescription(config)
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 hover:border-sky-400 text-sky-200 text-[10px] font-mono font-bold transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95 flex items-center gap-1"
+                            title={`Clonar y repetir esta sesión idéntica (${s.presetName})`}
+                          >
+                            <span>🔁</span>
+                            <span>Re-testar</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(): void => {
+                              setSessionToDeleteSingle(s.id)
+                              setIsDeleteModalOpen(true)
+                            }}
+                            className="p-1 rounded-lg bg-zinc-900 hover:bg-rose-950/80 border border-zinc-800 hover:border-rose-700/60 text-zinc-400 hover:text-rose-300 transition-all cursor-pointer"
+                            title="Eliminar esta sesión de la base de datos"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Modal de Confirmación de Borrado */}
+      <ConfirmModal
+        isOpen={isDeleteModalOpen}
+        title={
+          sessionToDeleteSingle
+            ? '¿Eliminar Sesión de Entrenamiento?'
+            : `¿Eliminar ${selectedIds.size} Sesiones Seleccionadas?`
+        }
+        message={
+          sessionToDeleteSingle
+            ? 'Esta acción eliminará permanentemente esta sesión y todas sus respuestas individuales de la base de datos.'
+            : `Se eliminarán permanentemente las ${selectedIds.size} sesiones seleccionadas y todas sus respuestas de la memoria local. Esta operación no se puede deshacer.`
+        }
+        confirmText="Sí, Eliminar"
+        cancelText="Cancelar"
+        onConfirm={handleConfirmDelete}
+        onCancel={(): void => {
+          setIsDeleteModalOpen(false)
+          setSessionToDeleteSingle(null)
+        }}
+      />
+    </>
   )
 }

@@ -19,6 +19,8 @@ interface DatabaseState {
   isInitialized: boolean
   initialize: () => Promise<void>
   saveSession: (session: DbSessionRecord, answers: DbAnswerRecord[]) => Promise<void>
+  deleteSession: (sessionId: string) => Promise<void>
+  deleteSessions: (sessionIds: string[]) => Promise<void>
   saveAiReport: (report: DbAiReportRecord) => Promise<void>
   saveAiConsultation: (consultation: DbAiConsultationRecord) => Promise<void>
   clearDatabase: () => Promise<void>
@@ -70,6 +72,20 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
     const { engine, reloadAllData } = get()
     if (!engine) return
     await engine.saveSession(session, answers)
+    await reloadAllData()
+  },
+
+  deleteSession: async (sessionId: string): Promise<void> => {
+    const { engine, reloadAllData } = get()
+    if (!engine) return
+    await engine.deleteSession(sessionId)
+    await reloadAllData()
+  },
+
+  deleteSessions: async (sessionIds: string[]): Promise<void> => {
+    const { engine, reloadAllData } = get()
+    if (!engine) return
+    await engine.deleteSessions(sessionIds)
     await reloadAllData()
   },
 

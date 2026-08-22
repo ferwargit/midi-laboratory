@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { useDatabaseStore } from './useDatabaseStore'
 import { useAiStore } from './useAiStore'
-import { DbSessionRecord, DbAiReportRecord, DbAiConsultationRecord } from '../domain/database/types'
+import {
+  DbSessionRecord,
+  DbAiReportRecord,
+  DbAiConsultationRecord,
+  DbAnswerRecord
+} from '../domain/database/types'
 
 describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Cascada', () => {
   beforeEach(async () => {
@@ -44,6 +49,87 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(state.sessions[0].id).toBe('session_db_test')
   })
 
+  // NUEVO TEST DE BORRADO INDIVIDUAL REACTIVO EN STORE
+  it('deleteSession debe eliminar una sesión y actualizar el estado reactivo y resumen', async () => {
+    const session: DbSessionRecord = {
+      id: 'session_to_delete',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Test',
+      totalQuestions: 2,
+      correctAnswers: 2,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 20
+    }
+
+    const answers: DbAnswerRecord[] = [
+      {
+        id: 'ans_1',
+        sessionId: 'session_to_delete',
+        questionIndex: 1,
+        expectedNote: 60,
+        playedNote: 60,
+        isCorrect: true,
+        semitoneDistance: 0,
+        responseTimeMs: 900,
+        velocity: 90,
+        reasonTelemetry: '',
+        createdAt: new Date().toISOString()
+      }
+    ]
+
+    await useDatabaseStore.getState().saveSession(session, answers)
+    expect(useDatabaseStore.getState().sessions.length).toBe(1)
+    expect(useDatabaseStore.getState().answers.length).toBe(1)
+
+    // Eliminación individual
+    await useDatabaseStore.getState().deleteSession('session_to_delete')
+
+    expect(useDatabaseStore.getState().sessions.length).toBe(0)
+    expect(useDatabaseStore.getState().answers.length).toBe(0)
+    expect(useDatabaseStore.getState().summary.totalSessions).toBe(0)
+  })
+
+  // NUEVO TEST DE BORRADO POR LOTE REACTIVO EN STORE
+  it('deleteSessions debe eliminar múltiples sesiones en lote y actualizar el estado', async () => {
+    const s1: DbSessionRecord = {
+      id: 's_batch_1',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'T1',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 10
+    }
+    const s2: DbSessionRecord = {
+      id: 's_batch_2',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'T2',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 10
+    }
+
+    await useDatabaseStore.getState().saveSession(s1, [])
+    await useDatabaseStore.getState().saveSession(s2, [])
+    expect(useDatabaseStore.getState().sessions.length).toBe(2)
+
+    // Eliminación por lote
+    await useDatabaseStore.getState().deleteSessions(['s_batch_1', 's_batch_2'])
+
+    expect(useDatabaseStore.getState().sessions.length).toBe(0)
+    expect(useDatabaseStore.getState().summary.totalSessions).toBe(0)
+  })
+
   it('debe guardar y recuperar informes de IA en la colección persistente', async () => {
     const mockReport: DbAiReportRecord = {
       id: 'ai_rep_1',
@@ -71,7 +157,6 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(state.aiReports[0].modelName).toBe('qwen3.5-9b')
   })
 
-  // TEST ESPECÍFICO DE CONSULTAS AL TUTOR IA
   it('debe guardar y recuperar consultas del tutor IA en la colección reactiva (saveAiConsultation)', async () => {
     const mockConsultation: DbAiConsultationRecord = {
       id: 'consult_store_1',
@@ -126,7 +211,7 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(useDatabaseStore.getState().summary.totalSessions).toBe(1)
     expect(useDatabaseStore.getState().aiConsultations.length).toBe(1)
 
-    // Ejecutamos limpieza completa de la base de datos
+    // Limpieza completa
     await useDatabaseStore.getState().clearDatabase()
 
     expect(useDatabaseStore.getState().summary.totalSessions).toBe(0)

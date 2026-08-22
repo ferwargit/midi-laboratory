@@ -43,7 +43,6 @@ export class DatabaseEngine {
           db.createObjectStore(AI_REPORTS_STORE, { keyPath: 'id' })
         }
 
-        // TABLA PERSISTENTE PARA CONSULTAS AL TUTOR IA
         if (!db.objectStoreNames.contains(AI_CONSULTATIONS_STORE)) {
           db.createObjectStore(AI_CONSULTATIONS_STORE, { keyPath: 'id' })
         }
@@ -87,6 +86,45 @@ export class DatabaseEngine {
 
       for (const answer of answers) {
         answersStore.put(answer)
+      }
+
+      tx.oncomplete = (): void => resolve()
+      tx.onerror = (): void => reject(tx.error)
+    })
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    return this.deleteSessions([sessionId])
+  }
+
+  async deleteSessions(sessionIds: string[]): Promise<void> {
+    if (!this.db) throw new Error('Base de datos no inicializada.')
+    if (sessionIds.length === 0) return
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction([SESSIONS_STORE, ANSWERS_STORE], 'readwrite')
+      const sessionsStore = tx.objectStore(SESSIONS_STORE)
+      const answersStore = tx.objectStore(ANSWERS_STORE)
+      const index = answersStore.index('sessionId')
+
+      const idSet = new Set(sessionIds)
+
+      // 1. Eliminar las sesiones de la tabla principal
+      sessionIds.forEach((id) => {
+        sessionsStore.delete(id)
+      })
+
+      // 2. Borrado en cascada de las respuestas asociadas en exercise_answers
+      const cursorRequest = index.openKeyCursor()
+      cursorRequest.onsuccess = (): void => {
+        const cursor = cursorRequest.result
+        if (cursor) {
+          const currentSessionId = cursor.key as string
+          if (idSet.has(currentSessionId)) {
+            answersStore.delete(cursor.primaryKey)
+          }
+          cursor.continue()
+        }
       }
 
       tx.oncomplete = (): void => resolve()

@@ -47,6 +47,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const aiConsultations = useDatabaseStore((state) => state.aiConsultations)
   const saveAiConsultation = useDatabaseStore((state) => state.saveAiConsultation)
 
+  const deleteSession = useDatabaseStore((state) => state.deleteSession)
+  const deleteSessions = useDatabaseStore((state) => state.deleteSessions)
+
   const [activeTab, setActiveTab] = useState<AnalyticsTabKey>('sessions')
 
   // Filtros Secundarios
@@ -236,6 +239,8 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           sortDirection={sortDirection}
           onSortClick={handleSortClick}
           onLoadPrescription={onLoadPrescription}
+          onDeleteSession={deleteSession}
+          onDeleteSessions={deleteSessions}
         />
       )}
 

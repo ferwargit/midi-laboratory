@@ -194,4 +194,93 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
     expect(consultations[0].userQuery).toBe('¿Por qué aumenta mi latencia en notas agudas?')
     expect(consultations[0].associatedMetricsSnapshot?.normalizedAccuracy).toBe(82)
   })
+
+  it('deleteSession debe eliminar la sesión y todas sus respuestas en cascada', async () => {
+    const session: DbSessionRecord = {
+      id: 'session_to_delete',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Test',
+      totalQuestions: 2,
+      correctAnswers: 2,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 10
+    }
+
+    const answers: DbAnswerRecord[] = [
+      {
+        id: 'ans_del_1',
+        sessionId: 'session_to_delete',
+        questionIndex: 1,
+        expectedNote: 60,
+        playedNote: 60,
+        isCorrect: true,
+        semitoneDistance: 0,
+        responseTimeMs: 900,
+        velocity: 90,
+        reasonTelemetry: '',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'ans_del_2',
+        sessionId: 'session_to_delete',
+        questionIndex: 2,
+        expectedNote: 62,
+        playedNote: 62,
+        isCorrect: true,
+        semitoneDistance: 0,
+        responseTimeMs: 1100,
+        velocity: 90,
+        reasonTelemetry: '',
+        createdAt: new Date().toISOString()
+      }
+    ]
+
+    await engine.saveSession(session, answers)
+    expect((await engine.getAllSessions()).length).toBe(1)
+    expect((await engine.getAllAnswers()).length).toBe(2)
+
+    // Borrado individual en cascada
+    await engine.deleteSession('session_to_delete')
+
+    expect((await engine.getAllSessions()).length).toBe(0)
+    expect((await engine.getAllAnswers()).length).toBe(0)
+  })
+
+  it('deleteSessions debe eliminar múltiples sesiones y sus respuestas por lote', async () => {
+    const s1: DbSessionRecord = {
+      id: 's_batch_1',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'T1',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 10
+    }
+    const s2: DbSessionRecord = {
+      id: 's_batch_2',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'T2',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 10
+    }
+
+    await engine.saveSession(s1, [])
+    await engine.saveSession(s2, [])
+    expect((await engine.getAllSessions()).length).toBe(2)
+
+    // Borrado por lote
+    await engine.deleteSessions(['s_batch_1', 's_batch_2'])
+    expect((await engine.getAllSessions()).length).toBe(0)
+  })
 })
