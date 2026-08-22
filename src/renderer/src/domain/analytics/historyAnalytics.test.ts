@@ -3,8 +3,8 @@ import {
   computeAnalyticsMetrics,
   filterSessionsByMode,
   filterSessionsAdvanced,
-  reconstructSessionConfig,
-  computeLongitudinalComparisons
+  computeLongitudinalComparisons,
+  reconstructSessionConfig
 } from './historyAnalytics'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
@@ -74,7 +74,8 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       responseTimeMs: 950,
       velocity: 90,
       reasonTelemetry: '',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      inputSource: 'midi_hardware'
     },
     {
       id: 'a2',
@@ -87,7 +88,8 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       responseTimeMs: 2400,
       velocity: 85,
       reasonTelemetry: '',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      inputSource: 'virtual_ui'
     }
   ]
 
@@ -103,7 +105,6 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
   it('filterSessionsAdvanced aplica filtros cruzados por Timbre, Formato, Nivel de Maestría y Búsqueda', () => {
     const all = [sNotePiano, sNoteFlute, sInterval, sSequence]
 
-    // 1. Filtrar solo flauta en single_note
     const fluteOnly = filterSessionsAdvanced(all, {
       mode: 'single_note',
       instrumentId: 'flute'
@@ -111,14 +112,12 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(fluteOnly.length).toBe(1)
     expect(fluteOnly[0].id).toBe('s_note_flute')
 
-    // 2. Filtrar por Formato Cronometrado
     const timedOnly = filterSessionsAdvanced(all, {
       mode: 'all',
       format: 'time'
     })
     expect(timedOnly.map((s) => s.id)).toEqual(['s_note_piano', 's_seq'])
 
-    // 3. Filtrar por Nivel de Maestría (Dominadas >=85%)
     const mastered = filterSessionsAdvanced(all, {
       mode: 'single_note',
       mastery: 'mastered'
@@ -126,7 +125,6 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(mastered.length).toBe(1)
     expect(mastered[0].id).toBe('s_note_piano')
 
-    // 4. Filtrar por Búsqueda de texto
     const searchMatch = filterSessionsAdvanced(all, {
       mode: 'all',
       searchQuery: 'Intervalos Clásicos'
@@ -148,19 +146,14 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     )
     expect(pianoAnalysis?.responsesPerMinute).toBe(10)
     expect(pianoAnalysis?.fastPercent).toBe(100)
+    expect(pianoAnalysis?.inputMethod).toBe('hardware')
 
     const fluteAnalysis = metrics.sessionPsychometricsList.find(
       (p) => p.session.id === 's_note_flute'
     )
     expect(fluteAnalysis?.sharpBiasCount).toBe(1)
     expect(fluteAnalysis?.dominantBias).toBe('sharp')
-  })
-
-  it('generateDiagnosticReport redacta el plan de acción psicopedagógico correctamente', () => {
-    const metrics = computeAnalyticsMetrics([sNotePiano], [mockAnswers[0]], 'single_note')
-    const report = generateDiagnosticReport(metrics)
-    expect(report.title).toContain('Informe')
-    expect(report.concreteActionPlan.length).toBeGreaterThan(0)
+    expect(fluteAnalysis?.inputMethod).toBe('virtual')
   })
 
   it('reconstructSessionConfig debe reconstruir con precisión el pool de notas canónicas y formato de una sesión pasada', () => {
@@ -177,7 +170,6 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       durationSeconds: 180
     }
 
-    // Aunque solo hayan salido 2 de las 3 notas en el array de respuestas:
     const pastAnswers: DbAnswerRecord[] = [
       {
         id: 'ans_1',
@@ -211,7 +203,6 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
 
     expect(prescription.targetMode).toBe('single_note')
     expect(prescription.instrumentId).toBe('flute')
-    // Debe restaurar las 3 notas canónicas del Nivel 1 ([60, 62, 64]), no solo las 2 que salieron
     expect(prescription.recommendedNotes).toEqual([60, 62, 64])
     expect(prescription.limitType).toBe('time')
     expect(prescription.durationMinutes).toBe(3)
@@ -259,7 +250,8 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
         sharpBiasCount: 2,
         flatBiasCount: 0,
         dominantBias: 'sharp',
-        formatType: 'time'
+        formatType: 'time',
+        inputMethod: 'hardware'
       },
       {
         session: session2,
@@ -274,14 +266,15 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
         sharpBiasCount: 0,
         flatBiasCount: 0,
         dominantBias: 'balanced',
-        formatType: 'time'
+        formatType: 'time',
+        inputMethod: 'hardware'
       }
     ])
 
     expect(comparisons.length).toBe(1)
-    expect(comparisons[0].rawAccuracyDelta).toBe(33) // +33%
-    expect(comparisons[0].responseTimeDeltaMs).toBe(-600) // 600ms más rápido
-    expect(comparisons[0].rpmDelta).toBe(5) // +5 RPM
+    expect(comparisons[0].rawAccuracyDelta).toBe(33)
+    expect(comparisons[0].responseTimeDeltaMs).toBe(-600)
+    expect(comparisons[0].rpmDelta).toBe(5)
     expect(comparisons[0].isImproved).toBe(true)
   })
 
@@ -294,7 +287,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
       totalQuestions: 44,
       correctAnswers: 37,
-      accuracyPercentage: 84, // 84% crudo -> 82% normalizado
+      accuracyPercentage: 84,
       avgResponseTimeMs: 1400,
       durationSeconds: 180
     }
@@ -307,7 +300,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
       totalQuestions: 44,
       correctAnswers: 38,
-      accuracyPercentage: 86, // >=85%
+      accuracyPercentage: 86,
       avgResponseTimeMs: 1400,
       durationSeconds: 180
     }
@@ -320,23 +313,27 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
       totalQuestions: 44,
       correctAnswers: 20,
-      accuracyPercentage: 45, // <50%
+      accuracyPercentage: 45,
       avgResponseTimeMs: 2500,
       durationSeconds: 180
     }
 
     const pool = [s82Percent, s86Percent, s45Percent]
 
-    // 1. Dominadas (>= 85%) -> Solo s86Percent
     const mastered = filterSessionsAdvanced(pool, { mode: 'all', mastery: 'mastered' })
     expect(mastered.map((s) => s.id)).toEqual(['s_86'])
 
-    // 2. En Progreso (50% - 84%) -> Solo s82Percent (debe ser amarillo, NO verde)
     const learning = filterSessionsAdvanced(pool, { mode: 'all', mastery: 'learning' })
     expect(learning.map((s) => s.id)).toEqual(['s_82'])
 
-    // 3. Críticas (< 50%) -> Solo s45Percent
     const critical = filterSessionsAdvanced(pool, { mode: 'all', mastery: 'critical' })
     expect(critical.map((s) => s.id)).toEqual(['s_45'])
+  })
+
+  it('generateDiagnosticReport redacta el plan de acción psicopedagógico correctamente', () => {
+    const metrics = computeAnalyticsMetrics([sNotePiano], [mockAnswers[0]], 'single_note')
+    const report = generateDiagnosticReport(metrics)
+    expect(report.title).toContain('Informe')
+    expect(report.concreteActionPlan.length).toBeGreaterThan(0)
   })
 })

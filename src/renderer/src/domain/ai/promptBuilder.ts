@@ -95,6 +95,12 @@ export function buildUserPrompt(
     id: s.session.id,
     fecha: s.session.createdAt,
     timbre: s.session.instrumentId,
+    fuenteEntrada:
+      s.inputMethod === 'hardware'
+        ? 'Roland FP-8 Físico'
+        : s.inputMethod === 'virtual'
+          ? 'Ratón Virtual'
+          : 'Mixto',
     algoritmo: s.session.strategyId,
     formato: s.formatType,
     duracionSeg: s.session.durationSeconds,
@@ -105,7 +111,7 @@ export function buildUserPrompt(
     poolNotas: s.poolSize,
     cadenciaRPM: s.responsesPerMinute,
     tiempoMedioMs: s.session.avgResponseTimeMs,
-    reflejoInmediatoPct: `${s.fastPercent}%`,
+    reflejoInmediatoPct: `${s.fastPercent}% (<1.4s)`,
     sesgoDominante:
       s.dominantBias === 'sharp'
         ? 'Hacia lo Agudo (+st)'

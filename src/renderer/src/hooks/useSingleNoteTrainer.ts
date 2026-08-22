@@ -59,7 +59,7 @@ export interface UseSingleNoteTrainerReturn {
   stopSession: () => void
   advanceToNextQuestion: () => void
   repeatCurrentNote: () => void
-  handleUserNotePlayed: (playedNoteNumber: number) => void
+  handleUserNotePlayed: (playedNoteNumber: number, source?: 'midi_hardware' | 'virtual_ui') => void
   trainWeakNotesOnly: () => void
   resetToConfig: () => void
 }
@@ -332,9 +332,6 @@ export function useSingleNoteTrainer({
     (notesPool?: number[]): void => {
       const currentPool = notesPool || activeNotesBufferRef.current
 
-      // FIX: se resetea siempre, incluso si la función corta más abajo por
-      // pool insuficiente. Antes quedaba en `true` para siempre si el pool
-      // bajaba de 2 notas justo al momento de avanzar, trabando la sesión.
       isAdvancingRef.current = false
 
       if (currentPool.length < 2) return
@@ -408,11 +405,9 @@ export function useSingleNoteTrainer({
     const finalStrategyId = activeSessionStrategyIdRef.current
     const finalInstrument = activeSessionInstrumentRef.current
 
-    // Identificar si coincide con algún preset formal o es selección libre
     const activePool = activeNotesBufferRef.current
     let contentName = `Notas Personalizadas (${activePool.length})`
 
-    // Si tenemos los presets importados o por cantidad de notas
     if (
       activePool.length === 3 &&
       activePool.includes(60) &&
@@ -627,7 +622,7 @@ export function useSingleNoteTrainer({
   }
 
   const handleUserNotePlayed = useCallback(
-    (playedNoteNumber: number): void => {
+    (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {
       if (
         !isSessionActiveRef.current ||
         !isWaitingAnswerRef.current ||
@@ -652,7 +647,8 @@ export function useSingleNoteTrainer({
         responseTimeMs,
         velocity: 90,
         reasonTelemetry: lastDecisionRef.current?.reason || '',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        inputSource: source
       }
 
       answersBufferRef.current.push(answerRecord)

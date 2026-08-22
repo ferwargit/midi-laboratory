@@ -54,7 +54,7 @@ export interface UseIntervalTrainerReturn {
   stopSession: () => void
   advanceToNextInterval: () => void
   repeatCurrentInterval: () => void
-  handleUserNotePlayed: (noteNumber: number) => void
+  handleUserNotePlayed: (noteNumber: number, source?: 'midi_hardware' | 'virtual_ui') => void
   trainWeakIntervalsOnly: () => void
   resetToConfig: () => void
 }
@@ -115,7 +115,6 @@ export function useIntervalTrainer({
     }
   }, [])
 
-  // Limpieza de seguridad al desmontar el hook/componente
   useEffect(() => {
     return (): void => {
       cleanupSessionTimers()
@@ -167,9 +166,6 @@ export function useIntervalTrainer({
       const currentIntervals = intervalsPool || activeIntervalsBufferRef.current
       const currentRoots = rootsPool || rootRangeNotesBufferRef.current
 
-      // FIX: se resetea siempre, incluso si la función corta más abajo por
-      // pool insuficiente. Antes quedaba en `true` para siempre si el pool
-      // de intervalos o raíces quedaba vacío justo al avanzar, trabando la sesión.
       isAdvancingRef.current = false
 
       if (currentIntervals.length === 0 || currentRoots.length === 0) return
@@ -236,8 +232,8 @@ export function useIntervalTrainer({
 
     const presetLabel =
       sessionLimitType === 'time'
-        ? `Intervalos Tiempo (${sessionDurationMinutesBufferRef.current}m)`
-        : `Intervalos (${activeIntervalsBufferRef.current.length})`
+        ? `Intervalos (${activeIntervalsBufferRef.current.length} activos) • Cronometrado ${sessionDurationMinutesBufferRef.current}m`
+        : `Intervalos (${activeIntervalsBufferRef.current.length} activos) • Bloque ${allAnswers.length} preguntas`
 
     const sessionRecord: DbSessionRecord = {
       id: sessionIdRef.current,
@@ -256,7 +252,6 @@ export function useIntervalTrainer({
     sessionIdRef.current = ''
   }, [cleanupSessionTimers, sessionLimitType, saveSessionToDb])
 
-  // Temporizador regresivo único y sincronizado para sesiones por tiempo
   useEffect(() => {
     if (!isSessionActive || sessionLimitType !== 'time') return
 
@@ -387,7 +382,7 @@ export function useIntervalTrainer({
   }
 
   const handleUserNotePlayed = useCallback(
-    (playedNoteNumber: number): void => {
+    (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {
       if (!isSessionActive || !currentStimulus || !questionTokenRef.current) return
 
       if (waitingNoteStep === 1) {
@@ -415,7 +410,8 @@ export function useIntervalTrainer({
           responseTimeMs,
           velocity: 90,
           reasonTelemetry: `${result.expectedStimulus.semitones} st (${result.expectedStimulus.direction})`,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          inputSource: source
         }
 
         answersBufferRef.current.push(answerRecord)

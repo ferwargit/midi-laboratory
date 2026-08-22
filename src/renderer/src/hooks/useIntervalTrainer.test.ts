@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useIntervalTrainer } from './useIntervalTrainer'
+import { useDatabaseStore } from '../stores/useDatabaseStore'
 
 describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () => {
   beforeEach(() => {
@@ -43,7 +44,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
     expect(target).toBe(64)
   })
 
-  it('debe manejar la secuencia de 2 pasos: fijar Nota 1 y evaluar al tocar Nota 2', () => {
+  it('debe manejar la secuencia de 2 pasos: fijar Nota 1 y evaluar al tocar Nota 2 con inputSource', () => {
     const onPlayInterval = vi.fn()
 
     const { result } = renderHook(() =>
@@ -57,7 +58,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
     })
 
     act(() => {
-      result.current.handleUserNotePlayed(60)
+      result.current.handleUserNotePlayed(60, 'virtual_ui')
     })
 
     expect(result.current.waitingNoteStep).toBe(2)
@@ -65,7 +66,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
     expect(result.current.lastResult).toBeNull()
 
     act(() => {
-      result.current.handleUserNotePlayed(64)
+      result.current.handleUserNotePlayed(64, 'virtual_ui')
     })
 
     expect(result.current.waitingNoteStep).toBe(1)
@@ -133,7 +134,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
       result.current.handleUserNotePlayed(60)
     })
     act(() => {
-      result.current.handleUserNotePlayed(61) // Fallo (+1st en vez de +4st)
+      result.current.handleUserNotePlayed(61)
     })
     act(() => {
       result.current.stopSession()
@@ -254,7 +255,6 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
 
       expect(result.current.isWaitingManualAdvance).toBe(true)
 
-      // El usuario destildea el único intervalo activo justo antes de avanzar
       act(() => {
         result.current.toggleInterval(4)
       })
@@ -263,10 +263,8 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
         result.current.advanceToNextInterval()
       })
 
-      // triggerNextInterval cortó temprano por pool vacío: no hay intervalo nuevo
       expect(onPlayInterval).toHaveBeenCalledTimes(1)
 
-      // El usuario repone el intervalo
       act(() => {
         result.current.toggleInterval(4)
       })
@@ -275,8 +273,44 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
         result.current.advanceToNextInterval()
       })
 
-      // Sin el fix, isAdvancingRef queda en true para siempre y esta llamada no hace nada
       expect(onPlayInterval).toHaveBeenCalledTimes(2)
+    })
+
+    it('debe guardar la sesión de intervalos con metadatos y fuente de entrada en la base de datos', async () => {
+      const saveSpy = vi
+        .spyOn(useDatabaseStore.getState(), 'saveSession')
+        .mockResolvedValue(undefined)
+      const onPlayInterval = vi.fn()
+      const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
+
+      act(() => {
+        result.current.setSessionLimitType('questions')
+        result.current.setSessionQuestionsCount(1)
+        result.current.startSession([4], [60])
+      })
+
+      // Paso 1: fijar la primera nota en un act independiente
+      act(() => {
+        result.current.handleUserNotePlayed(60, 'midi_hardware')
+      })
+
+      // Paso 2: evaluar la segunda nota en su propio act
+      act(() => {
+        result.current.handleUserNotePlayed(64, 'midi_hardware')
+      })
+
+      act(() => {
+        result.current.stopSession()
+      })
+
+      expect(saveSpy).toHaveBeenCalled()
+      const savedSession = saveSpy.mock.calls[0][0]
+      const savedAnswers = saveSpy.mock.calls[0][1]
+
+      expect(savedSession.strategyId).toBe('intervals_v1')
+      expect(savedAnswers[0].inputSource).toBe('midi_hardware')
+
+      saveSpy.mockRestore()
     })
   })
 })

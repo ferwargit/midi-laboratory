@@ -47,7 +47,7 @@ export interface UseSequenceTrainerReturn {
   stopSession: () => void
   advanceToNextSequence: () => void
   repeatCurrentSequence: () => void
-  handleUserNotePlayed: (noteNumber: number) => void
+  handleUserNotePlayed: (noteNumber: number, source?: 'midi_hardware' | 'virtual_ui') => void
   trainWeakMotifsOnly: () => void
   resetToConfig: () => void
 }
@@ -109,7 +109,6 @@ export function useSequenceTrainer({
     }
   }, [])
 
-  // Limpieza de seguridad al desmontar el hook/componente
   useEffect(() => {
     return (): void => {
       cleanupSessionTimers()
@@ -146,10 +145,6 @@ export function useSequenceTrainer({
       const currentPool = notesPool || customCandidateNotesBufferRef.current
       const currentLen = lengthToUse || sequenceLengthBufferRef.current
 
-      // FIX: se resetea siempre, incluso si la función corta más abajo por
-      // pool insuficiente. Antes quedaba en `true` para siempre si el pool
-      // de notas candidatas bajaba de 2 justo al momento de avanzar,
-      // trabando la sesión.
       isAdvancingRef.current = false
 
       if (currentPool.length < 2) return
@@ -208,8 +203,8 @@ export function useSequenceTrainer({
 
     const presetLabel =
       sessionLimitType === 'time'
-        ? `Secuencias Tiempo (${sessionDurationMinutesBufferRef.current}m)`
-        : `Secuencias (${sequenceLengthBufferRef.current} notas)`
+        ? `Secuencias (${sequenceLengthBufferRef.current} notas) • Cronometrado ${sessionDurationMinutesBufferRef.current}m`
+        : `Secuencias (${sequenceLengthBufferRef.current} notas) • Bloque ${allAnswers.length} preguntas`
 
     const sessionRecord: DbSessionRecord = {
       id: sessionIdRef.current,
@@ -228,7 +223,6 @@ export function useSequenceTrainer({
     sessionIdRef.current = ''
   }, [cleanupSessionTimers, sessionLimitType, saveSessionToDb])
 
-  // Temporizador regresivo único para sesiones por tiempo
   useEffect(() => {
     if (!isSessionActive || sessionLimitType !== 'time') return
 
@@ -354,7 +348,7 @@ export function useSequenceTrainer({
   }
 
   const handleUserNotePlayed = useCallback(
-    (playedNoteNumber: number): void => {
+    (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {
       if (!isSessionActive || currentSequence.length === 0 || !questionTokenRef.current) return
 
       const updatedCaptured = [...capturedNotes, playedNoteNumber]
@@ -382,7 +376,8 @@ export function useSequenceTrainer({
           responseTimeMs,
           velocity: 90,
           reasonTelemetry: `Secuencia: [${currentSequence.join(', ')}]`,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          inputSource: source
         }
 
         answersBufferRef.current.push(answerRecord)

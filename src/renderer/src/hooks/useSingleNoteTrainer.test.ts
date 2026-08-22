@@ -71,7 +71,7 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
     expect(specificPool).toContain(noteCalled)
   })
 
-  it('debe evaluar la respuesta del usuario y registrar acierto/fallo', () => {
+  it('debe evaluar la respuesta del usuario y registrar acierto/fallo con inputSource', () => {
     const onPlayStimulus = vi.fn()
     const onInstrumentChanged = vi.fn()
 
@@ -86,8 +86,9 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       result.current.startSession([60, 62])
     })
 
+    // Simulamos respuesta tocada desde el ratón virtual
     act(() => {
-      result.current.handleUserNotePlayed(60)
+      result.current.handleUserNotePlayed(60, 'virtual_ui')
     })
 
     expect(result.current.isWaitingAnswer).toBe(false)
@@ -164,7 +165,6 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       result.current.startSession([60, 62])
     })
 
-    // Simulamos fallo
     act(() => {
       result.current.handleUserNotePlayed(70)
     })
@@ -304,7 +304,6 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
 
       expect(result.current.isWaitingManualAdvance).toBe(true)
 
-      // El usuario destildea una nota y deja el pool en 1 justo antes de avanzar
       act(() => {
         result.current.toggleNote(62)
       })
@@ -313,10 +312,8 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
         result.current.advanceToNextQuestion()
       })
 
-      // triggerNextQuestion cortó temprano por pool < 2: no hay pregunta nueva
       expect(onPlayStimulus).toHaveBeenCalledTimes(1)
 
-      // El usuario repone la nota
       act(() => {
         result.current.toggleNote(62)
       })
@@ -328,7 +325,6 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       expect(onPlayStimulus).toHaveBeenCalledTimes(2)
     })
 
-    // NUEVO TEST: Valida que la sesión guarde la taxonomía enriquecida (Contenido • Formato)
     it('debe guardar la sesión con metadatos enriquecidos de contenido y formato de entrenamiento', async () => {
       const saveSpy = vi
         .spyOn(useDatabaseStore.getState(), 'saveSession')
@@ -343,12 +339,12 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       act(() => {
         result.current.setSessionLimitType('questions')
         result.current.setSessionQuestionsCount(1)
-        result.current.startSession([60, 62, 64]) // Nivel 1 (C, D, E)
+        result.current.startSession([60, 62, 64])
       })
 
       act(() => {
         const expected = result.current.currentExpectedNote as number
-        result.current.handleUserNotePlayed(expected)
+        result.current.handleUserNotePlayed(expected, 'midi_hardware')
       })
 
       act(() => {
@@ -357,10 +353,11 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
 
       expect(saveSpy).toHaveBeenCalled()
       const savedSession = saveSpy.mock.calls[0][0]
+      const savedAnswers = saveSpy.mock.calls[0][1]
 
-      // Debe contener el nombre del contenido y el formato del bloque
       expect(savedSession.presetName).toContain('Nivel 1 (C, D, E)')
       expect(savedSession.presetName).toContain('Bloque 1 preguntas')
+      expect(savedAnswers[0].inputSource).toBe('midi_hardware')
 
       saveSpy.mockRestore()
     })

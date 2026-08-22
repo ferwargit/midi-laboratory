@@ -14,14 +14,15 @@ describe('pedagogicalDictionary - Diccionario y Modelos Psicoacústicos Centrali
     })
   })
 
-  it('getConcept debe devolver el concepto correcto por su ID', () => {
+  it('getConcept debe devolver el concepto correcto por su ID con umbrales calibrados', () => {
     const irt = getConcept('irt_normalized_accuracy')
     expect(irt).not.toBeNull()
     expect(irt?.title).toContain('Oído Real')
     expect(irt?.formulaOrCalculation).toContain('Acierto - c')
 
     const latency = getConcept('cognitive_latency')
-    expect(latency?.practicalTakeaway).toContain('< 1.2s')
+    // Umbral calibrado psicoacústicamente a < 1.4s
+    expect(latency?.practicalTakeaway).toContain('< 1.4s')
   })
 
   it('debe devolver null si el concepto no existe', () => {

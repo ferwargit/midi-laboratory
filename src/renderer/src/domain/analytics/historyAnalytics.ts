@@ -46,6 +46,7 @@ export interface DetailedSessionAnalysis {
   flatBiasCount: number
   dominantBias: 'sharp' | 'flat' | 'balanced'
   formatType: 'time' | 'mastery' | 'questions' | 'infinite'
+  inputMethod: 'hardware' | 'virtual' | 'mixed'
 }
 
 export interface LongitudinalComparison {
@@ -81,7 +82,6 @@ export interface AnalyticsMetrics {
   longitudinalComparisons: LongitudinalComparison[]
 }
 
-// Función auxiliar para determinar el tamaño del pool nominal según el preset
 function resolveNominalPoolSize(session: DbSessionRecord, empiricalUniqueCount: number): number {
   const name = (session.presetName || '').toLowerCase()
 
@@ -91,7 +91,6 @@ function resolveNominalPoolSize(session: DbSessionRecord, empiricalUniqueCount: 
   if (name.includes('nivel 4') || name.includes('cromático')) return 13
   if (name.includes('pentatónica')) return 6
 
-  // Extraer número de "Notas (X)" o "Notas Personalizadas (X)"
   const match = name.match(/notas\s*(?:personalizadas)?\s*\((\d+)\)/i)
   if (match) {
     return parseInt(match[1], 10)
@@ -200,7 +199,6 @@ export function reconstructSessionConfig(
 
   const pName = (session.presetName || '').toLowerCase()
 
-  // 1. Reconstrucción fiel del pool si coincide con un preset formal de notas
   if (targetMode === 'single_note') {
     if (pName.includes('nivel 1')) {
       recommendedNotes = [
@@ -390,7 +388,6 @@ export function computeAnalyticsMetrics(
     const sAnswers = filteredAnswers.filter((a) => a.sessionId === session.id)
     const uniqueExpected = new Set(sAnswers.map((a) => a.expectedNote))
 
-    // RESOLUCIÓN EXACTA DEL POOL REAL NOMINAL
     const poolSize = resolveNominalPoolSize(session, uniqueExpected.size)
     const chanceBaseline = 1 / poolSize
     const entropyBits = Number(Math.log2(poolSize).toFixed(2))
@@ -410,15 +407,24 @@ export function computeAnalyticsMetrics(
     let sSlow = 0
     let sSharp = 0
     let sFlat = 0
+    let hardwareCount = 0
+    let virtualCount = 0
 
     sAnswers.forEach((ans) => {
-      if (ans.responseTimeMs < 1200) sFast++
+      // Calibración psicoacústica: < 1.4s es reflejo directo
+      if (ans.responseTimeMs < 1400) sFast++
       else if (ans.responseTimeMs <= 2800) sMed++
       else sSlow++
 
       if (!ans.isCorrect) {
         if (ans.semitoneDistance > 0) sSharp++
         else if (ans.semitoneDistance < 0) sFlat++
+      }
+
+      if (ans.inputSource === 'virtual_ui') {
+        virtualCount++
+      } else {
+        hardwareCount++
       }
     })
 
@@ -437,6 +443,9 @@ export function computeAnalyticsMetrics(
           ? 'mastery'
           : 'questions'
 
+    const inputMethod: 'hardware' | 'virtual' | 'mixed' =
+      virtualCount === 0 ? 'hardware' : hardwareCount === 0 ? 'virtual' : 'mixed'
+
     return {
       session,
       poolSize,
@@ -450,7 +459,8 @@ export function computeAnalyticsMetrics(
       sharpBiasCount: sSharp,
       flatBiasCount: sFlat,
       dominantBias,
-      formatType
+      formatType,
+      inputMethod
     }
   })
 
@@ -458,7 +468,7 @@ export function computeAnalyticsMetrics(
     if (ans.isCorrect) totalCorrect++
     totalTime += ans.responseTimeMs
 
-    if (ans.responseTimeMs < 1200) fastCount++
+    if (ans.responseTimeMs < 1400) fastCount++
     else if (ans.responseTimeMs <= 2800) medCount++
     else slowCount++
 

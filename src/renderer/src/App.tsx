@@ -177,11 +177,11 @@ export default function App(): React.ReactElement {
       })
 
       if (appMode === 'single_note') {
-        singleNoteTrainer.handleUserNotePlayed(noteNumber)
+        singleNoteTrainer.handleUserNotePlayed(noteNumber, 'virtual_ui')
       } else if (appMode === 'intervals') {
-        intervalTrainer.handleUserNotePlayed(noteNumber)
+        intervalTrainer.handleUserNotePlayed(noteNumber, 'virtual_ui')
       } else {
-        sequenceTrainer.handleUserNotePlayed(noteNumber)
+        sequenceTrainer.handleUserNotePlayed(noteNumber, 'virtual_ui')
       }
     },
     [midi, appMode, singleNoteTrainer, intervalTrainer, sequenceTrainer]

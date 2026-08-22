@@ -21,7 +21,7 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
     expect(result.current.sequenceLength).toBe(3)
   })
 
-  it('debe capturar notas secuencialmente y evaluar al completar la longitud', () => {
+  it('debe capturar notas secuencialmente y evaluar al completar la longitud con inputSource', () => {
     const onPlaySequence = vi.fn()
 
     const { result } = renderHook(() =>
@@ -38,17 +38,17 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
     expect(onPlaySequence).toHaveBeenCalledTimes(1)
 
     act(() => {
-      result.current.handleUserNotePlayed(60)
+      result.current.handleUserNotePlayed(60, 'virtual_ui')
     })
     expect(result.current.capturedNotes.length).toBe(1)
 
     act(() => {
-      result.current.handleUserNotePlayed(62)
+      result.current.handleUserNotePlayed(62, 'virtual_ui')
     })
     expect(result.current.capturedNotes.length).toBe(2)
 
     act(() => {
-      result.current.handleUserNotePlayed(64)
+      result.current.handleUserNotePlayed(64, 'virtual_ui')
     })
 
     expect(result.current.lastResult).not.toBeNull()
@@ -67,7 +67,6 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
     })
     expect(result.current.sequenceLength).toBe(4)
 
-    // Agregamos una nota grave que no está en el preset (55 / G3)
     act(() => {
       result.current.toggleCustomNote(55)
     })
@@ -105,7 +104,6 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
       result.current.startSession([60, 62, 64], 3)
     })
 
-    // Tocamos 3 notas equivocadas consecutivas
     act(() => {
       result.current.handleUserNotePlayed(71)
     })
@@ -138,8 +136,6 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
         result.current.startSession([60, 62, 64], 3)
       })
 
-      // Tocamos la secuencia REAL generada por el hook (no necesariamente
-      // [60, 62, 64] en ese orden), para garantizar un acierto exacto.
       const generatedSequence = result.current.currentSequence
 
       generatedSequence.forEach((note) => {
@@ -243,7 +239,6 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
 
       expect(result.current.isWaitingManualAdvance).toBe(true)
 
-      // El usuario destildea notas candidatas y deja el pool en 1 justo antes de avanzar
       act(() => {
         result.current.toggleCustomNote(60)
         result.current.toggleCustomNote(62)
@@ -253,10 +248,8 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
         result.current.advanceToNextSequence()
       })
 
-      // triggerNextSequence cortó temprano por pool < 2: no hay secuencia nueva
       expect(onPlaySequence).toHaveBeenCalledTimes(1)
 
-      // El usuario repone una nota (pool vuelve a tener 2: [60, 64])
       act(() => {
         result.current.toggleCustomNote(60)
       })
@@ -265,7 +258,6 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
         result.current.advanceToNextSequence()
       })
 
-      // Sin el fix, isAdvancingRef queda en true para siempre y esta llamada no hace nada
       expect(onPlaySequence).toHaveBeenCalledTimes(2)
     })
   })

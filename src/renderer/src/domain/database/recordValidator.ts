@@ -68,6 +68,13 @@ export function isValidAnswerRecord(answer: unknown): answer is DbAnswerRecord {
   if (typeof a.velocity !== 'number' || a.velocity < 0 || a.velocity > 127) return false
   if (typeof a.createdAt !== 'string' || Number.isNaN(Date.parse(a.createdAt))) return false
 
+  // Validación de fuente de entrada si está presente
+  if (a.inputSource !== undefined) {
+    if (a.inputSource !== 'midi_hardware' && a.inputSource !== 'virtual_ui') {
+      return false
+    }
+  }
+
   return true
 }
 

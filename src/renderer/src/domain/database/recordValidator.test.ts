@@ -97,4 +97,11 @@ describe('recordValidator - Validación Pura de Integridad de Registros', () => 
     expect(isValidAiConsultationRecord({ ...validConsultation, aiResponse: '' })).toBe(false)
     expect(isValidAiConsultationRecord({ ...validConsultation, id: '' })).toBe(false)
   })
+
+  it('isValidAnswerRecord debe validar correctamente inputSource', () => {
+    expect(isValidAnswerRecord({ ...validAnswer, inputSource: 'midi_hardware' })).toBe(true)
+    expect(isValidAnswerRecord({ ...validAnswer, inputSource: 'virtual_ui' })).toBe(true)
+    // @ts-ignore -- Prueba de rechazo de fuente inválida
+    expect(isValidAnswerRecord({ ...validAnswer, inputSource: 'joystick_invalido' })).toBe(false)
+  })
 })

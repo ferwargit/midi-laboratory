@@ -51,7 +51,8 @@ describe('promptBuilder - Generación de Prompts Especializados y Tutor Psicoac�
         sharpBiasCount: 2,
         flatBiasCount: 0,
         dominantBias: 'sharp',
-        formatType: 'time'
+        formatType: 'time',
+        inputMethod: 'hardware'
       }
     ],
     longitudinalComparisons: [
@@ -114,7 +115,7 @@ describe('promptBuilder - Generación de Prompts Especializados y Tutor Psicoac�
       expect(prompt).toContain('sequenceLength')
     })
 
-    it('empaqueta la telemetría clínica completa incluyendo RPM, entropía y sesgo dominante', () => {
+    it('empaqueta la telemetría clínica completa incluyendo RPM, entropía, fuente de entrada y sesgo', () => {
       const prompt = buildUserPrompt(mockMetrics)
       expect(prompt).toContain('Precisión Cruda Global: 80%')
       expect(prompt).toContain('Precisión Corregida por Azar (Oído Real Normalizado): 75%')
@@ -122,7 +123,7 @@ describe('promptBuilder - Generación de Prompts Especializados y Tutor Psicoac�
       expect(prompt).toContain('TELEMETRÍA DETALLADA POR SESIÓN')
       expect(prompt).toContain('"cadenciaRPM": 10')
       expect(prompt).toContain('"poolNotas": 3')
-      expect(prompt).toContain('"sesgoDominante": "Hacia lo Agudo (+st)"')
+      expect(prompt).toContain('"fuenteEntrada": "Roland FP-8 Físico"')
     })
 
     it('empaqueta las comparativas longitudinales (Test-Retest) con sus Deltas calculados', () => {
@@ -200,17 +201,12 @@ describe('promptBuilder - Generación de Prompts Especializados y Tutor Psicoac�
         'irt_normalized_accuracy'
       )
 
-      // 1. Mensaje de Sistema con prescripción previa
       expect(messages[0].role).toBe('system')
       expect(messages[0].content).toContain('Refuerzo F4/E4')
-
-      // 2. Historial de Diálogo anterior
       expect(messages[1].role).toBe('user')
       expect(messages[1].content).toBe('¿Por qué fallo en F4?')
       expect(messages[2].role).toBe('assistant')
       expect(messages[2].content).toBe('F4 tiene armónicos cercanos a E4...')
-
-      // 3. Consulta actual
       expect(messages[3].role).toBe('user')
       expect(messages[3].content).toContain('¿Y cómo practico ese semitono?')
     })

@@ -40,7 +40,7 @@ export const PEDAGOGICAL_DICTIONARY: Record<string, PedagogicalConcept> = {
       'Tiempo transcurrido desde que suena el tono hasta que presionas la tecla en tu teclado MIDI.',
     formulaOrCalculation: 'Tiempo de Reacción = Timestamp(Pulsación) - Timestamp(Estímulo)',
     practicalTakeaway:
-      '< 1.2s: Reflejo directo (tono consolidado). 1.2s - 2.8s: Deducción interválica consciente. > 2.8s: Vacilación, búsqueda al azar o fatiga auditiva.'
+      '< 1.4s: Reflejo directo (tono consolidado). 1.4s - 2.8s: Deducción interválica consciente. > 2.8s: Vacilación, búsqueda al azar o fatiga auditiva.'
   },
   responses_per_minute: {
     id: 'responses_per_minute',

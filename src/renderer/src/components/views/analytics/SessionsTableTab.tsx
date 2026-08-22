@@ -163,7 +163,7 @@ export function SessionsTableTab({
                 >
                   <div className="flex items-center justify-center">
                     <PedagogicalTooltip conceptId="cognitive_latency">
-                      <span>Reflejo (&lt;1.2s)</span>
+                      <span>Reflejo (&lt;1.4s)</span>
                     </PedagogicalTooltip>
                     {renderSortIndicator('fastPercent')}
                   </div>
@@ -220,6 +220,22 @@ export function SessionsTableTab({
                       <div className="font-semibold text-zinc-100 text-xs">{displayContent}</div>
                       <div className="text-[10px] font-mono text-zinc-500 mt-0.5 flex items-center gap-2">
                         <span>{inst?.name || s.instrumentId}</span>
+                        <span>•</span>
+                        <span
+                          className={
+                            item.inputMethod === 'hardware'
+                              ? 'text-emerald-400 font-bold'
+                              : item.inputMethod === 'virtual'
+                                ? 'text-purple-400'
+                                : 'text-amber-400'
+                          }
+                        >
+                          {item.inputMethod === 'hardware'
+                            ? '🎹 Roland FP-8'
+                            : item.inputMethod === 'virtual'
+                              ? '🖱️ Ratón Virtual'
+                              : '🔀 Mixto'}
+                        </span>
                         <span>•</span>
                         <span className="text-zinc-400">{s.strategyId}</span>
                       </div>

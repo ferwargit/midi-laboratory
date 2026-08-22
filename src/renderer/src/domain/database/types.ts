@@ -25,6 +25,7 @@ export interface DbAnswerRecord {
   velocity: number
   reasonTelemetry: string
   createdAt: string
+  inputSource?: 'midi_hardware' | 'virtual_ui'
 }
 
 export interface DbAiReportRecord {
