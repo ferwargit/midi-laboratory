@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   SEQUENCE_PRESETS,
   SequencePreset,
@@ -10,11 +10,16 @@ import {
 } from '../domain/exercise/sequenceEvaluator'
 import { AdvanceMode, SessionLimitType } from '../domain/exercise/types'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
-import { useDatabaseStore } from '../stores/useDatabaseStore'
+import { useTrainerCore, CoreStartSessionOptions } from './useTrainerCore'
 
 interface SequenceTrainerOptions {
   onPlaySequence: (notes: number[]) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
+}
+
+export interface SequenceSessionOptions extends CoreStartSessionOptions {
+  notes?: number[]
+  length?: number
 }
 
 export interface UseSequenceTrainerReturn {
@@ -43,22 +48,13 @@ export interface UseSequenceTrainerReturn {
   capturedNotes: number[]
   lastResult: SequenceExerciseResult | null
   sessionHistory: SequenceExerciseResult[]
-  startSession: (overrideNotes?: unknown, overrideLength?: unknown) => void
+  startSession: (overrideConfigOrNotes?: unknown, overrideLength?: unknown) => void
   stopSession: () => void
   advanceToNextSequence: () => void
   repeatCurrentSequence: () => void
   handleUserNotePlayed: (noteNumber: number, source?: 'midi_hardware' | 'virtual_ui') => void
   trainWeakMotifsOnly: () => void
   resetToConfig: () => void
-}
-
-export interface SequenceSessionOptions {
-  notes?: number[]
-  length?: number
-  limitType?: SessionLimitType
-  questionsCount?: number
-  durationMinutes?: number
-  advanceMode?: AdvanceMode
 }
 
 export function useSequenceTrainer({
@@ -68,103 +64,116 @@ export function useSequenceTrainer({
   const [selectedPresetId, setSelectedPresetIdState] = useState<string>(
     'level_2_0_diatonic_stepwise'
   )
-  const [sequenceLength, setSequenceLength] = useState<number>(3)
-  const [customCandidateNotes, setCustomCandidateNotes] = useState<number[]>([60, 62, 64, 65, 67])
-  const [sessionLimitType, setSessionLimitType] = useState<SessionLimitType>('questions')
-  const [sessionQuestionsCount, setSessionQuestionsCount] = useState<number>(10)
-  const [sessionDurationMinutes, setSessionDurationMinutesState] = useState<number>(5)
-  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(300)
-  const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
-  const [isSessionActive, setIsSessionActive] = useState<boolean>(false)
-  const [isSessionFinished, setIsSessionFinished] = useState<boolean>(false)
-  const [isWaitingManualAdvance, setIsWaitingManualAdvance] = useState<boolean>(false)
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
-  const [currentSequence, setCurrentSequence] = useState<number[]>([])
-  const [capturedNotes, setCapturedNotes] = useState<number[]>([])
-  const [stimulusStartTime, setStimulusStartTime] = useState<number>(0)
-  const [lastResult, setLastResult] = useState<SequenceExerciseResult | null>(null)
-  const [sessionHistory, setSessionHistory] = useState<SequenceExerciseResult[]>([])
-
-  const saveSessionToDb = useDatabaseStore((state) => state.saveSession)
-
-  const sessionIdRef = useRef<string>('')
-  const sessionStartTimeRef = useRef<number>(0)
-  const questionTokenRef = useRef<string | null>(null)
-  const isAdvancingRef = useRef<boolean>(false)
-  const isWaitingAnswerRef = useRef<boolean>(false)
-
-  const customCandidateNotesBufferRef = useRef<number[]>([60, 62, 64, 65, 67])
+  const [sequenceLength, setSequenceLengthState] = useState<number>(3)
   const sequenceLengthBufferRef = useRef<number>(3)
-  const sessionDurationMinutesBufferRef = useRef<number>(5)
-  const answersBufferRef = useRef<DbAnswerRecord[]>([])
-  const historyBufferRef = useRef<SequenceExerciseResult[]>([])
 
-  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [customCandidateNotes, setCustomCandidateNotesState] = useState<number[]>([
+    60, 62, 64, 65, 67
+  ])
+  const customCandidateNotesBufferRef = useRef<number[]>([60, 62, 64, 65, 67])
 
-  const setSessionDurationMinutes = useCallback((minutes: number): void => {
-    sessionDurationMinutesBufferRef.current = minutes
-    setSessionDurationMinutesState(minutes)
+  const [currentSequence, setCurrentSequence] = useState<number[]>([])
+  const currentSequenceRef = useRef<number[]>([])
+  const [capturedNotes, setCapturedNotes] = useState<number[]>([])
+  const stimulusStartTimeRef = useRef<number>(0)
+
+  const onBuildSessionRecord = useCallback(
+    ({
+      sessionId,
+      totalSeconds,
+      answers,
+      history,
+      limitType,
+      durationMinutes
+    }: {
+      sessionId: string
+      totalSeconds: number
+      answers: DbAnswerRecord[]
+      history: SequenceExerciseResult[]
+      limitType: SessionLimitType
+      durationMinutes: number
+    }): DbSessionRecord => {
+      const exactCount = history.filter((r) => r.isExactMatch).length
+      const avgScore = Math.round(
+        history.reduce((acc, r) => acc + r.similarityScorePercentage, 0) / answers.length
+      )
+      const avgTime = Math.round(
+        history.reduce((acc, r) => acc + r.responseTimeMs, 0) / answers.length
+      )
+
+      const presetLabel =
+        limitType === 'time'
+          ? `Secuencias (${sequenceLengthBufferRef.current} notas) • Cronometrado ${durationMinutes}m`
+          : `Secuencias (${sequenceLengthBufferRef.current} notas) • Bloque ${answers.length} preguntas`
+
+      return {
+        id: sessionId,
+        createdAt: new Date().toISOString(),
+        strategyId: 'sequences_v1',
+        instrumentId: 'piano_sequences',
+        presetName: presetLabel,
+        totalQuestions: answers.length,
+        correctAnswers: exactCount,
+        accuracyPercentage: avgScore,
+        avgResponseTimeMs: avgTime,
+        durationSeconds: totalSeconds
+      }
+    },
+    []
+  )
+
+  const core = useTrainerCore<SequenceExerciseResult>({
+    defaultLimitType: 'questions',
+    defaultQuestionsCount: 10,
+    defaultDurationMinutes: 5,
+    defaultAdvanceMode: 'smart',
+    autoAdvanceFastDelayMs: 1800,
+    autoAdvanceSlowDelayMs: 3500,
+    onBuildSessionRecord
+  })
+
+  const { sessionHistory } = core
+
+  const setCustomCandidateNotes = useCallback((notes: number[]): void => {
+    customCandidateNotesBufferRef.current = notes
+    setCustomCandidateNotesState(notes)
   }, [])
 
-  const cleanupSessionTimers = useCallback((): void => {
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-    if (sessionCountdownTimerRef.current) {
-      clearInterval(sessionCountdownTimerRef.current)
-      sessionCountdownTimerRef.current = null
-    }
+  const setSequenceLength = useCallback((len: number): void => {
+    sequenceLengthBufferRef.current = len
+    setSequenceLengthState(len)
   }, [])
 
-  useEffect(() => {
-    return (): void => {
-      cleanupSessionTimers()
-    }
-  }, [cleanupSessionTimers])
+  const setSelectedPresetId = useCallback(
+    (id: string): void => {
+      setSelectedPresetIdState(id)
+      const preset = SEQUENCE_PRESETS.find((p) => p.id === id)
+      if (preset) {
+        setSequenceLength(preset.length)
+        setCustomCandidateNotes([...preset.candidateNotes])
+      }
+    },
+    [setCustomCandidateNotes, setSequenceLength]
+  )
 
-  useEffect(() => {
-    customCandidateNotesBufferRef.current = customCandidateNotes
-  }, [customCandidateNotes])
-
-  useEffect(() => {
-    sequenceLengthBufferRef.current = sequenceLength
-  }, [sequenceLength])
-
-  const setSelectedPresetId = (id: string): void => {
-    setSelectedPresetIdState(id)
-    const preset = SEQUENCE_PRESETS.find((p) => p.id === id)
-    if (preset) {
-      setSequenceLength(preset.length)
-      sequenceLengthBufferRef.current = preset.length
-      setCustomCandidateNotes([...preset.candidateNotes])
-      customCandidateNotesBufferRef.current = [...preset.candidateNotes]
-    }
-  }
-
-  const toggleCustomNote = (note: number): void => {
-    setCustomCandidateNotes((prev) =>
-      prev.includes(note) ? prev.filter((n) => n !== note) : [...prev, note].sort((a, b) => a - b)
-    )
-  }
+  const toggleCustomNote = useCallback(
+    (note: number): void => {
+      const prev = customCandidateNotesBufferRef.current
+      const next = prev.includes(note)
+        ? prev.filter((n) => n !== note)
+        : [...prev, note].sort((a, b) => a - b)
+      setCustomCandidateNotes(next)
+    },
+    [setCustomCandidateNotes]
+  )
 
   const triggerNextSequence = useCallback(
     (notesPool?: number[], lengthToUse?: number): void => {
       const currentPool = notesPool || customCandidateNotesBufferRef.current
       const currentLen = lengthToUse || sequenceLengthBufferRef.current
-
-      isAdvancingRef.current = false
-
       if (currentPool.length < 2) return
 
-      if (autoAdvanceTimerRef.current) {
-        clearTimeout(autoAdvanceTimerRef.current)
-        autoAdvanceTimerRef.current = null
-      }
-
-      const token = `token_seq_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
-      questionTokenRef.current = token
+      core.generateQuestionToken('token_seq')
 
       const preset = SEQUENCE_PRESETS.find((p) => p.id === selectedPresetId)
       const maxJump = preset ? preset.maxJumpSemitones : 12
@@ -172,299 +181,140 @@ export function useSequenceTrainer({
 
       const sequence = generateMelodicSequence(currentPool, currentLen, maxJump, allowRepeat)
 
+      currentSequenceRef.current = sequence
       setCurrentSequence(sequence)
       setCapturedNotes([])
-      setLastResult(null)
-      setIsWaitingManualAdvance(false)
-      isWaitingAnswerRef.current = true
-      setStimulusStartTime(Date.now())
+      stimulusStartTimeRef.current = Date.now()
+
+      core.setLastResult(null)
+      core.setIsWaitingAnswer(true)
 
       onPlaySequence(sequence)
     },
-    [selectedPresetId, onPlaySequence]
+    [core, selectedPresetId, onPlaySequence]
   )
 
-  const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
-    cleanupSessionTimers()
+  const startSession = useCallback(
+    (overrideConfigOrNotes?: unknown, overrideLength?: unknown): void => {
+      let notesToUse = customCandidateNotesBufferRef.current
+      let lengthToUse = sequenceLengthBufferRef.current
+      let coreOptions: CoreStartSessionOptions | undefined = undefined
 
-    questionTokenRef.current = null
-    isAdvancingRef.current = false
-    isWaitingAnswerRef.current = false
-
-    const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
-
-    setIsSessionActive(false)
-    setIsSessionFinished(true)
-    setIsWaitingManualAdvance(false)
-    setCapturedNotes([])
-
-    const allAnswers = [...answersBufferRef.current]
-    if (allAnswers.length === 0) return
-
-    const exactCount = historyBufferRef.current.filter((r) => r.isExactMatch).length
-    const avgScore = Math.round(
-      historyBufferRef.current.reduce((acc, r) => acc + r.similarityScorePercentage, 0) /
-        allAnswers.length
-    )
-    const avgTime = Math.round(
-      historyBufferRef.current.reduce((acc, r) => acc + r.responseTimeMs, 0) / allAnswers.length
-    )
-
-    const presetLabel =
-      sessionLimitType === 'time'
-        ? `Secuencias (${sequenceLengthBufferRef.current} notas) • Cronometrado ${sessionDurationMinutesBufferRef.current}m`
-        : `Secuencias (${sequenceLengthBufferRef.current} notas) • Bloque ${allAnswers.length} preguntas`
-
-    const sessionRecord: DbSessionRecord = {
-      id: sessionIdRef.current,
-      createdAt: new Date().toISOString(),
-      strategyId: 'sequences_v1',
-      instrumentId: 'piano_sequences',
-      presetName: presetLabel,
-      totalQuestions: allAnswers.length,
-      correctAnswers: exactCount,
-      accuracyPercentage: avgScore,
-      avgResponseTimeMs: avgTime,
-      durationSeconds: totalSeconds
-    }
-
-    await saveSessionToDb(sessionRecord, allAnswers)
-    sessionIdRef.current = ''
-  }, [cleanupSessionTimers, sessionLimitType, saveSessionToDb])
-
-  useEffect(() => {
-    if (!isSessionActive || sessionLimitType !== 'time') return
-
-    const interval = setInterval(() => {
-      setTimeRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval)
-          sessionCountdownTimerRef.current = null
-          setIsSessionActive(false)
-          setIsSessionFinished(true)
-          setIsWaitingManualAdvance(false)
-          setCapturedNotes([])
-          void finalizeAndSaveSession()
-          return 0
+      if (Array.isArray(overrideConfigOrNotes) && overrideConfigOrNotes.length > 0) {
+        notesToUse = overrideConfigOrNotes as number[]
+        if (typeof overrideLength === 'number' && overrideLength >= 3) {
+          lengthToUse = overrideLength
         }
-        return prev - 1
+      } else if (overrideConfigOrNotes && typeof overrideConfigOrNotes === 'object') {
+        const opts = overrideConfigOrNotes as SequenceSessionOptions
+        if (Array.isArray(opts.notes) && opts.notes.length >= 2) {
+          notesToUse = opts.notes
+        }
+        if (typeof opts.length === 'number' && opts.length >= 3) {
+          lengthToUse = opts.length
+        }
+        coreOptions = opts
+      }
+
+      if (notesToUse.length < 2) return
+
+      setCustomCandidateNotes(notesToUse)
+      setSequenceLength(lengthToUse)
+      setCapturedNotes([])
+
+      core.startCoreSession(coreOptions, () => {
+        triggerNextSequence(notesToUse, lengthToUse)
       })
-    }, 1000)
-    sessionCountdownTimerRef.current = interval
-
-    return (): void => {
-      clearInterval(interval)
-      sessionCountdownTimerRef.current = null
-    }
-  }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
-
-  const startSession = (overrideConfigOrNotes?: unknown, overrideLength?: unknown): void => {
-    cleanupSessionTimers()
-
-    let notesToUse = customCandidateNotesBufferRef.current
-    let lengthToUse = sequenceLengthBufferRef.current
-    let limitTypeToUse = sessionLimitType
-    let durationMinutesToUse = sessionDurationMinutesBufferRef.current
-
-    if (Array.isArray(overrideConfigOrNotes) && overrideConfigOrNotes.length > 0) {
-      notesToUse = overrideConfigOrNotes as number[]
-      if (typeof overrideLength === 'number' && overrideLength >= 3) {
-        lengthToUse = overrideLength
-      }
-    } else if (overrideConfigOrNotes && typeof overrideConfigOrNotes === 'object') {
-      const opts = overrideConfigOrNotes as SequenceSessionOptions
-      if (Array.isArray(opts.notes) && opts.notes.length >= 2) {
-        notesToUse = opts.notes
-      }
-      if (typeof opts.length === 'number' && opts.length >= 3) {
-        lengthToUse = opts.length
-      }
-      if (opts.limitType) {
-        setSessionLimitType(opts.limitType)
-        limitTypeToUse = opts.limitType
-      }
-      if (typeof opts.questionsCount === 'number') {
-        setSessionQuestionsCount(opts.questionsCount)
-      }
-      if (typeof opts.durationMinutes === 'number') {
-        sessionDurationMinutesBufferRef.current = opts.durationMinutes
-        setSessionDurationMinutesState(opts.durationMinutes)
-        durationMinutesToUse = opts.durationMinutes
-      }
-      if (opts.advanceMode) {
-        setAdvanceMode(opts.advanceMode)
-      }
-    }
-
-    if (notesToUse.length < 2) return
-
-    setCustomCandidateNotes(notesToUse)
-    customCandidateNotesBufferRef.current = notesToUse
-    setSequenceLength(lengthToUse)
-    sequenceLengthBufferRef.current = lengthToUse
-
-    sessionIdRef.current = `session_seq_${Date.now()}`
-    sessionStartTimeRef.current = Date.now()
-    answersBufferRef.current = []
-    historyBufferRef.current = []
-    setSessionHistory([])
-    setCurrentQuestionIndex(1)
-    setIsSessionFinished(false)
-
-    if (limitTypeToUse === 'time') {
-      setTimeRemainingSeconds(durationMinutesToUse * 60)
-    }
-
-    setIsSessionActive(true)
-    triggerNextSequence(notesToUse, lengthToUse)
-  }
+    },
+    [core, setCustomCandidateNotes, setSequenceLength, triggerNextSequence]
+  )
 
   const advanceToNextSequence = useCallback((): void => {
-    if (!isSessionActive || isAdvancingRef.current || isWaitingAnswerRef.current) return
-    isAdvancingRef.current = true
-
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-
-    const isFixedQuestionsCompleted =
-      sessionLimitType === 'questions' && currentQuestionIndex >= sessionQuestionsCount
-
-    if (isFixedQuestionsCompleted) {
-      finalizeAndSaveSession()
-    } else {
-      setCurrentQuestionIndex((prev) => prev + 1)
+    core.advanceToNextQuestion(() => {
       triggerNextSequence()
-    }
-  }, [
-    currentQuestionIndex,
-    finalizeAndSaveSession,
-    isSessionActive,
-    sessionLimitType,
-    sessionQuestionsCount,
-    triggerNextSequence
-  ])
+    })
+  }, [core, triggerNextSequence])
 
   const stopSession = useCallback((): void => {
-    cleanupSessionTimers()
-    if (answersBufferRef.current.length > 0) {
-      finalizeAndSaveSession()
-    } else {
-      questionTokenRef.current = null
-      isWaitingAnswerRef.current = false
-      setIsSessionActive(false)
-      setIsSessionFinished(false)
-      setIsWaitingManualAdvance(false)
-      setCurrentSequence([])
-      setCapturedNotes([])
-    }
-  }, [cleanupSessionTimers, finalizeAndSaveSession])
-
-  const resetToConfig = (): void => {
-    cleanupSessionTimers()
-    questionTokenRef.current = null
-    isWaitingAnswerRef.current = false
-    setIsSessionActive(false)
-    setIsSessionFinished(false)
-    setIsWaitingManualAdvance(false)
     setCurrentSequence([])
+    currentSequenceRef.current = []
     setCapturedNotes([])
-  }
+    core.stopCoreSession()
+  }, [core])
 
-  const repeatCurrentSequence = (): void => {
-    if (currentSequence.length > 0) {
-      onPlaySequence(currentSequence)
+  const resetToConfig = useCallback((): void => {
+    setCurrentSequence([])
+    currentSequenceRef.current = []
+    setCapturedNotes([])
+    core.resetCoreToConfig()
+  }, [core])
+
+  const repeatCurrentSequence = useCallback((): void => {
+    const seq = currentSequenceRef.current
+    if (seq.length > 0) {
+      onPlaySequence(seq)
     }
-  }
+  }, [onPlaySequence])
 
   const handleUserNotePlayed = useCallback(
     (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {
-      if (!isSessionActive || currentSequence.length === 0 || !questionTokenRef.current) return
+      const seq = currentSequenceRef.current
+      if (!core.isSessionActive || seq.length === 0 || !core.questionToken) return
 
-      const updatedCaptured = [...capturedNotes, playedNoteNumber]
-      setCapturedNotes(updatedCaptured)
-
-      if (onTelemetryLog) {
-        onTelemetryLog(
-          'EVAL',
-          `Nota ${updatedCaptured.length}/${currentSequence.length}: ${playedNoteNumber}`
-        )
-      }
-
-      if (updatedCaptured.length >= currentSequence.length) {
-        const responseTimeMs = Date.now() - stimulusStartTime
-        const result = evaluateSequenceAnswer(currentSequence, updatedCaptured, responseTimeMs)
-
-        const answerRecord: DbAnswerRecord = {
-          id: `ans_seq_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          sessionId: sessionIdRef.current,
-          questionIndex: currentQuestionIndex,
-          expectedNote: currentSequence[0],
-          playedNote: playedNoteNumber,
-          isCorrect: result.isExactMatch,
-          semitoneDistance: result.levenshteinDistance,
-          responseTimeMs,
-          velocity: 90,
-          reasonTelemetry: `Secuencia: [${currentSequence.join(', ')}] | Tocadas: [${updatedCaptured.join(', ')}]`,
-          createdAt: new Date().toISOString(),
-          inputSource: source
-        }
-
-        answersBufferRef.current.push(answerRecord)
-        historyBufferRef.current.push(result)
-
-        setLastResult(result)
-        setSessionHistory([...historyBufferRef.current])
-        isWaitingAnswerRef.current = false
+      setCapturedNotes((prev) => {
+        const updated = [...prev, playedNoteNumber]
 
         if (onTelemetryLog) {
-          onTelemetryLog('EVAL', result.feedbackMessage)
+          onTelemetryLog('EVAL', `Nota ${updated.length}/${seq.length}: ${playedNoteNumber}`)
         }
 
-        const shouldWaitManual =
-          advanceMode === 'manual' || (advanceMode === 'smart' && !result.isExactMatch)
+        if (updated.length >= seq.length) {
+          const responseTimeMs = Date.now() - stimulusStartTimeRef.current
+          const result = evaluateSequenceAnswer(seq, updated, responseTimeMs)
 
-        if (shouldWaitManual) {
-          setIsWaitingManualAdvance(true)
-        } else {
-          const delay = advanceMode === 'auto_slow' ? 3500 : 1800
-          const scheduledSessionId = sessionIdRef.current
-          autoAdvanceTimerRef.current = setTimeout(() => {
-            if (sessionIdRef.current !== scheduledSessionId) return
+          const answerRecord: DbAnswerRecord = {
+            id: `ans_seq_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            sessionId: core.sessionId,
+            questionIndex: core.currentQuestionIndex,
+            expectedNote: seq[0],
+            playedNote: playedNoteNumber,
+            isCorrect: result.isExactMatch,
+            semitoneDistance: result.levenshteinDistance,
+            responseTimeMs,
+            velocity: 90,
+            reasonTelemetry: `Secuencia: [${seq.join(', ')}] | Tocadas: [${updated.join(', ')}]`,
+            createdAt: new Date().toISOString(),
+            inputSource: source
+          }
+
+          if (onTelemetryLog) {
+            onTelemetryLog('EVAL', result.feedbackMessage)
+          }
+
+          core.recordAnswer(result, answerRecord, result.isExactMatch, () => {
             advanceToNextSequence()
-          }, delay)
+          })
         }
-      }
+
+        return updated
+      })
     },
-    [
-      isSessionActive,
-      currentSequence,
-      capturedNotes,
-      stimulusStartTime,
-      currentQuestionIndex,
-      onTelemetryLog,
-      advanceMode,
-      advanceToNextSequence
-    ]
+    [core, onTelemetryLog, advanceToNextSequence]
   )
 
-  const trainWeakMotifsOnly = (): void => {
+  const trainWeakMotifsOnly = useCallback((): void => {
     const weakPool = Array.from(
-      new Set(
-        historyBufferRef.current.filter((h) => !h.isExactMatch).flatMap((h) => h.expectedNotes)
-      )
+      new Set(sessionHistory.filter((h) => !h.isExactMatch).flatMap((h) => h.expectedNotes))
     )
 
     if (weakPool.length === 0) return
-
     const poolToTrain =
       weakPool.length === 1
         ? [weakPool[0], weakPool[0] >= 60 ? weakPool[0] - 2 : weakPool[0] + 2]
         : weakPool
 
     startSession(poolToTrain.sort((a, b) => a - b))
-  }
+  }, [sessionHistory, startSession])
 
   return {
     presets: SEQUENCE_PRESETS,
@@ -475,23 +325,23 @@ export function useSequenceTrainer({
     customCandidateNotes,
     setCustomCandidateNotes,
     toggleCustomNote,
-    sessionLimitType,
-    setSessionLimitType,
-    sessionQuestionsCount,
-    setSessionQuestionsCount,
-    sessionDurationMinutes,
-    setSessionDurationMinutes,
-    timeRemainingSeconds,
-    advanceMode,
-    setAdvanceMode,
-    isSessionActive,
-    isSessionFinished,
-    isWaitingManualAdvance,
-    currentQuestionIndex,
+    sessionLimitType: core.sessionLimitType,
+    setSessionLimitType: core.setSessionLimitType,
+    sessionQuestionsCount: core.sessionQuestionsCount,
+    setSessionQuestionsCount: core.setSessionQuestionsCount,
+    sessionDurationMinutes: core.sessionDurationMinutes,
+    setSessionDurationMinutes: core.setSessionDurationMinutes,
+    timeRemainingSeconds: core.timeRemainingSeconds,
+    advanceMode: core.advanceMode,
+    setAdvanceMode: core.setAdvanceMode,
+    isSessionActive: core.isSessionActive,
+    isSessionFinished: core.isSessionFinished,
+    isWaitingManualAdvance: core.isWaitingManualAdvance,
+    currentQuestionIndex: core.currentQuestionIndex,
     currentSequence,
     capturedNotes,
-    lastResult,
-    sessionHistory,
+    lastResult: core.lastResult,
+    sessionHistory: core.sessionHistory,
     startSession,
     stopSession,
     advanceToNextSequence,

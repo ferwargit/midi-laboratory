@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   INTERVAL_PRESETS,
   IntervalPreset,
@@ -13,11 +13,17 @@ import {
 import { AdvanceMode, SessionLimitType } from '../domain/exercise/types'
 import { generateValidInterval } from '../domain/exercise/exerciseGeneratorRules'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
-import { useDatabaseStore } from '../stores/useDatabaseStore'
+import { useTrainerCore, CoreStartSessionOptions } from './useTrainerCore'
 
 interface IntervalTrainerOptions {
   onPlayInterval: (root: number, target: number, direction: IntervalDirection) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
+}
+
+export interface IntervalSessionOptions extends CoreStartSessionOptions {
+  intervals?: number[]
+  roots?: number[]
+  directionMode?: DirectionSelection
 }
 
 export interface UseIntervalTrainerReturn {
@@ -50,7 +56,7 @@ export interface UseIntervalTrainerReturn {
   firstNotePlayed: number | null
   lastResult: IntervalExerciseResult | null
   sessionHistory: IntervalExerciseResult[]
-  startSession: (overrideIntervals?: unknown, overrideRoots?: unknown) => void
+  startSession: (overrideConfigOrIntervals?: unknown, overrideRoots?: unknown) => void
   stopSession: () => void
   advanceToNextInterval: () => void
   repeatCurrentInterval: () => void
@@ -59,140 +65,150 @@ export interface UseIntervalTrainerReturn {
   resetToConfig: () => void
 }
 
-export interface IntervalSessionOptions {
-  intervals?: number[]
-  roots?: number[]
-  limitType?: SessionLimitType
-  questionsCount?: number
-  durationMinutes?: number
-  advanceMode?: AdvanceMode
-  directionMode?: DirectionSelection
-}
-
 export function useIntervalTrainer({
   onPlayInterval,
   onTelemetryLog
 }: IntervalTrainerOptions): UseIntervalTrainerReturn {
   const [selectedPresetId, setSelectedPresetIdState] = useState<string>('level_1_1_reference')
-  const [activeIntervals, setActiveIntervals] = useState<number[]>([2, 4, 5, 7, 12])
-  const [directionMode, setDirectionMode] = useState<DirectionSelection>('ascending')
-  const [rootRangeNotes, setRootRangeNotes] = useState<number[]>([60])
-  const [sessionLimitType, setSessionLimitType] = useState<SessionLimitType>('questions')
-  const [sessionQuestionsCount, setSessionQuestionsCount] = useState<number>(10)
-  const [sessionDurationMinutes, setSessionDurationMinutesState] = useState<number>(5)
-  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number>(300)
-  const [advanceMode, setAdvanceMode] = useState<AdvanceMode>('smart')
-  const [isSessionActive, setIsSessionActive] = useState<boolean>(false)
-  const [isSessionFinished, setIsSessionFinished] = useState<boolean>(false)
-  const [isWaitingManualAdvance, setIsWaitingManualAdvance] = useState<boolean>(false)
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
+  const [activeIntervals, setActiveIntervalsState] = useState<number[]>([2, 4, 5, 7, 12])
+  const activeIntervalsBufferRef = useRef<number[]>([2, 4, 5, 7, 12])
+
+  const [directionMode, setDirectionModeState] = useState<DirectionSelection>('ascending')
+  const directionModeRef = useRef<DirectionSelection>('ascending')
+
+  const [rootRangeNotes, setRootRangeNotesState] = useState<number[]>([60])
+  const rootRangeNotesBufferRef = useRef<number[]>([60])
+
   const [currentStimulus, setCurrentStimulus] = useState<IntervalExerciseStimulus | null>(null)
+  const currentStimulusRef = useRef<IntervalExerciseStimulus | null>(null)
+
   const [waitingNoteStep, setWaitingNoteStep] = useState<1 | 2>(1)
   const [firstNotePlayed, setFirstNotePlayed] = useState<number | null>(null)
-  const [stimulusStartTime, setStimulusStartTime] = useState<number>(0)
-  const [lastResult, setLastResult] = useState<IntervalExerciseResult | null>(null)
-  const [sessionHistory, setSessionHistory] = useState<IntervalExerciseResult[]>([])
+  const stimulusStartTimeRef = useRef<number>(0)
 
-  const saveSessionToDb = useDatabaseStore((state) => state.saveSession)
+  const onBuildSessionRecord = useCallback(
+    ({
+      sessionId,
+      totalSeconds,
+      answers,
+      history,
+      limitType,
+      durationMinutes
+    }: {
+      sessionId: string
+      totalSeconds: number
+      answers: DbAnswerRecord[]
+      history: IntervalExerciseResult[]
+      limitType: SessionLimitType
+      durationMinutes: number
+    }): DbSessionRecord => {
+      const correctCount = history.filter((r) => r.isIntervalCorrect).length
+      const accPercent = Math.round((correctCount / answers.length) * 100)
+      const avgTime = Math.round(
+        history.reduce((acc, r) => acc + r.responseTimeMs, 0) / answers.length
+      )
 
-  const sessionIdRef = useRef<string>('')
-  const sessionStartTimeRef = useRef<number>(0)
-  const questionTokenRef = useRef<string | null>(null)
-  const isAdvancingRef = useRef<boolean>(false)
-  const isWaitingAnswerRef = useRef<boolean>(false)
+      const presetLabel =
+        limitType === 'time'
+          ? `Intervalos (${activeIntervalsBufferRef.current.length} activos) • Cronometrado ${durationMinutes}m`
+          : `Intervalos (${activeIntervalsBufferRef.current.length} activos) • Bloque ${answers.length} preguntas`
 
-  const activeIntervalsBufferRef = useRef<number[]>([2, 4, 5, 7, 12])
-  const rootRangeNotesBufferRef = useRef<number[]>([60])
-  const sessionDurationMinutesBufferRef = useRef<number>(5)
-  const answersBufferRef = useRef<DbAnswerRecord[]>([])
-  const historyBufferRef = useRef<IntervalExerciseResult[]>([])
-  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const sessionCountdownTimerRef = useRef<NodeJS.Timeout | null>(null)
-
-  const setSessionDurationMinutes = useCallback((minutes: number): void => {
-    sessionDurationMinutesBufferRef.current = minutes
-    setSessionDurationMinutesState(minutes)
-  }, [])
-
-  const cleanupSessionTimers = useCallback((): void => {
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-    if (sessionCountdownTimerRef.current) {
-      clearInterval(sessionCountdownTimerRef.current)
-      sessionCountdownTimerRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    return (): void => {
-      cleanupSessionTimers()
-    }
-  }, [cleanupSessionTimers])
-
-  useEffect(() => {
-    activeIntervalsBufferRef.current = activeIntervals
-  }, [activeIntervals])
-
-  useEffect(() => {
-    rootRangeNotesBufferRef.current = rootRangeNotes
-  }, [rootRangeNotes])
-
-  const setSelectedPresetId = (id: string): void => {
-    setSelectedPresetIdState(id)
-    const preset = INTERVAL_PRESETS.find((p) => p.id === id)
-    if (preset) {
-      setActiveIntervals([...preset.intervalSemitones])
-      activeIntervalsBufferRef.current = [...preset.intervalSemitones]
-      setDirectionMode(preset.defaultDirection)
-      if (preset.fixedRootNote !== null) {
-        setRootRangeNotes([preset.fixedRootNote])
-        rootRangeNotesBufferRef.current = [preset.fixedRootNote]
-      } else {
-        const roots = Array.from({ length: 25 }, (_, i) => 48 + i)
-        setRootRangeNotes(roots)
-        rootRangeNotesBufferRef.current = roots
+      return {
+        id: sessionId,
+        createdAt: new Date().toISOString(),
+        strategyId: 'intervals_v1',
+        instrumentId: 'piano_intervals',
+        presetName: presetLabel,
+        totalQuestions: answers.length,
+        correctAnswers: correctCount,
+        accuracyPercentage: accPercent,
+        avgResponseTimeMs: avgTime,
+        durationSeconds: totalSeconds
       }
-    }
-  }
+    },
+    []
+  )
 
-  const toggleInterval = (semitone: number): void => {
-    setActiveIntervals((prev) =>
-      prev.includes(semitone)
+  const core = useTrainerCore<IntervalExerciseResult>({
+    defaultLimitType: 'questions',
+    defaultQuestionsCount: 10,
+    defaultDurationMinutes: 5,
+    defaultAdvanceMode: 'smart',
+    autoAdvanceFastDelayMs: 1600,
+    autoAdvanceSlowDelayMs: 3500,
+    onBuildSessionRecord
+  })
+
+  const { sessionHistory } = core
+
+  const setActiveIntervals = useCallback((st: number[]): void => {
+    activeIntervalsBufferRef.current = st
+    setActiveIntervalsState(st)
+  }, [])
+
+  const setRootRangeNotes = useCallback((notes: number[]): void => {
+    rootRangeNotesBufferRef.current = notes
+    setRootRangeNotesState(notes)
+  }, [])
+
+  const setDirectionMode = useCallback((dir: DirectionSelection): void => {
+    directionModeRef.current = dir
+    setDirectionModeState(dir)
+  }, [])
+
+  const setSelectedPresetId = useCallback(
+    (id: string): void => {
+      setSelectedPresetIdState(id)
+      const preset = INTERVAL_PRESETS.find((p) => p.id === id)
+      if (preset) {
+        setActiveIntervals([...preset.intervalSemitones])
+        setDirectionMode(preset.defaultDirection)
+        if (preset.fixedRootNote !== null) {
+          setRootRangeNotes([preset.fixedRootNote])
+        } else {
+          const roots = Array.from({ length: 25 }, (_, i) => 48 + i)
+          setRootRangeNotes(roots)
+        }
+      }
+    },
+    [setActiveIntervals, setDirectionMode, setRootRangeNotes]
+  )
+
+  const toggleInterval = useCallback(
+    (semitone: number): void => {
+      const prev = activeIntervalsBufferRef.current
+      const next = prev.includes(semitone)
         ? prev.filter((st) => st !== semitone)
         : [...prev, semitone].sort((a, b) => a - b)
-    )
-  }
+      setActiveIntervals(next)
+    },
+    [setActiveIntervals]
+  )
 
-  const toggleRootNote = (note: number): void => {
-    setRootRangeNotes((prev) =>
-      prev.includes(note) ? prev.filter((n) => n !== note) : [...prev, note].sort((a, b) => a - b)
-    )
-  }
+  const toggleRootNote = useCallback(
+    (note: number): void => {
+      const prev = rootRangeNotesBufferRef.current
+      const next = prev.includes(note)
+        ? prev.filter((n) => n !== note)
+        : [...prev, note].sort((a, b) => a - b)
+      setRootRangeNotes(next)
+    },
+    [setRootRangeNotes]
+  )
 
   const triggerNextInterval = useCallback(
     (intervalsPool?: number[], rootsPool?: number[]): void => {
       const currentIntervals = intervalsPool || activeIntervalsBufferRef.current
       const currentRoots = rootsPool || rootRangeNotesBufferRef.current
-
-      isAdvancingRef.current = false
-
       if (currentIntervals.length === 0 || currentRoots.length === 0) return
 
-      if (autoAdvanceTimerRef.current) {
-        clearTimeout(autoAdvanceTimerRef.current)
-        autoAdvanceTimerRef.current = null
-      }
+      core.generateQuestionToken('token_int')
 
-      const token = `token_int_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
-      questionTokenRef.current = token
-
-      const lastSt = currentStimulus ? currentStimulus.semitones : null
+      const lastSt = currentStimulusRef.current ? currentStimulusRef.current.semitones : null
       const intervalData = generateValidInterval(
         currentIntervals,
         currentRoots,
-        directionMode,
+        directionModeRef.current,
         lastSt
       )
 
@@ -203,222 +219,93 @@ export function useIntervalTrainer({
         direction: intervalData.direction
       }
 
+      currentStimulusRef.current = stimulus
       setCurrentStimulus(stimulus)
       setWaitingNoteStep(1)
       setFirstNotePlayed(null)
-      setLastResult(null)
-      setIsWaitingManualAdvance(false)
-      isWaitingAnswerRef.current = true
-      setStimulusStartTime(Date.now())
+      stimulusStartTimeRef.current = Date.now()
+
+      core.setLastResult(null)
+      core.setIsWaitingAnswer(true)
 
       onPlayInterval(stimulus.rootNote, stimulus.targetNote, stimulus.direction)
     },
-    [currentStimulus, directionMode, onPlayInterval]
+    [core, onPlayInterval]
   )
 
-  const finalizeAndSaveSession = useCallback(async (): Promise<void> => {
-    cleanupSessionTimers()
+  const startSession = useCallback(
+    (overrideConfigOrIntervals?: unknown, overrideRoots?: unknown): void => {
+      let intervalsToUse = activeIntervalsBufferRef.current
+      let rootsToUse = rootRangeNotesBufferRef.current
+      let coreOptions: CoreStartSessionOptions | undefined = undefined
 
-    questionTokenRef.current = null
-    isAdvancingRef.current = false
-    isWaitingAnswerRef.current = false
-
-    const totalSeconds = Math.max(1, Math.round((Date.now() - sessionStartTimeRef.current) / 1000))
-
-    setIsSessionActive(false)
-    setIsSessionFinished(true)
-    setIsWaitingManualAdvance(false)
-    setWaitingNoteStep(1)
-    setFirstNotePlayed(null)
-
-    const allAnswers = [...answersBufferRef.current]
-    if (allAnswers.length === 0) return
-
-    const correctCount = historyBufferRef.current.filter((r) => r.isIntervalCorrect).length
-    const accPercent = Math.round((correctCount / allAnswers.length) * 100)
-    const avgTime = Math.round(
-      historyBufferRef.current.reduce((acc, r) => acc + r.responseTimeMs, 0) / allAnswers.length
-    )
-
-    const presetLabel =
-      sessionLimitType === 'time'
-        ? `Intervalos (${activeIntervalsBufferRef.current.length} activos) • Cronometrado ${sessionDurationMinutesBufferRef.current}m`
-        : `Intervalos (${activeIntervalsBufferRef.current.length} activos) • Bloque ${allAnswers.length} preguntas`
-
-    const sessionRecord: DbSessionRecord = {
-      id: sessionIdRef.current,
-      createdAt: new Date().toISOString(),
-      strategyId: 'intervals_v1',
-      instrumentId: 'piano_intervals',
-      presetName: presetLabel,
-      totalQuestions: allAnswers.length,
-      correctAnswers: correctCount,
-      accuracyPercentage: accPercent,
-      avgResponseTimeMs: avgTime,
-      durationSeconds: totalSeconds
-    }
-
-    await saveSessionToDb(sessionRecord, allAnswers)
-    sessionIdRef.current = ''
-  }, [cleanupSessionTimers, sessionLimitType, saveSessionToDb])
-
-  useEffect(() => {
-    if (!isSessionActive || sessionLimitType !== 'time') return
-
-    const interval = setInterval(() => {
-      setTimeRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval)
-          sessionCountdownTimerRef.current = null
-          setIsSessionActive(false)
-          setIsSessionFinished(true)
-          setIsWaitingManualAdvance(false)
-          setWaitingNoteStep(1)
-          setFirstNotePlayed(null)
-          void finalizeAndSaveSession()
-          return 0
+      if (Array.isArray(overrideConfigOrIntervals) && overrideConfigOrIntervals.length > 0) {
+        intervalsToUse = overrideConfigOrIntervals as number[]
+        if (Array.isArray(overrideRoots) && overrideRoots.length > 0) {
+          rootsToUse = overrideRoots as number[]
         }
-        return prev - 1
+      } else if (overrideConfigOrIntervals && typeof overrideConfigOrIntervals === 'object') {
+        const opts = overrideConfigOrIntervals as IntervalSessionOptions
+        if (Array.isArray(opts.intervals) && opts.intervals.length > 0) {
+          intervalsToUse = opts.intervals
+        }
+        if (Array.isArray(opts.roots) && opts.roots.length > 0) {
+          rootsToUse = opts.roots
+        }
+        if (opts.directionMode) {
+          setDirectionMode(opts.directionMode)
+        }
+        coreOptions = opts
+      }
+
+      if (intervalsToUse.length === 0 || rootsToUse.length === 0) return
+
+      setActiveIntervals(intervalsToUse)
+      setRootRangeNotes(rootsToUse)
+
+      setWaitingNoteStep(1)
+      setFirstNotePlayed(null)
+
+      core.startCoreSession(coreOptions, () => {
+        triggerNextInterval(intervalsToUse, rootsToUse)
       })
-    }, 1000)
-    sessionCountdownTimerRef.current = interval
-
-    return (): void => {
-      clearInterval(interval)
-      sessionCountdownTimerRef.current = null
-    }
-  }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
-
-  const startSession = (overrideConfigOrIntervals?: unknown, overrideRoots?: unknown): void => {
-    cleanupSessionTimers()
-
-    let intervalsToUse = activeIntervalsBufferRef.current
-    let rootsToUse = rootRangeNotesBufferRef.current
-    let limitTypeToUse = sessionLimitType
-    let durationMinutesToUse = sessionDurationMinutesBufferRef.current
-
-    if (Array.isArray(overrideConfigOrIntervals) && overrideConfigOrIntervals.length > 0) {
-      intervalsToUse = overrideConfigOrIntervals as number[]
-      if (Array.isArray(overrideRoots) && overrideRoots.length > 0) {
-        rootsToUse = overrideRoots as number[]
-      }
-    } else if (overrideConfigOrIntervals && typeof overrideConfigOrIntervals === 'object') {
-      const opts = overrideConfigOrIntervals as IntervalSessionOptions
-      if (Array.isArray(opts.intervals) && opts.intervals.length > 0) {
-        intervalsToUse = opts.intervals
-      }
-      if (Array.isArray(opts.roots) && opts.roots.length > 0) {
-        rootsToUse = opts.roots
-      }
-      if (opts.limitType) {
-        setSessionLimitType(opts.limitType)
-        limitTypeToUse = opts.limitType
-      }
-      if (typeof opts.questionsCount === 'number') {
-        setSessionQuestionsCount(opts.questionsCount)
-      }
-      if (typeof opts.durationMinutes === 'number') {
-        sessionDurationMinutesBufferRef.current = opts.durationMinutes
-        setSessionDurationMinutesState(opts.durationMinutes)
-        durationMinutesToUse = opts.durationMinutes
-      }
-      if (opts.advanceMode) {
-        setAdvanceMode(opts.advanceMode)
-      }
-      if (opts.directionMode) {
-        setDirectionMode(opts.directionMode)
-      }
-    }
-
-    if (intervalsToUse.length === 0 || rootsToUse.length === 0) return
-
-    setActiveIntervals(intervalsToUse)
-    activeIntervalsBufferRef.current = intervalsToUse
-    setRootRangeNotes(rootsToUse)
-    rootRangeNotesBufferRef.current = rootsToUse
-
-    sessionIdRef.current = `session_int_${Date.now()}`
-    sessionStartTimeRef.current = Date.now()
-    answersBufferRef.current = []
-    historyBufferRef.current = []
-    setSessionHistory([])
-    setCurrentQuestionIndex(1)
-    setIsSessionFinished(false)
-
-    if (limitTypeToUse === 'time') {
-      setTimeRemainingSeconds(durationMinutesToUse * 60)
-    }
-
-    setIsSessionActive(true)
-    triggerNextInterval(intervalsToUse, rootsToUse)
-  }
+    },
+    [core, setActiveIntervals, setRootRangeNotes, setDirectionMode, triggerNextInterval]
+  )
 
   const advanceToNextInterval = useCallback((): void => {
-    if (!isSessionActive || isAdvancingRef.current || isWaitingAnswerRef.current) return
-    isAdvancingRef.current = true
-
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-
-    const isFixedQuestionsCompleted =
-      sessionLimitType === 'questions' && currentQuestionIndex >= sessionQuestionsCount
-
-    if (isFixedQuestionsCompleted) {
-      finalizeAndSaveSession()
-    } else {
-      setCurrentQuestionIndex((prev) => prev + 1)
+    core.advanceToNextQuestion(() => {
       triggerNextInterval()
-    }
-  }, [
-    currentQuestionIndex,
-    finalizeAndSaveSession,
-    isSessionActive,
-    sessionLimitType,
-    sessionQuestionsCount,
-    triggerNextInterval
-  ])
+    })
+  }, [core, triggerNextInterval])
 
   const stopSession = useCallback((): void => {
-    cleanupSessionTimers()
-    if (answersBufferRef.current.length > 0) {
-      finalizeAndSaveSession()
-    } else {
-      questionTokenRef.current = null
-      isWaitingAnswerRef.current = false
-      setIsSessionActive(false)
-      setIsSessionFinished(false)
-      setIsWaitingManualAdvance(false)
-      setCurrentStimulus(null)
-      setFirstNotePlayed(null)
-    }
-  }, [cleanupSessionTimers, finalizeAndSaveSession])
-
-  const resetToConfig = (): void => {
-    cleanupSessionTimers()
-    questionTokenRef.current = null
-    isWaitingAnswerRef.current = false
-    setIsSessionActive(false)
-    setIsSessionFinished(false)
-    setIsWaitingManualAdvance(false)
     setCurrentStimulus(null)
+    currentStimulusRef.current = null
     setFirstNotePlayed(null)
-  }
+    setWaitingNoteStep(1)
+    core.stopCoreSession()
+  }, [core])
 
-  const repeatCurrentInterval = (): void => {
-    if (currentStimulus) {
-      onPlayInterval(
-        currentStimulus.rootNote,
-        currentStimulus.targetNote,
-        currentStimulus.direction
-      )
+  const resetToConfig = useCallback((): void => {
+    setCurrentStimulus(null)
+    currentStimulusRef.current = null
+    setFirstNotePlayed(null)
+    setWaitingNoteStep(1)
+    core.resetCoreToConfig()
+  }, [core])
+
+  const repeatCurrentInterval = useCallback((): void => {
+    const stim = currentStimulusRef.current
+    if (stim) {
+      onPlayInterval(stim.rootNote, stim.targetNote, stim.direction)
     }
-  }
+  }, [onPlayInterval])
 
   const handleUserNotePlayed = useCallback(
     (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {
-      if (!isSessionActive || !currentStimulus || !questionTokenRef.current) return
+      const stim = currentStimulusRef.current
+      if (!core.isSessionActive || !stim || !core.questionToken) return
 
       if (waitingNoteStep === 1) {
         setFirstNotePlayed(playedNoteNumber)
@@ -430,15 +317,15 @@ export function useIntervalTrainer({
       }
 
       if (waitingNoteStep === 2 && firstNotePlayed !== null) {
-        const responseTimeMs = Date.now() - stimulusStartTime
+        const responseTimeMs = Date.now() - stimulusStartTimeRef.current
         const playedPair: [number, number] = [firstNotePlayed, playedNoteNumber]
-        const result = evaluateIntervalAnswer(currentStimulus, playedPair, responseTimeMs)
+        const result = evaluateIntervalAnswer(stim, playedPair, responseTimeMs)
 
         const answerRecord: DbAnswerRecord = {
-          id: `ans_int_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-          sessionId: sessionIdRef.current,
-          questionIndex: currentQuestionIndex,
-          expectedNote: currentStimulus.targetNote,
+          id: `ans_int_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          sessionId: core.sessionId,
+          questionIndex: core.currentQuestionIndex,
+          expectedNote: stim.targetNote,
           playedNote: playedNoteNumber,
           isCorrect: result.isIntervalCorrect,
           semitoneDistance: result.semitoneDistanceError,
@@ -449,12 +336,6 @@ export function useIntervalTrainer({
           inputSource: source
         }
 
-        answersBufferRef.current.push(answerRecord)
-        historyBufferRef.current.push(result)
-
-        setLastResult(result)
-        setSessionHistory([...historyBufferRef.current])
-        isWaitingAnswerRef.current = false
         setWaitingNoteStep(1)
         setFirstNotePlayed(null)
 
@@ -462,38 +343,18 @@ export function useIntervalTrainer({
           onTelemetryLog('EVAL', result.feedbackMessage)
         }
 
-        const shouldWaitManual =
-          advanceMode === 'manual' || (advanceMode === 'smart' && !result.isIntervalCorrect)
-
-        if (shouldWaitManual) {
-          setIsWaitingManualAdvance(true)
-        } else {
-          const delay = advanceMode === 'auto_slow' ? 3500 : 1600
-          const scheduledSessionId = sessionIdRef.current
-          autoAdvanceTimerRef.current = setTimeout(() => {
-            if (sessionIdRef.current !== scheduledSessionId) return
-            advanceToNextInterval()
-          }, delay)
-        }
+        core.recordAnswer(result, answerRecord, result.isIntervalCorrect, () => {
+          advanceToNextInterval()
+        })
       }
     },
-    [
-      isSessionActive,
-      currentStimulus,
-      waitingNoteStep,
-      firstNotePlayed,
-      stimulusStartTime,
-      currentQuestionIndex,
-      onTelemetryLog,
-      advanceMode,
-      advanceToNextInterval
-    ]
+    [core, waitingNoteStep, firstNotePlayed, onTelemetryLog, advanceToNextInterval]
   )
 
-  const trainWeakIntervalsOnly = (): void => {
+  const trainWeakIntervalsOnly = useCallback((): void => {
     const weakIntervals: number[] = []
     activeIntervalsBufferRef.current.forEach((st) => {
-      const attempts = historyBufferRef.current.filter((h) => h.expectedStimulus.semitones === st)
+      const attempts = sessionHistory.filter((h) => h.expectedStimulus.semitones === st)
       if (attempts.length > 0) {
         const correct = attempts.filter((h) => h.isIntervalCorrect).length
         if (correct / attempts.length < 0.85) {
@@ -503,9 +364,8 @@ export function useIntervalTrainer({
     })
 
     if (weakIntervals.length === 0) return
-
     startSession(weakIntervals)
-  }
+  }, [sessionHistory, startSession])
 
   return {
     presets: INTERVAL_PRESETS,
@@ -519,24 +379,24 @@ export function useIntervalTrainer({
     rootRangeNotes,
     setRootRangeNotes,
     toggleRootNote,
-    sessionLimitType,
-    setSessionLimitType,
-    sessionQuestionsCount,
-    setSessionQuestionsCount,
-    sessionDurationMinutes,
-    setSessionDurationMinutes,
-    timeRemainingSeconds,
-    advanceMode,
-    setAdvanceMode,
-    isSessionActive,
-    isSessionFinished,
-    isWaitingManualAdvance,
-    currentQuestionIndex,
+    sessionLimitType: core.sessionLimitType,
+    setSessionLimitType: core.setSessionLimitType,
+    sessionQuestionsCount: core.sessionQuestionsCount,
+    setSessionQuestionsCount: core.setSessionQuestionsCount,
+    sessionDurationMinutes: core.sessionDurationMinutes,
+    setSessionDurationMinutes: core.setSessionDurationMinutes,
+    timeRemainingSeconds: core.timeRemainingSeconds,
+    advanceMode: core.advanceMode,
+    setAdvanceMode: core.setAdvanceMode,
+    isSessionActive: core.isSessionActive,
+    isSessionFinished: core.isSessionFinished,
+    isWaitingManualAdvance: core.isWaitingManualAdvance,
+    currentQuestionIndex: core.currentQuestionIndex,
     currentStimulus,
     waitingNoteStep,
     firstNotePlayed,
-    lastResult,
-    sessionHistory,
+    lastResult: core.lastResult,
+    sessionHistory: core.sessionHistory,
     startSession,
     stopSession,
     advanceToNextInterval,
