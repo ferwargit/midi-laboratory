@@ -32,7 +32,8 @@ describe('recordValidator - Validación Pura de Integridad de Registros', () => 
     responseTimeMs: 900,
     velocity: 90,
     reasonTelemetry: '',
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    inputSource: 'midi_hardware'
   }
 
   const validReport: DbAiReportRecord = {
@@ -70,38 +71,71 @@ describe('recordValidator - Validación Pura de Integridad de Registros', () => 
     }
   }
 
-  it('isValidSessionRecord debe aceptar sesiones válidas y rechazar datos corruptos', () => {
+  it('isValidSessionRecord debe aceptar sesiones válidas y rechazar datos corruptos o fuera de rango', () => {
     expect(isValidSessionRecord(validSession)).toBe(true)
+    expect(isValidSessionRecord(null)).toBe(false)
+    expect(isValidSessionRecord('no objeto')).toBe(false)
+    expect(isValidSessionRecord({ ...validSession, id: '' })).toBe(false)
+    expect(isValidSessionRecord({ ...validSession, strategyId: '' })).toBe(false)
+    expect(isValidSessionRecord({ ...validSession, instrumentId: '' })).toBe(false)
+    expect(isValidSessionRecord({ ...validSession, presetName: '' })).toBe(false)
+    expect(isValidSessionRecord({ ...validSession, totalQuestions: -5 })).toBe(false)
+    expect(isValidSessionRecord({ ...validSession, totalQuestions: 3.5 })).toBe(false)
     expect(isValidSessionRecord({ ...validSession, correctAnswers: 15 })).toBe(false)
     expect(isValidSessionRecord({ ...validSession, accuracyPercentage: 120 })).toBe(false)
+    expect(isValidSessionRecord({ ...validSession, accuracyPercentage: -10 })).toBe(false)
+    expect(isValidSessionRecord({ ...validSession, avgResponseTimeMs: -100 })).toBe(false)
+    expect(isValidSessionRecord({ ...validSession, durationSeconds: -10 })).toBe(false)
     expect(isValidSessionRecord({ ...validSession, createdAt: 'fecha_invalida' })).toBe(false)
   })
 
-  it('isValidAnswerRecord debe aceptar respuestas válidas y rechazar notas fuera de rango MIDI', () => {
+  it('isValidAnswerRecord debe aceptar respuestas válidas y rechazar notas o parámetros corruptos', () => {
     expect(isValidAnswerRecord(validAnswer)).toBe(true)
+    expect(isValidAnswerRecord(null)).toBe(false)
+    expect(isValidAnswerRecord({ ...validAnswer, id: '' })).toBe(false)
+    expect(isValidAnswerRecord({ ...validAnswer, sessionId: '' })).toBe(false)
+    expect(isValidAnswerRecord({ ...validAnswer, questionIndex: -1 })).toBe(false)
     expect(isValidAnswerRecord({ ...validAnswer, expectedNote: -1 })).toBe(false)
     expect(isValidAnswerRecord({ ...validAnswer, playedNote: 130 })).toBe(false)
+    expect(isValidAnswerRecord({ ...validAnswer, isCorrect: 'true' as unknown as boolean })).toBe(
+      false
+    )
+    expect(isValidAnswerRecord({ ...validAnswer, semitoneDistance: 1.5 })).toBe(false)
     expect(isValidAnswerRecord({ ...validAnswer, responseTimeMs: -100 })).toBe(false)
+    expect(isValidAnswerRecord({ ...validAnswer, velocity: 150 })).toBe(false)
+    expect(isValidAnswerRecord({ ...validAnswer, velocity: -5 })).toBe(false)
+    expect(isValidAnswerRecord({ ...validAnswer, createdAt: 'fecha_invalida' })).toBe(false)
+    expect(
+      isValidAnswerRecord({ ...validAnswer, inputSource: 'invalido' as unknown as 'midi_hardware' })
+    ).toBe(false)
   })
 
   it('isValidAiReportRecord debe validar reportes de IA y rechazar objetos vacíos', () => {
     expect(isValidAiReportRecord(validReport)).toBe(true)
     expect(isValidAiReportRecord(null)).toBe(false)
+    expect(isValidAiReportRecord({ ...validReport, id: '' })).toBe(false)
+    expect(isValidAiReportRecord({ ...validReport, modelName: '' })).toBe(false)
+    expect(isValidAiReportRecord({ ...validReport, modeFilter: '' })).toBe(false)
     expect(isValidAiReportRecord({ ...validReport, analysisText: '' })).toBe(false)
+    expect(
+      isValidAiReportRecord({
+        ...validReport,
+        prescription: null as unknown as Record<string, unknown>
+      })
+    ).toBe(false)
+    expect(isValidAiReportRecord({ ...validReport, createdAt: 'fecha_invalida' })).toBe(false)
   })
 
   it('isValidAiConsultationRecord debe validar consultas del tutor IA y rechazar campos vacíos', () => {
     expect(isValidAiConsultationRecord(validConsultation)).toBe(true)
     expect(isValidAiConsultationRecord(null)).toBe(false)
+    expect(isValidAiConsultationRecord({ ...validConsultation, id: '' })).toBe(false)
+    expect(isValidAiConsultationRecord({ ...validConsultation, modelName: '' })).toBe(false)
+    expect(isValidAiConsultationRecord({ ...validConsultation, modeFilter: '' })).toBe(false)
     expect(isValidAiConsultationRecord({ ...validConsultation, userQuery: '' })).toBe(false)
     expect(isValidAiConsultationRecord({ ...validConsultation, aiResponse: '' })).toBe(false)
-    expect(isValidAiConsultationRecord({ ...validConsultation, id: '' })).toBe(false)
-  })
-
-  it('isValidAnswerRecord debe validar correctamente inputSource', () => {
-    expect(isValidAnswerRecord({ ...validAnswer, inputSource: 'midi_hardware' })).toBe(true)
-    expect(isValidAnswerRecord({ ...validAnswer, inputSource: 'virtual_ui' })).toBe(true)
-    // @ts-ignore -- Prueba de rechazo de fuente inválida
-    expect(isValidAnswerRecord({ ...validAnswer, inputSource: 'joystick_invalido' })).toBe(false)
+    expect(isValidAiConsultationRecord({ ...validConsultation, createdAt: 'fecha_invalida' })).toBe(
+      false
+    )
   })
 })

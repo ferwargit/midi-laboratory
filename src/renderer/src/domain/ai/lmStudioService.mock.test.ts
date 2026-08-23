@@ -3,7 +3,7 @@ import { LmStudioService } from './lmStudioService'
 import { AnalyticsMetrics, DetailedSessionAnalysis } from '../analytics/historyAnalytics'
 import { DbAiConsultationRecord, DbAiReportRecord } from '../database/types'
 
-describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia y Multi-Turn)', () => {
+describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y Multi-Turn)', () => {
   const mockMetrics: AnalyticsMetrics = {
     modeFilter: 'single_note',
     filteredSessionsCount: 2,
@@ -133,7 +133,7 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia y Mult
     expect(result.prescription.title).toBe('Prescripción Mock')
   })
 
-  it('askCustomConsultation debe transmitir la secuencia Multi-Turn con historial conversacional', async () => {
+  it('askCustomConsultation debe transmitir la secuencia Multi-Turn con historial conversacional vía fetch', async () => {
     const fakeModelsResponse = { data: [{ id: 'qwen3.5-mock' }] }
     const fakeChatResponse = {
       model: 'qwen3.5-mock',
@@ -171,41 +171,29 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia y Mult
     expect(global.fetch).toHaveBeenCalledTimes(2)
   })
 
-  // NUEVO TEST: Verificación de transmisión de telemetría multi-sesión
-  it('askMultiSessionComparison debe transmitir la telemetría cruzada de las sesiones seleccionadas', async () => {
-    const fakeModelsResponse = { data: [{ id: 'qwen3.5-mock' }] }
-    const fakeChatResponse = {
-      model: 'qwen3.5-mock',
-      choices: [
-        {
-          message: {
-            content: 'Informe comparativo cruzado generado exitosamente por el modelo.'
-          }
-        }
-      ]
+  it('askMultiSessionComparison debe transmitir la telemetría cruzada de las sesiones seleccionadas vía IPC', async () => {
+    // @ts-ignore -- Mock temporal de window.customAPI para comparativa multi-sesión
+    window.customAPI = {
+      checkLmStudioModels: vi.fn().mockResolvedValue('qwen-ipc-model'),
+      chatLmStudio: vi.fn().mockResolvedValue({
+        success: true,
+        model: 'qwen-ipc-model',
+        content: 'Informe comparativo cruzado generado exitosamente por IPC.'
+      })
     }
 
-    global.fetch = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => fakeModelsResponse
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => fakeChatResponse
-      } as Response)
-
-    const service = new LmStudioService('http://127.0.0.1:1234')
+    const service = new LmStudioService()
     const result = await service.askMultiSessionComparison(mockSelectedAnalysis, mockMetrics)
 
-    expect(result.modelName).toBe('qwen3.5-mock')
-    expect(result.content).toBe('Informe comparativo cruzado generado exitosamente por el modelo.')
-    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(result.modelName).toBe('qwen-ipc-model')
+    expect(result.content).toBe('Informe comparativo cruzado generado exitosamente por IPC.')
+
+    // @ts-ignore -- Limpieza de window.customAPI
+    delete window.customAPI
   })
 
   it('debe comunicarse exitosamente vía Electron IPC customAPI si está disponible', async () => {
-    // @ts-ignore -- Mock temporal de window.customAPI en entorno jsdom para prueba unitaria
+    // @ts-ignore -- Mock temporal de window.customAPI
     window.customAPI = {
       checkLmStudioModels: vi.fn().mockResolvedValue('qwen-ipc-model'),
       chatLmStudio: vi.fn().mockResolvedValue({
@@ -237,7 +225,7 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia y Mult
     expect(result.analysisText).toBe('Diagnóstico IPC mock.')
     expect(result.prescription.targetMode).toBe('intervals')
 
-    // @ts-ignore -- Limpieza de window.customAPI tras completar la prueba unitaria
+    // @ts-ignore -- Limpieza de window.customAPI
     delete window.customAPI
   })
 })

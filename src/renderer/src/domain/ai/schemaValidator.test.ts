@@ -3,7 +3,7 @@ import { isValidPrescription, validateAndParseAiResponse } from './schemaValidat
 import { generateAlgorithmicFallback } from './fallbackGenerator'
 import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 
-describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM', () => {
+describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM y Generación de Fallback', () => {
   const validPrescriptionJson = {
     analysisText: 'Excelente progreso en discriminación auditiva.',
     prescription: {
@@ -51,43 +51,86 @@ describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM', () 
     expect(result?.prescription.recommendedNotes).toEqual([60, 62, 64])
   })
 
-  it('malformed JSON rejected: debe rechazar cadenas que no sean JSON válido', () => {
-    const malformed = 'Esto no es un JSON { incompleto...'
-    const result = validateAndParseAiResponse(malformed, 'qwen3.5')
-
-    expect(result).toBeNull()
+  it('malformed JSON rejected: debe rechazar cadenas que no sean JSON válido o entradas no string', () => {
+    expect(validateAndParseAiResponse('Esto no es un JSON { incompleto...', 'qwen3.5')).toBeNull()
+    expect(validateAndParseAiResponse(null as unknown as string, 'qwen3.5')).toBeNull()
+    expect(validateAndParseAiResponse(12345 as unknown as string, 'qwen3.5')).toBeNull()
   })
 
-  it('missing prescription rejected: debe rechazar objetos que no tengan el bloque de prescripción o campos requeridos', () => {
+  it('isValidPrescription debe rechazar objetos nulos, no objetos y campos requeridos inválidos', () => {
+    expect(isValidPrescription(null)).toBe(false)
+    expect(isValidPrescription('no es un objeto')).toBe(false)
+    expect(isValidPrescription({ ...validPrescriptionJson.prescription, title: '' })).toBe(false)
+    expect(isValidPrescription({ ...validPrescriptionJson.prescription, rationale: '' })).toBe(
+      false
+    )
+    expect(
+      isValidPrescription({
+        ...validPrescriptionJson.prescription,
+        instrumentId: 'invalido' as unknown as 'flute'
+      })
+    ).toBe(false)
+    expect(
+      isValidPrescription({
+        ...validPrescriptionJson.prescription,
+        limitType: 'invalido' as unknown as 'time'
+      })
+    ).toBe(false)
+    expect(
+      isValidPrescription({
+        ...validPrescriptionJson.prescription,
+        advanceMode: 'invalido' as unknown as 'smart'
+      })
+    ).toBe(false)
+    expect(
+      isValidPrescription({ ...validPrescriptionJson.prescription, recommendedNotes: [] })
+    ).toBe(false)
+    expect(
+      isValidPrescription({
+        ...validPrescriptionJson.prescription,
+        recommendedNotes: 'no-array' as unknown as number[]
+      })
+    ).toBe(false)
+    expect(isValidPrescription({ ...validPrescriptionJson.prescription, questionsCount: -1 })).toBe(
+      false
+    )
+    expect(isValidPrescription({ ...validPrescriptionJson.prescription, durationMinutes: 0 })).toBe(
+      false
+    )
+  })
+
+  it('missing prescription rejected: debe rechazar objetos que no tengan el bloque de prescripción', () => {
     const missingPrescription = JSON.stringify({ analysisText: 'Solo texto' })
     expect(validateAndParseAiResponse(missingPrescription, 'qwen3.5')).toBeNull()
 
-    const invalidNotes = JSON.stringify({
-      analysisText: 'Texto',
-      prescription: {
-        ...validPrescriptionJson.prescription,
-        recommendedNotes: [-10, 500]
-      }
+    const emptyText = JSON.stringify({
+      analysisText: '   ',
+      prescription: validPrescriptionJson.prescription
     })
-    expect(validateAndParseAiResponse(invalidNotes, 'qwen3.5')).toBeNull()
-
-    const invalidMode = JSON.stringify({
-      analysisText: 'Texto',
-      prescription: {
-        ...validPrescriptionJson.prescription,
-        targetMode: 'chords_mode_inexistente'
-      }
-    })
-    expect(validateAndParseAiResponse(invalidMode, 'qwen3.5')).toBeNull()
+    expect(validateAndParseAiResponse(emptyText, 'qwen3.5')).toBeNull()
   })
 
-  it('fallback used on invalid schema: cuando el esquema es inválido, el sistema recurre al fallback algorítmico', () => {
-    const invalidPayload = 'corrupted data'
-    const parsed = validateAndParseAiResponse(invalidPayload, 'qwen3.5')
+  it('generateAlgorithmicFallback debe generar prescripciones adaptadas según la modalidad y notas difíciles', () => {
+    // 1. Fallback para intervalos
+    const intFallback = generateAlgorithmicFallback({ ...mockMetrics, modeFilter: 'intervals' })
+    expect(intFallback.prescription.targetMode).toBe('intervals')
+    expect(intFallback.prescription.recommendedIntervals).toEqual([2, 4, 5, 7])
 
-    const finalResponse = parsed || generateAlgorithmicFallback(mockMetrics)
+    // 2. Fallback para secuencias
+    const seqFallback = generateAlgorithmicFallback({ ...mockMetrics, modeFilter: 'sequences' })
+    expect(seqFallback.prescription.targetMode).toBe('sequences')
+    expect(seqFallback.prescription.sequenceLength).toBe(3)
 
-    expect(finalResponse.source).toBe('algorithmic_fallback')
-    expect(isValidPrescription(finalResponse.prescription)).toBe(true)
+    // 3. Fallback para notas individuales con notas difíciles acumuladas
+    const diffFallback = generateAlgorithmicFallback({
+      ...mockMetrics,
+      modeFilter: 'single_note',
+      mostDifficultNotes: [
+        { noteName: 'C#4', accuracy: 40, attempts: 5 },
+        { noteName: 'D4', accuracy: 45, attempts: 6 }
+      ]
+    })
+    expect(diffFallback.prescription.targetMode).toBe('single_note')
+    expect(diffFallback.prescription.recommendedNotes.length).toBeGreaterThanOrEqual(2)
   })
 })

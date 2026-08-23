@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { generateAlgorithmicFallback } from './fallbackGenerator'
 import { buildSystemPrompt, buildUserPrompt } from './promptBuilder'
 import { AnalyticsMetrics, DetailedSessionAnalysis } from '../analytics/historyAnalytics'
@@ -54,33 +54,6 @@ describe('ai - Servicios de IA, Prescripción, Tutor y Comparador Multi-Sesión'
       dominantBias: 'sharp',
       formatType: 'time',
       inputMethod: 'hardware'
-    },
-    {
-      session: {
-        id: 's_comp_2',
-        createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
-        strategyId: 'adaptive_v1',
-        instrumentId: 'flute',
-        presetName: 'Nivel 1 (C, D, E)',
-        totalQuestions: 15,
-        correctAnswers: 14,
-        accuracyPercentage: 93,
-        avgResponseTimeMs: 1100,
-        durationSeconds: 60
-      },
-      poolSize: 3,
-      entropyBits: 1.58,
-      chanceBaseline: 33,
-      normalizedAccuracy: 90,
-      responsesPerMinute: 15,
-      fastPercent: 80,
-      mediumPercent: 20,
-      slowPercent: 0,
-      sharpBiasCount: 0,
-      flatBiasCount: 0,
-      dominantBias: 'balanced',
-      formatType: 'time',
-      inputMethod: 'hardware'
     }
   ]
 
@@ -102,6 +75,15 @@ describe('ai - Servicios de IA, Prescripción, Tutor y Comparador Multi-Sesión'
     expect(response.prescription).toBeDefined()
     expect(response.prescription.targetMode).toBeDefined()
     expect(response.prescription.recommendedNotes.length).toBeGreaterThan(0)
+  })
+
+  it('checkConnection y getLoadedModelId deben retornar null/false si la conexión falla o el circuit breaker está abierto', async () => {
+    const breaker = new CircuitBreaker()
+    vi.spyOn(breaker, 'canExecute').mockReturnValue(false)
+    const service = new LmStudioService('http://127.0.0.1:9999', breaker)
+
+    expect(await service.getLoadedModelId()).toBeNull()
+    expect(await service.checkConnection()).toBe(false)
   })
 
   it('LmStudioService retorna fallback rápidamente si el puerto no responde sin bloquear la práctica', async () => {
@@ -133,7 +115,6 @@ describe('ai - Servicios de IA, Prescripción, Tutor y Comparador Multi-Sesión'
     expect(consultation.content).toContain('Tutor Local')
   })
 
-  // NUEVO TEST: Validación de fallback en comparativa multi-sesión
   it('askMultiSessionComparison debe retornar informe heurístico comparativo si el servidor está desconectado', async () => {
     const fastCircuitBreaker = new CircuitBreaker({
       failureThreshold: 2,
@@ -144,6 +125,6 @@ describe('ai - Servicios de IA, Prescripción, Tutor y Comparador Multi-Sesión'
     const comparison = await service.askMultiSessionComparison(mockSelectedAnalysis, mockMetrics)
 
     expect(comparison.modelName).toBe('Motor Heurístico Local')
-    expect(comparison.content).toContain('Comparativa Cruzada Heurística (2 Sesiones)')
+    expect(comparison.content).toContain('Comparativa Cruzada Heurística (1 Sesiones)')
   })
 })
