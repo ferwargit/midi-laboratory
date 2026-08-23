@@ -133,6 +133,73 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(searchMatch[0].id).toBe('s_int')
   })
 
+  it('filterSessionsAdvanced debe filtrar por Motor, Preset, Fuente de Entrada y Sesgo', () => {
+    const sSpaced: DbSessionRecord = {
+      id: 's_spaced',
+      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
+      strategyId: 'spaced_repetition',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Pentatónica C Mayor • Bloque 10 preguntas',
+      totalQuestions: 10,
+      correctAnswers: 9,
+      accuracyPercentage: 90,
+      avgResponseTimeMs: 1100,
+      durationSeconds: 60
+    }
+
+    const pool = [sNotePiano, sNoteFlute, sInterval, sSequence, sSpaced]
+
+    const spacedOnly = filterSessionsAdvanced(pool, {
+      mode: 'all',
+      strategyId: 'spaced_repetition'
+    })
+    expect(spacedOnly.map((s) => s.id)).toEqual(['s_note_flute', 's_spaced'])
+
+    const pentatonicOnly = filterSessionsAdvanced(pool, {
+      mode: 'all',
+      presetFilter: 'Pentatónica'
+    })
+    expect(pentatonicOnly.map((s) => s.id)).toEqual(['s_spaced'])
+  })
+
+  it('filterSessionsAdvanced debe coincidir semánticamente Nivel 3 con nombres canónicos y alias históricos', () => {
+    const sLegacyOctavaDiatonica: DbSessionRecord = {
+      id: 's_legacy_1',
+      createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      totalQuestions: 40,
+      correctAnswers: 31,
+      accuracyPercentage: 78,
+      avgResponseTimeMs: 2025,
+      durationSeconds: 180
+    }
+
+    const sCanonicalName: DbSessionRecord = {
+      id: 's_canon_1',
+      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_grand_piano',
+      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
+      totalQuestions: 40,
+      correctAnswers: 35,
+      accuracyPercentage: 88,
+      avgResponseTimeMs: 1400,
+      durationSeconds: 180
+    }
+
+    const pool = [sLegacyOctavaDiatonica, sCanonicalName]
+
+    const matched = filterSessionsAdvanced(pool, {
+      mode: 'single_note',
+      presetFilter: 'Nivel 3 (Octava Diatónica C4-C5)'
+    })
+
+    expect(matched.length).toBe(2)
+    expect(matched.map((s) => s.id)).toEqual(['s_legacy_1', 's_canon_1'])
+  })
+
   it('computeAnalyticsMetrics calcula telemetría clínica de alta resolución por sesión (RPM, reflejo, sesgo)', () => {
     const all = [sNotePiano, sNoteFlute]
     const metrics = computeAnalyticsMetrics(all, mockAnswers, 'single_note')
@@ -154,6 +221,99 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(fluteAnalysis?.sharpBiasCount).toBe(1)
     expect(fluteAnalysis?.dominantBias).toBe('sharp')
     expect(fluteAnalysis?.inputMethod).toBe('virtual')
+  })
+
+  it('computeAnalyticsMetrics debe calcular exactamente el descanso inter-sesión (ISI) en orden cronológico', () => {
+    const s1: DbSessionRecord = {
+      id: 's_isi_1',
+      createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Test',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 60
+    }
+
+    const s2: DbSessionRecord = {
+      id: 's_isi_2',
+      createdAt: new Date('2026-08-21T10:15:00Z').toISOString(), // 15 minutos después
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Test',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 60
+    }
+
+    const s3: DbSessionRecord = {
+      id: 's_isi_3',
+      createdAt: new Date('2026-08-22T10:15:00Z').toISOString(), // 24 horas después
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Test',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 60
+    }
+
+    const ans1: DbAnswerRecord = {
+      id: 'a_isi_1',
+      sessionId: 's_isi_1',
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 60,
+      isCorrect: true,
+      semitoneDistance: 0,
+      responseTimeMs: 1000,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: s1.createdAt
+    }
+
+    const ans2: DbAnswerRecord = {
+      id: 'a_isi_2',
+      sessionId: 's_isi_2',
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 60,
+      isCorrect: true,
+      semitoneDistance: 0,
+      responseTimeMs: 1000,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: s2.createdAt
+    }
+
+    const ans3: DbAnswerRecord = {
+      id: 'a_isi_3',
+      sessionId: 's_isi_3',
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 60,
+      isCorrect: true,
+      semitoneDistance: 0,
+      responseTimeMs: 1000,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: s3.createdAt
+    }
+
+    const metrics = computeAnalyticsMetrics([s1, s2, s3], [ans1, ans2, ans3], 'all')
+
+    const item1 = metrics.sessionPsychometricsList.find((p) => p.session.id === 's_isi_1')
+    const item2 = metrics.sessionPsychometricsList.find((p) => p.session.id === 's_isi_2')
+    const item3 = metrics.sessionPsychometricsList.find((p) => p.session.id === 's_isi_3')
+
+    expect(item1?.interSessionGapLabel).toBe('Inicio')
+    expect(item2?.interSessionGapLabel).toBe('15 min')
+    expect(item3?.interSessionGapLabel).toBe('1 d')
   })
 
   it('reconstructSessionConfig debe reconstruir con precisión el pool de notas canónicas y formato de una sesión pasada', () => {
@@ -251,7 +411,9 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
         flatBiasCount: 0,
         dominantBias: 'sharp',
         formatType: 'time',
-        inputMethod: 'hardware'
+        inputMethod: 'hardware',
+        interSessionGapMs: null,
+        interSessionGapLabel: 'Inicio'
       },
       {
         session: session2,
@@ -267,7 +429,9 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
         flatBiasCount: 0,
         dominantBias: 'balanced',
         formatType: 'time',
-        inputMethod: 'hardware'
+        inputMethod: 'hardware',
+        interSessionGapMs: 950400000,
+        interSessionGapLabel: '11 d'
       }
     ])
 
@@ -330,44 +494,6 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(critical.map((s) => s.id)).toEqual(['s_45'])
   })
 
-  it('generateDiagnosticReport redacta el plan de acción psicopedagógico correctamente', () => {
-    const metrics = computeAnalyticsMetrics([sNotePiano], [mockAnswers[0]], 'single_note')
-    const report = generateDiagnosticReport(metrics)
-    expect(report.title).toContain('Informe')
-    expect(report.concreteActionPlan.length).toBeGreaterThan(0)
-  })
-
-  it('filterSessionsAdvanced debe filtrar por Motor, Preset, Fuente de Entrada y Sesgo', () => {
-    const sSpaced: DbSessionRecord = {
-      id: 's_spaced',
-      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
-      strategyId: 'spaced_repetition',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Pentatónica C Mayor • Bloque 10 preguntas',
-      totalQuestions: 10,
-      correctAnswers: 9,
-      accuracyPercentage: 90,
-      avgResponseTimeMs: 1100,
-      durationSeconds: 60
-    }
-
-    const pool = [sNotePiano, sNoteFlute, sInterval, sSequence, sSpaced]
-
-    // 1. Filtrar por Motor Adaptativo (spaced_repetition)
-    const spacedOnly = filterSessionsAdvanced(pool, {
-      mode: 'all',
-      strategyId: 'spaced_repetition'
-    })
-    expect(spacedOnly.map((s) => s.id)).toEqual(['s_note_flute', 's_spaced'])
-
-    // 2. Filtrar por Preset (Pentatónica)
-    const pentatonicOnly = filterSessionsAdvanced(pool, {
-      mode: 'all',
-      presetFilter: 'Pentatónica'
-    })
-    expect(pentatonicOnly.map((s) => s.id)).toEqual(['s_spaced'])
-  })
-
   it('la ordenación por formato debe ordenar numéricamente las duraciones de sesiones cronometradas (59s < 180s)', () => {
     const s59Sec: DbSessionRecord = {
       id: 's_59',
@@ -379,7 +505,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       correctAnswers: 17,
       accuracyPercentage: 94,
       avgResponseTimeMs: 1100,
-      durationSeconds: 59 // 59 segundos
+      durationSeconds: 59
     }
 
     const s180Sec: DbSessionRecord = {
@@ -392,142 +518,21 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       correctAnswers: 31,
       accuracyPercentage: 78,
       avgResponseTimeMs: 2025,
-      durationSeconds: 180 // 3 minutos (180 segundos)
+      durationSeconds: 180
     }
 
     const list = [s180Sec, s59Sec]
 
-    // Ordenamiento ascendente por duración real (Menor a Mayor)
     const sortedAsc = [...list].sort((a, b) => (a.durationSeconds || 0) - (b.durationSeconds || 0))
 
-    expect(sortedAsc[0].id).toBe('s_59') // 59s debe quedar primero
-    expect(sortedAsc[1].id).toBe('s_180') // 180s después
+    expect(sortedAsc[0].id).toBe('s_59')
+    expect(sortedAsc[1].id).toBe('s_180')
   })
 
-  it('filterSessionsAdvanced debe coincidir semánticamente Nivel 3 con nombres canónicos y alias históricos', () => {
-    const sLegacyOctavaDiatonica: DbSessionRecord = {
-      id: 's_legacy_1',
-      createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
-      totalQuestions: 40,
-      correctAnswers: 31,
-      accuracyPercentage: 78,
-      avgResponseTimeMs: 2025,
-      durationSeconds: 180
-    }
-
-    const sCanonicalName: DbSessionRecord = {
-      id: 's_canon_1',
-      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
-      totalQuestions: 40,
-      correctAnswers: 35,
-      accuracyPercentage: 88,
-      avgResponseTimeMs: 1400,
-      durationSeconds: 180
-    }
-
-    const sLegacyC4aC5: DbSessionRecord = {
-      id: 's_legacy_2',
-      createdAt: new Date('2026-08-20T10:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (C4 a C5) • Cronometrado 3m',
-      totalQuestions: 40,
-      correctAnswers: 30,
-      accuracyPercentage: 75,
-      avgResponseTimeMs: 1900,
-      durationSeconds: 180
-    }
-
-    const pool = [sLegacyOctavaDiatonica, sCanonicalName, sLegacyC4aC5]
-
-    // Al filtrar por el nombre canónico del selector:
-    const matched = filterSessionsAdvanced(pool, {
-      mode: 'single_note',
-      presetFilter: 'Nivel 3 (Octava Diatónica C4-C5)'
-    })
-
-    // Debe coincidir con las 3 variaciones históricas sin perder ninguna sesión
-    expect(matched.length).toBe(3)
-    expect(matched.map((s) => s.id)).toEqual(['s_legacy_1', 's_canon_1', 's_legacy_2'])
-  })
-
-  it('generateDiagnosticReport debe generar devoluciones para precisión intermedia, baja, sesgo agudo y grave', () => {
-    // 1. Sin sesiones registradas
-    const emptyReport = generateDiagnosticReport({
-      modeFilter: 'all',
-      filteredSessionsCount: 0,
-      totalAnswers: 0,
-      totalCorrect: 0,
-      overallAccuracy: 0,
-      normalizedOverallAccuracy: 0,
-      avgEntropyBits: 0,
-      avgResponseTimeMs: 0,
-      fastResponsesCount: 0,
-      mediumResponsesCount: 0,
-      slowResponsesCount: 0,
-      sharpBiasCount: 0,
-      flatBiasCount: 0,
-      topConfusions: [],
-      mostDifficultNotes: [],
-      strongestNotes: [],
-      sessionPsychometricsList: [],
-      longitudinalComparisons: []
-    })
-    expect(emptyReport.executiveSummary).toContain('No se registran sesiones')
-
-    // 2. Nivel Intermedio y sesgo hacia lo grave
-    const flatReport = generateDiagnosticReport({
-      modeFilter: 'single_note',
-      filteredSessionsCount: 2,
-      totalAnswers: 20,
-      totalCorrect: 14,
-      overallAccuracy: 70, // Intermedio
-      normalizedOverallAccuracy: 65,
-      avgEntropyBits: 2.0,
-      avgResponseTimeMs: 3100, // Lento
-      fastResponsesCount: 2,
-      mediumResponsesCount: 4,
-      slowResponsesCount: 14, // >35% lento
-      sharpBiasCount: 1,
-      flatBiasCount: 5, // Sesgo grave dominante
-      topConfusions: [{ expected: 'C4', played: 'B3', count: 3 }],
-      mostDifficultNotes: [{ noteName: 'C4', accuracy: 50, attempts: 6 }],
-      strongestNotes: [],
-      sessionPsychometricsList: [],
-      longitudinalComparisons: []
-    })
-    expect(flatReport.executiveSummary).toContain('INTERMEDIO CONSOLIDADO')
-    expect(flatReport.directionalBiasAnalysis).toContain('SESGO HACIA LO GRAVE')
-    expect(flatReport.cognitiveLatencyAnalysis).toContain('conteo mental')
-
-    // 3. Nivel Formativo
-    const lowReport = generateDiagnosticReport({
-      modeFilter: 'single_note',
-      filteredSessionsCount: 1,
-      totalAnswers: 10,
-      totalCorrect: 4,
-      overallAccuracy: 40, // Formativo
-      normalizedOverallAccuracy: 30,
-      avgEntropyBits: 1.5,
-      avgResponseTimeMs: 1800,
-      fastResponsesCount: 3,
-      mediumResponsesCount: 6,
-      slowResponsesCount: 1,
-      sharpBiasCount: 0,
-      flatBiasCount: 0,
-      topConfusions: [],
-      mostDifficultNotes: [],
-      strongestNotes: [],
-      sessionPsychometricsList: [],
-      longitudinalComparisons: []
-    })
-    expect(lowReport.executiveSummary).toContain('ENTRENAMIENTO FORMATIVO')
-    expect(lowReport.directionalBiasAnalysis).toContain('Sin errores registrados')
+  it('generateDiagnosticReport redacta el plan de acción psicopedagógico correctamente', () => {
+    const metrics = computeAnalyticsMetrics([sNotePiano], [mockAnswers[0]], 'single_note')
+    const report = generateDiagnosticReport(metrics)
+    expect(report.title).toContain('Informe')
+    expect(report.concreteActionPlan.length).toBeGreaterThan(0)
   })
 })

@@ -86,6 +86,17 @@ export const PEDAGOGICAL_DICTIONARY: Record<string, PedagogicalConcept> = {
       'Caja 1 (Fallo: turno 1) ➔ Caja 2 (1 acierto: turno 3) ➔ Caja 3 (3 aciertos: turno 8)',
     practicalTakeaway:
       'Garantiza que no pierdas tiempo en notas que ya dominas y refuerza inmediatamente las notas con interferencia perceptual.'
+  },
+  inter_session_gap: {
+    id: 'inter_session_gap',
+    title: 'Descanso Inter-Sesión (ISI)',
+    subtitle: 'Spacing Effect y Consolidación Sináptica',
+    category: 'cognition',
+    shortDefinition:
+      'Tiempo transcurrido desde que finalizaste la sesión anterior hasta el inicio de la sesión actual.',
+    formulaOrCalculation: 'ISI = Timestamp(Inicio Sesión Actual) - Timestamp(Fin Sesión Previa)',
+    practicalTakeaway:
+      '< 15 min: Práctica masiva (propensa a saturación y fatiga). 12h - 48h: Espaciamiento óptimo con consolidación durante el sueño. > 48h: Retención a largo plazo.'
   }
 }
 

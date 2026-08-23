@@ -109,6 +109,7 @@ export function buildUserPrompt(
     algoritmo: s.session.strategyId,
     formato: s.formatType,
     duracionSeg: s.session.durationSeconds,
+    descansoPrevio: s.interSessionGapLabel,
     preguntas: `${s.session.correctAnswers}/${s.session.totalQuestions}`,
     precisionCruda: `${s.session.accuracyPercentage}%`,
     oidoRealIRT: `${s.normalizedAccuracy}%`,

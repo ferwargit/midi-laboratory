@@ -30,7 +30,9 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
       flatBiasCount: 0,
       dominantBias: 'sharp',
       formatType: 'time',
-      inputMethod: 'hardware'
+      inputMethod: 'hardware',
+      interSessionGapMs: null,
+      interSessionGapLabel: 'Inicio'
     },
     {
       session: {
@@ -57,7 +59,9 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
       flatBiasCount: 0,
       dominantBias: 'balanced',
       formatType: 'time',
-      inputMethod: 'hardware'
+      inputMethod: 'hardware',
+      interSessionGapMs: null,
+      interSessionGapLabel: 'Inicio'
     }
   ]
 

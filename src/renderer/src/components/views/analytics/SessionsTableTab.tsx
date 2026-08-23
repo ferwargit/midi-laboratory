@@ -331,14 +331,36 @@ export function SessionsTableTab({
                         />
                       </td>
 
-                      {/* 1. Fecha */}
+                      {/* 1. Fecha y Descanso Inter-Sesión (ISI) */}
                       <td className="py-3 text-zinc-400 text-[11px] whitespace-nowrap">
-                        {new Date(s.createdAt).toLocaleDateString('es-AR', {
-                          day: '2-digit',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                        <div>
+                          {new Date(s.createdAt).toLocaleDateString('es-AR', {
+                            day: '2-digit',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                        <div className="mt-0.5">
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold ${
+                              item.interSessionGapLabel === 'Inicio'
+                                ? 'bg-zinc-900 text-zinc-500 border border-zinc-800'
+                                : item.interSessionGapMs !== null && item.interSessionGapMs < 900000 // < 15 min (Masiva)
+                                  ? 'bg-amber-950/80 text-amber-300 border border-amber-800/80'
+                                  : item.interSessionGapMs !== null &&
+                                      item.interSessionGapMs >= 43200000 &&
+                                      item.interSessionGapMs <= 172800000 // 12h-48h (Óptima)
+                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80'
+                                    : 'bg-zinc-900 text-sky-400 border border-zinc-800'
+                            }`}
+                            title={`Descanso previo: ${item.interSessionGapLabel}`}
+                          >
+                            {item.interSessionGapLabel === 'Inicio'
+                              ? 'Inicio'
+                              : `⏱️ +${item.interSessionGapLabel}`}
+                          </span>
+                        </div>
                       </td>
 
                       {/* 2. Contenido, Timbre y Fuente */}

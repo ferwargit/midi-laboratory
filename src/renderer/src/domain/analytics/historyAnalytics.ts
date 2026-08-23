@@ -4,7 +4,7 @@ import { EXERCISE_PRESETS } from '../music/presets'
 import { AiExercisePrescription } from '../ai/types'
 
 export const COGNITIVE_LATENCY_THRESHOLDS = {
-  FAST_MAX_MS: 1400, // < 1.4s = Reflejo Inmediato (considerando 500ms de audio + 900ms reacción motora)
+  FAST_MAX_MS: 1400, // < 1.4s = Reflejo Inmediato
   MEDIUM_MAX_MS: 2800, // 1.4s - 2.8s = Deducción Activa
   FAST_LABEL: '< 1.4s',
   MEDIUM_LABEL: '1.4s - 2.8s',
@@ -64,6 +64,8 @@ export interface DetailedSessionAnalysis {
   dominantBias: 'sharp' | 'flat' | 'balanced'
   formatType: 'time' | 'mastery' | 'questions' | 'infinite'
   inputMethod: 'hardware' | 'virtual' | 'mixed'
+  interSessionGapMs: number | null
+  interSessionGapLabel: string
 }
 
 export interface LongitudinalComparison {
@@ -97,6 +99,18 @@ export interface AnalyticsMetrics {
   strongestNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
   sessionPsychometricsList: DetailedSessionAnalysis[]
   longitudinalComparisons: LongitudinalComparison[]
+}
+
+export function formatInterSessionGap(gapMs: number | null): string {
+  if (gapMs === null || gapMs < 0) return 'Inicio'
+  const seconds = Math.round(gapMs / 1000)
+  if (seconds < 60) return 'Inmediato'
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes} min`
+  const hours = Number((minutes / 60).toFixed(1))
+  if (hours < 24) return `${hours} h`
+  const days = Math.round(hours / 24)
+  return `${days} d`
 }
 
 function resolveNominalPoolSize(session: DbSessionRecord, empiricalUniqueCount: number): number {
@@ -153,12 +167,10 @@ export function filterSessionsAdvanced(
   filters: AnalyticsFilterOptions
 ): DbSessionRecord[] {
   return sessions.filter((s) => {
-    // 1. Filtro Modalidad
     if (filters.mode === 'single_note' && !isSingleNoteSession(s)) return false
     if (filters.mode === 'intervals' && !isIntervalSession(s)) return false
     if (filters.mode === 'sequences' && !isSequenceSession(s)) return false
 
-    // 2. Filtro Instrumento
     if (
       filters.instrumentId &&
       filters.instrumentId !== 'all' &&
@@ -167,17 +179,14 @@ export function filterSessionsAdvanced(
       return false
     }
 
-    // 3. Filtro Estrategia / Motor
     if (filters.strategyId && filters.strategyId !== 'all' && s.strategyId !== filters.strategyId) {
       return false
     }
 
-    // 4. Filtro Preset / Contenido Musical con Normalización Semántica
     if (filters.presetFilter && filters.presetFilter !== 'all') {
       const pName = (s.presetName || '').toLowerCase()
       const target = filters.presetFilter.toLowerCase()
 
-      // Normalización de tokens clave para máxima robustez
       const isLevel3 =
         (target.includes('nivel 3') || target.includes('octava diatónica')) &&
         (pName.includes('nivel 3') ||
@@ -207,7 +216,6 @@ export function filterSessionsAdvanced(
       }
     }
 
-    // 5. Filtro Formato
     const name = (s.presetName || '').toLowerCase()
     const isTimed = name.includes('tiempo') || name.includes('cronometrado')
     const isMastery = name.includes('maestría')
@@ -216,13 +224,11 @@ export function filterSessionsAdvanced(
     if (filters.format === 'mastery' && !isMastery) return false
     if (filters.format === 'questions' && (isTimed || isMastery)) return false
 
-    // 6. Filtro Nivel de Dominio
     if (filters.mastery === 'mastered' && s.accuracyPercentage < 85) return false
     if (filters.mastery === 'learning' && (s.accuracyPercentage < 50 || s.accuracyPercentage >= 85))
       return false
     if (filters.mastery === 'critical' && s.accuracyPercentage >= 50) return false
 
-    // 7. Búsqueda por texto
     if (filters.searchQuery && filters.searchQuery.trim().length > 0) {
       const q = filters.searchQuery.toLowerCase()
       const matchName = (s.presetName || '').toLowerCase().includes(q)
@@ -432,6 +438,26 @@ export function computeAnalyticsMetrics(
     }
   }
 
+  // Ordenamos cronológicamente para calcular el descanso inter-sesión (ISI)
+  const chronologicalSessions = [...filteredSessions].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  )
+
+  const gapMap = new Map<string, { gapMs: number | null; label: string }>()
+  for (let i = 0; i < chronologicalSessions.length; i++) {
+    const current = chronologicalSessions[i]
+    if (i === 0) {
+      gapMap.set(current.id, { gapMs: null, label: 'Inicio' })
+    } else {
+      const prev = chronologicalSessions[i - 1]
+      const diffMs = Math.max(
+        0,
+        new Date(current.createdAt).getTime() - new Date(prev.createdAt).getTime()
+      )
+      gapMap.set(current.id, { gapMs: diffMs, label: formatInterSessionGap(diffMs) })
+    }
+  }
+
   let totalCorrect = 0
   let totalTime = 0
   let fastCount = 0
@@ -504,6 +530,8 @@ export function computeAnalyticsMetrics(
     const inputMethod: 'hardware' | 'virtual' | 'mixed' =
       virtualCount === 0 ? 'hardware' : hardwareCount === 0 ? 'virtual' : 'mixed'
 
+    const gapInfo = gapMap.get(session.id) || { gapMs: null, label: 'Inicio' }
+
     return {
       session,
       poolSize,
@@ -518,7 +546,9 @@ export function computeAnalyticsMetrics(
       flatBiasCount: sFlat,
       dominantBias,
       formatType,
-      inputMethod
+      inputMethod,
+      interSessionGapMs: gapInfo.gapMs,
+      interSessionGapLabel: gapInfo.label
     }
   })
 
@@ -526,8 +556,8 @@ export function computeAnalyticsMetrics(
     if (ans.isCorrect) totalCorrect++
     totalTime += ans.responseTimeMs
 
-    if (ans.responseTimeMs < 1400) fastCount++
-    else if (ans.responseTimeMs <= 2800) medCount++
+    if (ans.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) fastCount++
+    else if (ans.responseTimeMs <= COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_MAX_MS) medCount++
     else slowCount++
 
     if (!ans.isCorrect) {

@@ -79,7 +79,9 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
       flatBiasCount: 0,
       dominantBias: 'sharp',
       formatType: 'time',
-      inputMethod: 'hardware'
+      inputMethod: 'hardware',
+      interSessionGapMs: null,
+      interSessionGapLabel: 'Inicio'
     }
   ]
 

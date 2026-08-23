@@ -1,11 +1,17 @@
 import React, { useMemo, useState, memo } from 'react'
 import { DbSessionRecord, DbAnswerRecord } from '../../domain/database/types'
-import { SessionPsychometrics, MASTERY_THRESHOLDS } from '../../domain/analytics/historyAnalytics'
+import {
+  SessionPsychometrics,
+  MASTERY_THRESHOLDS,
+  AnalyticsModeFilter
+} from '../../domain/analytics/historyAnalytics'
 
 interface AnalyticsChartsProps {
   sessions: DbSessionRecord[]
   answers: DbAnswerRecord[]
   psychometrics?: SessionPsychometrics[]
+  modeFilter?: AnalyticsModeFilter
+  activeFiltersLabel?: string
 }
 
 interface HoveredPointInfo {
@@ -21,11 +27,12 @@ interface HoveredPointInfo {
 function AnalyticsChartsComponent({
   sessions,
   answers,
-  psychometrics = []
+  psychometrics = [],
+  modeFilter = 'all',
+  activeFiltersLabel = 'Todos los datos'
 }: AnalyticsChartsProps): React.ReactElement {
   const [hoveredPoint, setHoveredPoint] = useState<HoveredPointInfo | null>(null)
 
-  // Tomamos hasta 14 sesiones recientes en orden cronológico
   const recentSessions = useMemo(() => [...sessions].slice(0, 14).reverse(), [sessions])
   const recentPsychometrics = useMemo(
     () => [...psychometrics].slice(0, 14).reverse(),
@@ -56,28 +63,64 @@ function AnalyticsChartsComponent({
 
   return (
     <div className="space-y-4 select-none font-mono">
-      {/* 1. CURVA TEMPORAL PSICOMÉTRICA CON EJES GRADUADOS */}
-      <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-2xl relative">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/80 text-xs">
+      {/* 1. BANNER DINÁMICO EDUCATIVO Y DE CONTEXTO */}
+      <div className="p-4 bg-gradient-to-r from-sky-950/40 via-purple-950/40 to-zinc-900 rounded-2xl border border-sky-500/30 space-y-2.5 shadow-xl">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
-            <span className="font-bold text-zinc-100 uppercase tracking-wider">
-              Evolución Psicométrica: Precisión Cruda vs. Oído Real (IRT)
+            <span className="text-base">📊</span>
+            <span className="font-bold text-sky-300 uppercase tracking-wider">
+              Contexto de la Muestra Graficada ({recentSessions.length} sesiones):
             </span>
           </div>
-          <div className="flex gap-4 text-xs font-semibold">
-            <span className="text-sky-400 flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" /> Cruda
-            </span>
-            <span className="text-purple-400 flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block" /> Oído Real
-              (IRT)
-            </span>
-            <span className="text-emerald-400 flex items-center gap-1.5">
+          <span className="px-2.5 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300">
+            Filtros: <strong className="text-sky-400">{modeFilter.toUpperCase()}</strong> •{' '}
+            {activeFiltersLabel}
+          </span>
+        </div>
+
+        {/* Guía de lectura pedagógica de la curva */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 font-sans text-xs">
+          <div className="p-2 bg-zinc-950/80 rounded-xl border border-sky-800/40 space-y-0.5">
+            <strong className="text-sky-400 font-mono text-[11px] flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" /> 🔵 Precisión
+              Cruda:
+            </strong>
+            <p className="text-[11px] text-zinc-400 m-0">
+              Acierto bruto ($K/N$). Incluye la probabilidad estadística de suerte por descarte.
+            </p>
+          </div>
+
+          <div className="p-2 bg-zinc-950/80 rounded-xl border border-purple-800/40 space-y-0.5">
+            <strong className="text-purple-400 font-mono text-[11px] flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block" /> 🟣 Oído Real
+              (IRT):
+            </strong>
+            <p className="text-[11px] text-zinc-400 m-0">
+              Precisión corregida descontando el azar según el tamaño del pool de notas ($1/N$).
+            </p>
+          </div>
+
+          <div className="p-2 bg-zinc-950/80 rounded-xl border border-emerald-800/40 space-y-0.5">
+            <strong className="text-emerald-400 font-mono text-[11px] flex items-center gap-1.5">
               <span className="w-3 h-0.5 border-t-2 border-dashed border-emerald-400 inline-block" />{' '}
-              Meta ({MASTERY_THRESHOLDS.MASTERED_MIN}%)
-            </span>
+              🟢 Meta ({MASTERY_THRESHOLDS.MASTERED_MIN}%):
+            </strong>
+            <p className="text-[11px] text-zinc-400 m-0">
+              Umbral canónico de maestría necesario para considerar el nivel consolidado.
+            </p>
           </div>
+        </div>
+      </div>
+
+      {/* 2. CURVA TEMPORAL PSICOMÉTRICA CON EJES GRADUADOS */}
+      <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-2xl relative">
+        <div className="flex justify-between items-center pb-2 border-b border-zinc-800/80 text-xs">
+          <span className="font-bold text-zinc-100 uppercase tracking-wider">
+            Curva Psicométrica (Eje X Cronológico ➔ Eje Y Precisión)
+          </span>
+          <span className="text-[10px] text-zinc-500">
+            Pasa el mouse sobre los puntos para inspeccionar
+          </span>
         </div>
 
         {recentSessions.length < 2 ? (
@@ -93,13 +136,11 @@ function AnalyticsChartsComponent({
                 preserveAspectRatio="none"
               >
                 <defs>
-                  {/* Gradiente Cyan para Precisión Cruda */}
                   <linearGradient id="cyanAreaGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.25" />
                     <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
                   </linearGradient>
 
-                  {/* Gradiente Púrpura para Oído Real IRT */}
                   <linearGradient id="purpleAreaGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#c084fc" stopOpacity="0.2" />
                     <stop offset="100%" stopColor="#c084fc" stopOpacity="0.0" />
@@ -107,13 +148,11 @@ function AnalyticsChartsComponent({
                 </defs>
 
                 {/* Líneas Guía del Eje Y */}
-                {/* 100% */}
                 <line x1="45" y1="10" x2="590" y2="10" stroke="#27272a" strokeWidth="1" />
                 <text x="5" y="13" fill="#71717a" fontSize="9" fontFamily="monospace">
                   100%
                 </text>
 
-                {/* 85% (Meta de Maestría) */}
                 <line
                   x1="45"
                   y1="26.5"
@@ -135,7 +174,6 @@ function AnalyticsChartsComponent({
                   85%
                 </text>
 
-                {/* 50% */}
                 <line
                   x1="45"
                   y1="65"
@@ -149,7 +187,6 @@ function AnalyticsChartsComponent({
                   50%
                 </text>
 
-                {/* 0% (Eje X Base) */}
                 <line x1="45" y1="115" x2="590" y2="115" stroke="#3f3f46" strokeWidth="1" />
                 <text x="20" y="118" fill="#71717a" fontSize="9" fontFamily="monospace">
                   0%
@@ -178,7 +215,6 @@ function AnalyticsChartsComponent({
                     return { x, y, s, psych, normAcc }
                   })
 
-                  // Construcción de trazados SVG
                   const pathRaw = pointsRaw
                     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
                     .join(' ')
@@ -186,17 +222,14 @@ function AnalyticsChartsComponent({
                     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
                     .join(' ')
 
-                  // Áreas sombreadas cerradas
                   const areaRaw = `${pathRaw} L ${pointsRaw[pointsRaw.length - 1].x} ${yBottom} L ${pointsRaw[0].x} ${yBottom} Z`
                   const areaNorm = `${pathNorm} L ${pointsNorm[pointsNorm.length - 1].x} ${yBottom} L ${pointsNorm[0].x} ${yBottom} Z`
 
                   return (
                     <>
-                      {/* Áreas bajo la curva */}
                       <path d={areaNorm} fill="url(#purpleAreaGrad)" />
                       <path d={areaRaw} fill="url(#cyanAreaGrad)" />
 
-                      {/* Líneas de Curva */}
                       <path
                         d={pathNorm}
                         fill="none"
@@ -206,7 +239,6 @@ function AnalyticsChartsComponent({
                       />
                       <path d={pathRaw} fill="none" stroke="#38bdf8" strokeWidth="2.5" />
 
-                      {/* Puntos Interactivos */}
                       {pointsRaw.map((p, i) => {
                         const psych = recentPsychometrics[i]
                         const normP = pointsNorm[i]
@@ -219,7 +251,6 @@ function AnalyticsChartsComponent({
 
                         return (
                           <g key={i} className="cursor-pointer group">
-                            {/* Punto Púrpura (IRT) */}
                             <circle
                               cx={normP.x}
                               cy={normP.y}
@@ -229,7 +260,6 @@ function AnalyticsChartsComponent({
                               strokeWidth="1.5"
                             />
 
-                            {/* Punto Cyan (Cruda) */}
                             <circle
                               cx={p.x}
                               cy={p.y}
@@ -251,7 +281,6 @@ function AnalyticsChartsComponent({
                               onMouseLeave={(): void => setHoveredPoint(null)}
                             />
 
-                            {/* Etiqueta de fecha en el Eje X */}
                             <text
                               x={p.x}
                               y={yBottom + 14}
@@ -273,7 +302,6 @@ function AnalyticsChartsComponent({
                 })()}
               </svg>
 
-              {/* HUD FLOTANTE INTERACTIVO AL PASAR EL MOUSE SOBRE UN PUNTO */}
               {hoveredPoint && (
                 <div
                   style={{
@@ -309,9 +337,8 @@ function AnalyticsChartsComponent({
         )}
       </div>
 
-      {/* 2. HISTOGRAMA DE SESGOS Y CARGA CONTEXTUAL */}
+      {/* 3. HISTOGRAMA DE SESGOS Y CARGA CONTEXTUAL */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Histograma direccional de errores */}
         <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl">
           <div className="flex justify-between items-center text-xs">
             <span className="font-bold text-amber-400">🎯 SESGO DE DESVIACIÓN (-3st a +3st):</span>
@@ -354,7 +381,6 @@ function AnalyticsChartsComponent({
           </div>
         </div>
 
-        {/* Resistencia a la entropía */}
         <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl text-xs">
           <div className="flex justify-between items-center">
             <span className="font-bold text-purple-400">
