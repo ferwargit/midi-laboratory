@@ -1,8 +1,10 @@
-import { AnalyticsMetrics } from '../analytics/historyAnalytics'
+import { AnalyticsMetrics, DetailedSessionAnalysis } from '../analytics/historyAnalytics'
 import {
   buildSystemPrompt,
   buildUserPrompt,
   buildConversationalMessages,
+  buildMultiSessionComparisonSystemPrompt,
+  buildMultiSessionComparisonPrompt,
   ChatMessage
 } from './promptBuilder'
 import { generateAlgorithmicFallback } from './fallbackGenerator'
@@ -153,6 +155,64 @@ export class LmStudioService {
             model: loadedModelId,
             messages,
             temperature: 0.5
+          })
+        })
+
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`)
+        const data = await res.json()
+        const message = data.choices[0]?.message
+        rawContent = message?.content || message?.reasoning_content || ''
+        returnedModel = data.model || loadedModelId
+      }
+
+      return {
+        content: rawContent.trim(),
+        modelName: returnedModel
+      }
+    }, fallbackOp)
+  }
+
+  async askMultiSessionComparison(
+    selectedSessions: DetailedSessionAnalysis[],
+    metrics: AnalyticsMetrics
+  ): Promise<{ content: string; modelName: string }> {
+    const fallbackOp = (): { content: string; modelName: string } => ({
+      content: `### Comparativa Cruzada Heurística (${selectedSessions.length} Sesiones)\n\nSe analizaron ${selectedSessions.length} sesiones seleccionadas. Se observa una variación entre el primer intento (${selectedSessions[0].session.accuracyPercentage}%) y el último (${selectedSessions[selectedSessions.length - 1].session.accuracyPercentage}%). Recomendamos consolidar el anclaje tonal manteniendo sesiones de 3 minutos.`,
+      modelName: 'Motor Heurístico Local'
+    })
+
+    return this.circuitBreaker.execute(async () => {
+      const loadedModelId = await this.getLoadedModelId()
+      if (!loadedModelId) {
+        throw new Error('No hay modelo cargado en LM Studio')
+      }
+
+      const messages: ChatMessage[] = [
+        { role: 'system', content: buildMultiSessionComparisonSystemPrompt(metrics.modeFilter) },
+        { role: 'user', content: buildMultiSessionComparisonPrompt(selectedSessions, metrics) }
+      ]
+
+      let rawContent = ''
+      let returnedModel = loadedModelId
+
+      if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
+        const result = await window.customAPI.chatLmStudio({
+          model: loadedModelId,
+          messages
+        })
+        if (!result.success || !result.content) {
+          throw new Error(result.error || 'Respuesta vacía de IPC')
+        }
+        rawContent = result.content
+        returnedModel = result.model || loadedModelId
+      } else {
+        const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: loadedModelId,
+            messages,
+            temperature: 0.4
           })
         })
 

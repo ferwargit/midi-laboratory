@@ -7,8 +7,10 @@ import {
   filterSessionsAdvanced,
   DetailedSessionAnalysis
 } from '../../domain/analytics/historyAnalytics'
+import { LmStudioService } from '../../domain/ai/lmStudioService'
 import { AnalyticsCharts } from '../trainer/AnalyticsCharts'
 import { AiExercisePrescription } from '../../domain/ai/types'
+import { DbAiConsultationRecord } from '../../domain/database/types'
 
 // Subcomponentes modulares
 import { SortColumnKey, SortDirection, AnalyticsTabKey } from './analytics/types'
@@ -25,6 +27,8 @@ import { ConfusionMatrixTab } from './analytics/ConfusionMatrixTab'
 interface AnalyticsViewProps {
   onLoadPrescription: (prescription: AiExercisePrescription) => void
 }
+
+const aiService = new LmStudioService()
 
 export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React.ReactElement {
   const sessions = useDatabaseStore((state) => state.sessions)
@@ -155,12 +159,10 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       validIds.has(item.session.id)
     )
 
-    // Filtro por fuente de entrada (hardware vs virtual)
     if (selectedInputSource !== 'all') {
       list = list.filter((item) => item.inputMethod === selectedInputSource)
     }
 
-    // Filtro por sesgo direccional
     if (selectedBias !== 'all') {
       list = list.filter((item) => item.dominantBias === selectedBias)
     }
@@ -177,7 +179,6 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           comparison = (a.session.presetName || '').localeCompare(b.session.presetName || '')
           break
         case 'format': {
-          // CORRECCIÓN MATEMÁTICA: Cuando ambos son por tiempo, comparar la duración real en segundos (59s < 180s)
           if (a.formatType === 'time' && b.formatType === 'time') {
             comparison = (a.session.durationSeconds || 0) - (b.session.durationSeconds || 0)
           } else if (a.formatType === 'questions' && b.formatType === 'questions') {
@@ -241,6 +242,38 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     sortDirection
   ])
 
+  // MANEJADOR DEL COMPARADOR MULTI-SESIÓN CON IA LOCAL
+  const handleCompareSessionsWithAi = async (selectedIds: string[]): Promise<void> => {
+    const selectedAnalysis = displayedAnalysisList.filter((d) => selectedIds.includes(d.session.id))
+    if (selectedAnalysis.length < 2) return
+
+    // Cambiar a la pestaña del Tutor para visualizar la respuesta
+    setActiveTab('ai_consultation')
+
+    try {
+      const res = await aiService.askMultiSessionComparison(selectedAnalysis, metrics)
+
+      const namesSummary = selectedAnalysis.map((s) => s.session.presetName).join(' vs ')
+      const consultationRecord: DbAiConsultationRecord = {
+        id: `ai_compare_${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        modelName: res.modelName,
+        modeFilter,
+        userQuery: `Comparativa Cruzada (${selectedAnalysis.length} sesiones): ${namesSummary}`,
+        aiResponse: res.content,
+        associatedMetricsSnapshot: {
+          overallAccuracy: metrics.overallAccuracy,
+          normalizedAccuracy: metrics.normalizedOverallAccuracy,
+          avgLatencyMs: metrics.avgResponseTimeMs,
+          poolEntropyBits: metrics.avgEntropyBits
+        }
+      }
+      await saveAiConsultation(consultationRecord)
+    } catch (err) {
+      console.error('Error al ejecutar comparativa multi-sesión:', err)
+    }
+  }
+
   const filteredReports = aiReports.filter(
     (r) => modeFilter === 'all' || r.modeFilter === modeFilter
   )
@@ -250,7 +283,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       {/* 1. KPIs Psicométricos Superiores */}
       <AnalyticsKpiCards metrics={metrics} totalFilteredSessions={displayedAnalysisList.length} />
 
-      {/* 2. Barra de Filtros Multidimensionales con 3 Filas y Reset */}
+      {/* 2. Barra de Filtros Multidimensionales */}
       <AnalyticsFilterBar
         modeFilter={modeFilter}
         onSelectModeFilter={(m): void => setModeFilter(m, sessions, answers)}
@@ -295,6 +328,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           onLoadPrescription={onLoadPrescription}
           onDeleteSession={deleteSession}
           onDeleteSessions={deleteSessions}
+          onCompareSessionsWithAi={handleCompareSessionsWithAi}
         />
       )}
 

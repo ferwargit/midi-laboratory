@@ -1,6 +1,7 @@
 import {
   AnalyticsMetrics,
   AnalyticsModeFilter,
+  DetailedSessionAnalysis,
   COGNITIVE_LATENCY_THRESHOLDS
 } from '../analytics/historyAnalytics'
 import { getConcept } from '../analytics/pedagogicalDictionary'
@@ -257,4 +258,72 @@ export function buildConversationalMessages(
   })
 
   return messages
+}
+
+export function buildMultiSessionComparisonSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
+  return `Eres un Profesor de Oído Musical, Neurociencia Auditiva y Psicoacústica Experimental de Élite.
+Tu objetivo es realizar un ANÁLISIS COMPARATIVO CRUZADO EXHAUSTIVO entre las sesiones de entrenamiento específicas seleccionadas por el alumno.
+Modalidad de estudio: ${mode.toUpperCase()}.
+
+DIRECTIVAS CLÍNICAS PARA LA COMPARATIVA CRUZADA:
+1. Analiza la progresión cronológica estricta (de la sesión más antigua a la más reciente de la selección).
+2. Evalúa las 4 variables clave:
+   • Precisión y Oído Real (IRT Normalizado).
+   • Velocidad Cognitiva: Latencia media (ms) y tasa de reflejo inmediato (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}).
+   • Variaciones de Timbre y Motor: Si hubo cambios de instrumento (ej: Piano vs Flauta) o algoritmo (Adaptativo vs Leitner).
+   • Sesgo Tonal (+st / -st) y persistencia de fatiga auditiva.
+3. Concluye con un diagnóstico sintético de tu plasticidad cerebral y una recomendación práctica directa.`
+}
+
+export function buildMultiSessionComparisonPrompt(
+  selectedSessions: DetailedSessionAnalysis[],
+  metrics: AnalyticsMetrics
+): string {
+  const sortedSelected = [...selectedSessions].sort(
+    (a, b) => new Date(a.session.createdAt).getTime() - new Date(b.session.createdAt).getTime()
+  )
+
+  const sessionsTelemetry = sortedSelected.map((s, idx) => ({
+    indice: idx + 1,
+    id: s.session.id,
+    fecha: s.session.createdAt,
+    contenido: s.session.presetName,
+    timbre: s.session.instrumentId,
+    algoritmo: s.session.strategyId,
+    formato: s.formatType,
+    duracionSeg: s.session.durationSeconds,
+    preguntas: `${s.session.correctAnswers}/${s.session.totalQuestions}`,
+    precisionCruda: `${s.session.accuracyPercentage}%`,
+    oidoRealIRT: `${s.normalizedAccuracy}%`,
+    entropiaBits: s.entropyBits,
+    poolNotas: s.poolSize,
+    cadenciaRPM: s.responsesPerMinute,
+    tiempoMedioMs: s.session.avgResponseTimeMs,
+    reflejoInmediatoPct: `${s.fastPercent}% (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})`,
+    sesgoDominante:
+      s.dominantBias === 'sharp'
+        ? 'Hacia lo Agudo (+st)'
+        : s.dominantBias === 'flat'
+          ? 'Hacia lo Grave (-st)'
+          : 'Equilibrado',
+    fuenteEntrada:
+      s.inputMethod === 'hardware'
+        ? 'Roland FP-8 Físico'
+        : s.inputMethod === 'virtual'
+          ? 'Ratón Virtual'
+          : 'Mixto'
+  }))
+
+  return `SOLICITUD DE COMPARATIVA MULTI-SESIÓN DEL ALUMNO:
+Por favor, realiza un análisis comparativo cruzado exhaustivo entre estas ${selectedSessions.length} sesiones de entrenamiento seleccionadas.
+
+TELEMETRÍA DETALLADA DE LAS ${selectedSessions.length} SESIONES SELECCIONADAS (EN ORDEN CRONOLÓGICO):
+${JSON.stringify(sessionsTelemetry, null, 2)}
+
+CONTEXTO CLÍNICO GENERAL DEL ALUMNO:
+- Total histórico acumulado: ${metrics.totalAnswers} ejercicios en ${metrics.filteredSessionsCount} sesiones.
+- Oído Real Global Normalizado: ${metrics.normalizedOverallAccuracy}%.
+- Pares conflictivos globales: ${JSON.stringify(metrics.topConfusions)}
+
+Por favor, elabora tu informe clínico comparativo desglosando la evolución del rendimiento, latencias y diferencias de timbre o motor.`
 }

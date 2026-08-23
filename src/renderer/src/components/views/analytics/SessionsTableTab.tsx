@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import {
   DetailedSessionAnalysis,
-  reconstructSessionConfig
+  reconstructSessionConfig,
+  COGNITIVE_LATENCY_THRESHOLDS
 } from '../../../domain/analytics/historyAnalytics'
 import { DbAnswerRecord } from '../../../domain/database/types'
 import { INSTRUMENT_CATALOG } from '../../../domain/music/instruments'
@@ -21,6 +22,7 @@ interface SessionsTableTabProps {
   onLoadPrescription: (p: AiExercisePrescription) => void
   onDeleteSession: (sessionId: string) => Promise<void>
   onDeleteSessions: (sessionIds: string[]) => Promise<void>
+  onCompareSessionsWithAi: (selectedIds: string[]) => void
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -38,9 +40,9 @@ export function SessionsTableTab({
   onSortClick,
   onLoadPrescription,
   onDeleteSession,
-  onDeleteSessions
+  onDeleteSessions,
+  onCompareSessionsWithAi
 }: SessionsTableTabProps): React.ReactElement {
-  // Estado de selección múltiple (Set de IDs)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [sessionToDeleteSingle, setSessionToDeleteSingle] = useState<string | null>(null)
@@ -97,7 +99,8 @@ export function SessionsTableTab({
               Registro Histórico y Telemetría Clínica ({displayedList.length} sesiones)
             </h3>
             <p className="text-[11px] text-zinc-400 mt-0.5">
-              Marca las casillas para comparar o borrar sesiones en lote:
+              Marca 2 o más casillas para hacer una comparativa cruzada con IA Local o borrar en
+              lote:
             </p>
           </div>
 
@@ -122,6 +125,18 @@ export function SessionsTableTab({
             </div>
 
             <div className="flex items-center gap-2">
+              {/* BOTÓN COMPARAR CON IA */}
+              {selectedIds.size >= 2 && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={(): void => onCompareSessionsWithAi(Array.from(selectedIds))}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold text-xs shadow-md cursor-pointer border border-purple-400/30"
+                >
+                  🔬 Comparar con IA Local ({selectedIds.size})
+                </Button>
+              )}
+
               <Button
                 variant="danger"
                 size="sm"
@@ -255,7 +270,7 @@ export function SessionsTableTab({
                   >
                     <div className="flex items-center justify-center">
                       <PedagogicalTooltip conceptId="cognitive_latency">
-                        <span>Reflejo (&lt;1.4s)</span>
+                        <span>Reflejo ({COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})</span>
                       </PedagogicalTooltip>
                       {renderSortIndicator('fastPercent')}
                     </div>
@@ -408,7 +423,7 @@ export function SessionsTableTab({
                         </span>
                       </td>
 
-                      {/* 9. Reflejo Inmediato (<1.4s) */}
+                      {/* 9. Reflejo Inmediato */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <span
                           className={
@@ -480,7 +495,6 @@ export function SessionsTableTab({
         )}
       </Card>
 
-      {/* Modal de Confirmación de Borrado */}
       <ConfirmModal
         isOpen={isDeleteModalOpen}
         title={

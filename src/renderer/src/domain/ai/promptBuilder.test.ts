@@ -4,7 +4,9 @@ import {
   buildUserPrompt,
   buildConsultationSystemPrompt,
   buildConsultationUserPrompt,
-  buildConversationalMessages
+  buildConversationalMessages,
+  buildMultiSessionComparisonSystemPrompt,
+  buildMultiSessionComparisonPrompt
 } from './promptBuilder'
 import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 
@@ -209,6 +211,23 @@ describe('promptBuilder - Generación de Prompts Especializados y Tutor Psicoac�
       expect(messages[2].content).toBe('F4 tiene armónicos cercanos a E4...')
       expect(messages[3].role).toBe('user')
       expect(messages[3].content).toContain('¿Y cómo practico ese semitono?')
+    })
+  })
+
+  describe('buildMultiSessionComparisonPrompt (Comparador Multi-Sesión N-Sessions)', () => {
+    it('debe empaquetar la telemetría cronológica cruzada de las sesiones seleccionadas', () => {
+      const sys = buildMultiSessionComparisonSystemPrompt('single_note')
+      expect(sys).toContain('ANÁLISIS COMPARATIVO CRUZADO EXHAUSTIVO')
+      expect(sys).toContain('Modalidad de estudio: SINGLE_NOTE')
+
+      const prompt = buildMultiSessionComparisonPrompt(
+        mockMetrics.sessionPsychometricsList,
+        mockMetrics
+      )
+
+      expect(prompt).toContain('SOLICITUD DE COMPARATIVA MULTI-SESIÓN')
+      expect(prompt).toContain('TELEMETRÍA DETALLADA DE LAS 1 SESIONES SELECCIONADAS')
+      expect(prompt).toContain('"precisionCruda": "80%"')
     })
   })
 })

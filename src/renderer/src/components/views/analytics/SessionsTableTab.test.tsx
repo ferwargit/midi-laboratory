@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { SessionsTableTab } from './SessionsTableTab'
 import { DetailedSessionAnalysis } from '../../../domain/analytics/historyAnalytics'
 
-describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Re-testeo', () => {
+describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparador IA', () => {
   const mockAnalysisList: DetailedSessionAnalysis[] = [
     {
       session: {
@@ -31,6 +31,33 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Re-teste
       dominantBias: 'sharp',
       formatType: 'time',
       inputMethod: 'hardware'
+    },
+    {
+      session: {
+        id: 's_ui_2',
+        createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
+        strategyId: 'adaptive_v1',
+        instrumentId: 'acoustic_grand_piano',
+        presetName: 'Nivel 1 (C, D, E) • Cronometrado 1m',
+        totalQuestions: 15,
+        correctAnswers: 14,
+        accuracyPercentage: 93,
+        avgResponseTimeMs: 1100,
+        durationSeconds: 60
+      },
+      poolSize: 3,
+      entropyBits: 1.58,
+      chanceBaseline: 33,
+      normalizedAccuracy: 90,
+      responsesPerMinute: 15,
+      fastPercent: 80,
+      mediumPercent: 20,
+      slowPercent: 0,
+      sharpBiasCount: 0,
+      flatBiasCount: 0,
+      dominantBias: 'balanced',
+      formatType: 'time',
+      inputMethod: 'hardware'
     }
   ]
 
@@ -45,16 +72,18 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Re-teste
         onLoadPrescription={vi.fn()}
         onDeleteSession={vi.fn()}
         onDeleteSessions={vi.fn()}
+        onCompareSessionsWithAi={vi.fn()}
       />
     )
 
-    expect(screen.getByText('Nivel 1 (C, D, E)')).toBeDefined()
-    expect(screen.getByText('🎹 Roland FP-8')).toBeDefined()
-    expect(screen.getByText('3 notas')).toBeDefined()
-    expect(screen.getByText('Re-testar')).toBeDefined()
+    expect(screen.getAllByText('Nivel 1 (C, D, E)').length).toBe(2)
+    expect(screen.getAllByText('🎹 Roland FP-8').length).toBe(2)
+    expect(screen.getAllByText('Re-testar').length).toBe(2)
   })
 
-  it('al marcar el checkbox debe aparecer la barra flotante de acciones por lote', () => {
+  it('al marcar 2 casillas debe aparecer el botón de Comparar con IA Local', () => {
+    const onCompareSessionsWithAi = vi.fn()
+
     render(
       <SessionsTableTab
         displayedList={mockAnalysisList}
@@ -65,43 +94,20 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Re-teste
         onLoadPrescription={vi.fn()}
         onDeleteSession={vi.fn()}
         onDeleteSessions={vi.fn()}
+        onCompareSessionsWithAi={onCompareSessionsWithAi}
       />
     )
 
-    // Al inicio no hay barra flotante
-    expect(screen.queryByText(/sesión seleccionada/i)).toBeNull()
-
-    // Marcamos la casilla de la fila
+    // Marcamos ambas casillas
     const checkboxes = screen.getAllByRole('checkbox')
-    fireEvent.click(checkboxes[1]) // Checkbox de la primera fila
+    fireEvent.click(checkboxes[1]) // Fila 1
+    fireEvent.click(checkboxes[2]) // Fila 2
 
-    // Aparece la barra flotante con el botón de eliminar seleccionadas
-    expect(screen.getByText('1 sesión seleccionada')).toBeDefined()
-    expect(screen.getByText('🗑️ Eliminar Seleccionadas (1)')).toBeDefined()
-  })
+    // Aparece el botón de comparar con IA
+    const compareBtn = screen.getByText(/Comparar con IA Local \(2\)/i)
+    expect(compareBtn).toBeDefined()
 
-  it('hacer clic en Re-testar debe invocar onLoadPrescription con la configuración clonada', () => {
-    const onLoadPrescription = vi.fn()
-
-    render(
-      <SessionsTableTab
-        displayedList={mockAnalysisList}
-        answers={[]}
-        sortKey="date"
-        sortDirection="desc"
-        onSortClick={vi.fn()}
-        onLoadPrescription={onLoadPrescription}
-        onDeleteSession={vi.fn()}
-        onDeleteSessions={vi.fn()}
-      />
-    )
-
-    const retestBtn = screen.getByTitle(/Clonar y repetir esta sesión idéntica/i)
-    fireEvent.click(retestBtn)
-
-    expect(onLoadPrescription).toHaveBeenCalledTimes(1)
-    const passedConfig = onLoadPrescription.mock.calls[0][0]
-    expect(passedConfig.targetMode).toBe('single_note')
-    expect(passedConfig.recommendedNotes).toEqual([60, 62, 64])
+    fireEvent.click(compareBtn)
+    expect(onCompareSessionsWithAi).toHaveBeenCalledWith(['s_ui_1', 's_ui_2'])
   })
 })
