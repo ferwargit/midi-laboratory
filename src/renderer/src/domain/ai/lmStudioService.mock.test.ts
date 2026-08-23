@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { LmStudioService } from './lmStudioService'
-import { AnalyticsMetrics } from '../analytics/historyAnalytics'
+import { AnalyticsMetrics, DetailedSessionAnalysis } from '../analytics/historyAnalytics'
+import { DbAiConsultationRecord, DbAiReportRecord } from '../database/types'
 
-describe('lmStudioService - Pruebas de Integración con Mocks', () => {
+describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia y Multi-Turn)', () => {
   const mockMetrics: AnalyticsMetrics = {
     modeFilter: 'single_note',
     filteredSessionsCount: 2,
@@ -23,6 +24,64 @@ describe('lmStudioService - Pruebas de Integración con Mocks', () => {
     sessionPsychometricsList: [],
     longitudinalComparisons: []
   }
+
+  const mockPastConsultation: DbAiConsultationRecord = {
+    id: 'consult_1',
+    createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
+    modelName: 'qwen3.5-9b',
+    modeFilter: 'single_note',
+    userQuery: '¿Por qué me cuesta F4?',
+    aiResponse: 'F4 tiene armónicos cercanos a E4 en el piano acústico...'
+  }
+
+  const mockPastReport: DbAiReportRecord = {
+    id: 'rep_1',
+    createdAt: new Date('2026-08-21T09:00:00Z').toISOString(),
+    modelName: 'qwen3.5-9b',
+    modeFilter: 'single_note',
+    analysisText: 'Reporte previo',
+    prescription: {
+      title: 'Consolidación F4/E4',
+      rationale: 'Foco en semitonos',
+      targetMode: 'single_note',
+      instrumentId: 'acoustic_grand_piano',
+      recommendedNotes: [64, 65],
+      limitType: 'mastery',
+      questionsCount: 10,
+      durationMinutes: 5,
+      advanceMode: 'smart'
+    }
+  }
+
+  const mockSelectedAnalysis: DetailedSessionAnalysis[] = [
+    {
+      session: {
+        id: 's_comp_1',
+        createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
+        strategyId: 'adaptive_v1',
+        instrumentId: 'acoustic_grand_piano',
+        presetName: 'Nivel 1 (C, D, E)',
+        totalQuestions: 10,
+        correctAnswers: 8,
+        accuracyPercentage: 80,
+        avgResponseTimeMs: 1200,
+        durationSeconds: 60
+      },
+      poolSize: 3,
+      entropyBits: 1.58,
+      chanceBaseline: 33,
+      normalizedAccuracy: 70,
+      responsesPerMinute: 10,
+      fastPercent: 60,
+      mediumPercent: 30,
+      slowPercent: 10,
+      sharpBiasCount: 1,
+      flatBiasCount: 0,
+      dominantBias: 'sharp',
+      formatType: 'time',
+      inputMethod: 'hardware'
+    }
+  ]
 
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -74,6 +133,77 @@ describe('lmStudioService - Pruebas de Integración con Mocks', () => {
     expect(result.prescription.title).toBe('Prescripción Mock')
   })
 
+  it('askCustomConsultation debe transmitir la secuencia Multi-Turn con historial conversacional', async () => {
+    const fakeModelsResponse = { data: [{ id: 'qwen3.5-mock' }] }
+    const fakeChatResponse = {
+      model: 'qwen3.5-mock',
+      choices: [
+        {
+          message: {
+            content: 'Respuesta del tutor recordando el diálogo previo sobre F4.'
+          }
+        }
+      ]
+    }
+
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => fakeModelsResponse
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => fakeChatResponse
+      } as Response)
+
+    const service = new LmStudioService('http://127.0.0.1:1234')
+    const result = await service.askCustomConsultation(
+      '¿Y cómo lo practico en el Roland FP-8?',
+      mockMetrics,
+      'irt_normalized_accuracy',
+      [mockPastConsultation],
+      [mockPastReport]
+    )
+
+    expect(result.modelName).toBe('qwen3.5-mock')
+    expect(result.content).toBe('Respuesta del tutor recordando el diálogo previo sobre F4.')
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+  })
+
+  // NUEVO TEST: Verificación de transmisión de telemetría multi-sesión
+  it('askMultiSessionComparison debe transmitir la telemetría cruzada de las sesiones seleccionadas', async () => {
+    const fakeModelsResponse = { data: [{ id: 'qwen3.5-mock' }] }
+    const fakeChatResponse = {
+      model: 'qwen3.5-mock',
+      choices: [
+        {
+          message: {
+            content: 'Informe comparativo cruzado generado exitosamente por el modelo.'
+          }
+        }
+      ]
+    }
+
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => fakeModelsResponse
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => fakeChatResponse
+      } as Response)
+
+    const service = new LmStudioService('http://127.0.0.1:1234')
+    const result = await service.askMultiSessionComparison(mockSelectedAnalysis, mockMetrics)
+
+    expect(result.modelName).toBe('qwen3.5-mock')
+    expect(result.content).toBe('Informe comparativo cruzado generado exitosamente por el modelo.')
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+  })
+
   it('debe comunicarse exitosamente vía Electron IPC customAPI si está disponible', async () => {
     // @ts-ignore -- Mock temporal de window.customAPI en entorno jsdom para prueba unitaria
     window.customAPI = {
@@ -107,7 +237,7 @@ describe('lmStudioService - Pruebas de Integración con Mocks', () => {
     expect(result.analysisText).toBe('Diagnóstico IPC mock.')
     expect(result.prescription.targetMode).toBe('intervals')
 
-    // @ts-ignore -- Limpieza del mock de customAPI
+    // @ts-ignore -- Limpieza de window.customAPI tras completar la prueba unitaria
     delete window.customAPI
   })
 })

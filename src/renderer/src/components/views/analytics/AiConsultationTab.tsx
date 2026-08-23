@@ -56,7 +56,6 @@ export function AiConsultationTab({
     }, 1000)
 
     try {
-      // INFERENCIA MULTI-TURN: Envía la pregunta actual + el historial de consultas y prescripciones
       const res = await aiService.askCustomConsultation(
         textToSend,
         metrics,
@@ -112,54 +111,60 @@ export function AiConsultationTab({
         </span>
       </div>
 
-      {/* 1. CAJA DE ENTRADA DE PREGUNTAS */}
-      <div className="space-y-2.5">
-        <div className="relative">
-          <textarea
-            value={userQuery}
-            onChange={(e): void => setUserQuery(e.target.value)}
-            placeholder="Escribe tu duda o repregúntale algo sobre la respuesta anterior (ej: ¿Y cómo puedo aplicar esa técnica en el FP-8?)..."
-            rows={3}
-            disabled={isAnswering}
-            className="w-full bg-zinc-950/90 border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-purple-500 font-sans transition-all resize-none shadow-inner"
-          />
-          <div className="absolute right-3 bottom-3 flex items-center gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={isAnswering || !userQuery.trim()}
-              onClick={(): void => {
-                void handleSendQuery()
-              }}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)]"
-            >
-              {isAnswering
-                ? `Razonando (${formatReasoningTime(reasoningSeconds)})...`
-                : 'Enviar Pregunta ➔'}
-            </Button>
-          </div>
-        </div>
+      {/* 1. CAJA DE ENTRADA CON BARRA DE ACCIÓN SEPARADA (CERO SOLAPAMIENTO) */}
+      <div className="bg-zinc-950/90 border border-zinc-800/90 rounded-2xl p-3.5 space-y-3 shadow-inner">
+        <textarea
+          value={userQuery}
+          onChange={(e): void => setUserQuery(e.target.value)}
+          placeholder="Escribe tu duda o propuesta de ejercicio aquí..."
+          rows={3}
+          disabled={isAnswering}
+          className="w-full bg-transparent border-0 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none font-sans resize-y min-h-[75px]"
+        />
 
-        {/* Sugerencias Rápidas */}
-        <div className="space-y-1">
-          <span className="text-xs font-mono text-zinc-500 uppercase tracking-wider block font-semibold">
-            Preguntas Rápidas de Estudio:
+        {/* Barra de acción inferior */}
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2 pt-2 border-t border-zinc-900">
+          <span className="text-[11px] text-zinc-500 font-mono">
+            {userQuery.length > 0
+              ? `${userQuery.length} caracteres`
+              : '💡 Puedes consultar propuestas de estudio o teoría de armónicos'}
           </span>
-          <div className="flex flex-wrap gap-1.5">
-            {suggestedQueries.map((q, i) => (
-              <button
-                key={i}
-                type="button"
-                disabled={isAnswering}
-                onClick={(): void => {
-                  void handleSendQuery(q)
-                }}
-                className="px-3 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800/80 border border-zinc-800 text-xs text-zinc-300 hover:text-purple-300 font-sans transition-all cursor-pointer text-left disabled:opacity-40"
-              >
-                💡 {q}
-              </button>
-            ))}
-          </div>
+
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={isAnswering || !userQuery.trim()}
+            onClick={(): void => {
+              void handleSendQuery()
+            }}
+            className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)] shrink-0"
+          >
+            {isAnswering
+              ? `Razonando (${formatReasoningTime(reasoningSeconds)})...`
+              : 'Enviar Pregunta ➔'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Sugerencias Rápidas */}
+      <div className="space-y-1">
+        <span className="text-xs font-mono text-zinc-500 uppercase tracking-wider block font-semibold">
+          Preguntas Rápidas de Estudio:
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {suggestedQueries.map((q, i) => (
+            <button
+              key={i}
+              type="button"
+              disabled={isAnswering}
+              onClick={(): void => {
+                void handleSendQuery(q)
+              }}
+              className="px-3 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800/80 border border-zinc-800 text-xs text-zinc-300 hover:text-purple-300 font-sans transition-all cursor-pointer text-left disabled:opacity-40"
+            >
+              💡 {q}
+            </button>
+          ))}
         </div>
       </div>
 
