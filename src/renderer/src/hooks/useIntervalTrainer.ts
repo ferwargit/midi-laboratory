@@ -59,6 +59,16 @@ export interface UseIntervalTrainerReturn {
   resetToConfig: () => void
 }
 
+export interface IntervalSessionOptions {
+  intervals?: number[]
+  roots?: number[]
+  limitType?: SessionLimitType
+  questionsCount?: number
+  durationMinutes?: number
+  advanceMode?: AdvanceMode
+  directionMode?: DirectionSelection
+}
+
 export function useIntervalTrainer({
   onPlayInterval,
   onTelemetryLog
@@ -279,28 +289,53 @@ export function useIntervalTrainer({
     }
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
-  const startSession = (overrideIntervals?: unknown, overrideRoots?: unknown): void => {
+  const startSession = (overrideConfigOrIntervals?: unknown, overrideRoots?: unknown): void => {
     cleanupSessionTimers()
 
-    const validIntervals =
-      Array.isArray(overrideIntervals) && overrideIntervals.length > 0
-        ? (overrideIntervals as number[])
-        : activeIntervalsBufferRef.current
-    const validRoots =
-      Array.isArray(overrideRoots) && overrideRoots.length > 0
-        ? (overrideRoots as number[])
-        : rootRangeNotesBufferRef.current
+    let intervalsToUse = activeIntervalsBufferRef.current
+    let rootsToUse = rootRangeNotesBufferRef.current
+    let limitTypeToUse = sessionLimitType
+    let durationMinutesToUse = sessionDurationMinutesBufferRef.current
 
-    if (validIntervals.length === 0 || validRoots.length === 0) return
+    if (Array.isArray(overrideConfigOrIntervals) && overrideConfigOrIntervals.length > 0) {
+      intervalsToUse = overrideConfigOrIntervals as number[]
+      if (Array.isArray(overrideRoots) && overrideRoots.length > 0) {
+        rootsToUse = overrideRoots as number[]
+      }
+    } else if (overrideConfigOrIntervals && typeof overrideConfigOrIntervals === 'object') {
+      const opts = overrideConfigOrIntervals as IntervalSessionOptions
+      if (Array.isArray(opts.intervals) && opts.intervals.length > 0) {
+        intervalsToUse = opts.intervals
+      }
+      if (Array.isArray(opts.roots) && opts.roots.length > 0) {
+        rootsToUse = opts.roots
+      }
+      if (opts.limitType) {
+        setSessionLimitType(opts.limitType)
+        limitTypeToUse = opts.limitType
+      }
+      if (typeof opts.questionsCount === 'number') {
+        setSessionQuestionsCount(opts.questionsCount)
+      }
+      if (typeof opts.durationMinutes === 'number') {
+        sessionDurationMinutesBufferRef.current = opts.durationMinutes
+        setSessionDurationMinutesState(opts.durationMinutes)
+        durationMinutesToUse = opts.durationMinutes
+      }
+      if (opts.advanceMode) {
+        setAdvanceMode(opts.advanceMode)
+      }
+      if (opts.directionMode) {
+        setDirectionMode(opts.directionMode)
+      }
+    }
 
-    if (Array.isArray(overrideIntervals) && overrideIntervals.length > 0) {
-      setActiveIntervals(overrideIntervals as number[])
-      activeIntervalsBufferRef.current = overrideIntervals as number[]
-    }
-    if (Array.isArray(overrideRoots) && overrideRoots.length > 0) {
-      setRootRangeNotes(overrideRoots as number[])
-      rootRangeNotesBufferRef.current = overrideRoots as number[]
-    }
+    if (intervalsToUse.length === 0 || rootsToUse.length === 0) return
+
+    setActiveIntervals(intervalsToUse)
+    activeIntervalsBufferRef.current = intervalsToUse
+    setRootRangeNotes(rootsToUse)
+    rootRangeNotesBufferRef.current = rootsToUse
 
     sessionIdRef.current = `session_int_${Date.now()}`
     sessionStartTimeRef.current = Date.now()
@@ -310,12 +345,12 @@ export function useIntervalTrainer({
     setCurrentQuestionIndex(1)
     setIsSessionFinished(false)
 
-    if (sessionLimitType === 'time') {
-      setTimeRemainingSeconds(sessionDurationMinutesBufferRef.current * 60)
+    if (limitTypeToUse === 'time') {
+      setTimeRemainingSeconds(durationMinutesToUse * 60)
     }
 
     setIsSessionActive(true)
-    triggerNextInterval(validIntervals, validRoots)
+    triggerNextInterval(intervalsToUse, rootsToUse)
   }
 
   const advanceToNextInterval = useCallback((): void => {

@@ -52,6 +52,15 @@ export interface UseSequenceTrainerReturn {
   resetToConfig: () => void
 }
 
+export interface SequenceSessionOptions {
+  notes?: number[]
+  length?: number
+  limitType?: SessionLimitType
+  questionsCount?: number
+  durationMinutes?: number
+  advanceMode?: AdvanceMode
+}
+
 export function useSequenceTrainer({
   onPlaySequence,
   onTelemetryLog
@@ -249,28 +258,50 @@ export function useSequenceTrainer({
     }
   }, [isSessionActive, sessionLimitType, finalizeAndSaveSession])
 
-  const startSession = (overrideNotes?: unknown, overrideLength?: unknown): void => {
+  const startSession = (overrideConfigOrNotes?: unknown, overrideLength?: unknown): void => {
     cleanupSessionTimers()
 
-    const validNotes =
-      Array.isArray(overrideNotes) && overrideNotes.length > 0
-        ? (overrideNotes as number[])
-        : customCandidateNotesBufferRef.current
-    const validLength =
-      typeof overrideLength === 'number' && overrideLength >= 3
-        ? overrideLength
-        : sequenceLengthBufferRef.current
+    let notesToUse = customCandidateNotesBufferRef.current
+    let lengthToUse = sequenceLengthBufferRef.current
+    let limitTypeToUse = sessionLimitType
+    let durationMinutesToUse = sessionDurationMinutesBufferRef.current
 
-    if (validNotes.length < 2) return
+    if (Array.isArray(overrideConfigOrNotes) && overrideConfigOrNotes.length > 0) {
+      notesToUse = overrideConfigOrNotes as number[]
+      if (typeof overrideLength === 'number' && overrideLength >= 3) {
+        lengthToUse = overrideLength
+      }
+    } else if (overrideConfigOrNotes && typeof overrideConfigOrNotes === 'object') {
+      const opts = overrideConfigOrNotes as SequenceSessionOptions
+      if (Array.isArray(opts.notes) && opts.notes.length >= 2) {
+        notesToUse = opts.notes
+      }
+      if (typeof opts.length === 'number' && opts.length >= 3) {
+        lengthToUse = opts.length
+      }
+      if (opts.limitType) {
+        setSessionLimitType(opts.limitType)
+        limitTypeToUse = opts.limitType
+      }
+      if (typeof opts.questionsCount === 'number') {
+        setSessionQuestionsCount(opts.questionsCount)
+      }
+      if (typeof opts.durationMinutes === 'number') {
+        sessionDurationMinutesBufferRef.current = opts.durationMinutes
+        setSessionDurationMinutesState(opts.durationMinutes)
+        durationMinutesToUse = opts.durationMinutes
+      }
+      if (opts.advanceMode) {
+        setAdvanceMode(opts.advanceMode)
+      }
+    }
 
-    if (Array.isArray(overrideNotes) && overrideNotes.length > 0) {
-      setCustomCandidateNotes(overrideNotes as number[])
-      customCandidateNotesBufferRef.current = overrideNotes as number[]
-    }
-    if (typeof overrideLength === 'number' && overrideLength >= 3) {
-      setSequenceLength(overrideLength)
-      sequenceLengthBufferRef.current = overrideLength
-    }
+    if (notesToUse.length < 2) return
+
+    setCustomCandidateNotes(notesToUse)
+    customCandidateNotesBufferRef.current = notesToUse
+    setSequenceLength(lengthToUse)
+    sequenceLengthBufferRef.current = lengthToUse
 
     sessionIdRef.current = `session_seq_${Date.now()}`
     sessionStartTimeRef.current = Date.now()
@@ -280,12 +311,12 @@ export function useSequenceTrainer({
     setCurrentQuestionIndex(1)
     setIsSessionFinished(false)
 
-    if (sessionLimitType === 'time') {
-      setTimeRemainingSeconds(sessionDurationMinutesBufferRef.current * 60)
+    if (limitTypeToUse === 'time') {
+      setTimeRemainingSeconds(durationMinutesToUse * 60)
     }
 
     setIsSessionActive(true)
-    triggerNextSequence(validNotes, validLength)
+    triggerNextSequence(notesToUse, lengthToUse)
   }
 
   const advanceToNextSequence = useCallback((): void => {
@@ -366,7 +397,7 @@ export function useSequenceTrainer({
         const result = evaluateSequenceAnswer(currentSequence, updatedCaptured, responseTimeMs)
 
         const answerRecord: DbAnswerRecord = {
-          id: `ans_seq_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          id: `ans_seq_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           sessionId: sessionIdRef.current,
           questionIndex: currentQuestionIndex,
           expectedNote: currentSequence[0],
@@ -375,7 +406,7 @@ export function useSequenceTrainer({
           semitoneDistance: result.levenshteinDistance,
           responseTimeMs,
           velocity: 90,
-          reasonTelemetry: `Secuencia: [${currentSequence.join(', ')}]`,
+          reasonTelemetry: `Secuencia: [${currentSequence.join(', ')}] | Tocadas: [${updatedCaptured.join(', ')}]`,
           createdAt: new Date().toISOString(),
           inputSource: source
         }

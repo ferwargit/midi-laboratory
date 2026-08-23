@@ -5,7 +5,12 @@ declare global {
     electron: ElectronAPI
     customAPI: {
       checkLmStudioModels: () => Promise<string | null>
-      chatLmStudio: (payload: { model: string; messages: unknown[] }) => Promise<{
+      chatLmStudio: (payload: {
+        model: string
+        messages: unknown[]
+        temperature?: number
+        timeoutMs?: number
+      }) => Promise<{
         success: boolean
         content?: string
         model?: string

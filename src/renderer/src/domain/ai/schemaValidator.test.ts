@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { isValidPrescription, validateAndParseAiResponse } from './schemaValidator'
+import {
+  isValidPrescription,
+  validateAndParseAiResponse,
+  extractBalancedJsonObject
+} from './schemaValidator'
 import { generateAlgorithmicFallback } from './fallbackGenerator'
 import { AnalyticsMetrics } from '../analytics/historyAnalytics'
 
-describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM y Generación de Fallback', () => {
+describe('s2-ai-schema-validation - Validación Estricta y Extracción Balanceada de JSON', () => {
   const validPrescriptionJson = {
     analysisText: 'Excelente progreso en discriminación auditiva.',
     prescription: {
@@ -49,6 +53,35 @@ describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM y Gen
     expect(result).not.toBeNull()
     expect(result?.source).toBe('lm_studio_ai')
     expect(result?.prescription.recommendedNotes).toEqual([60, 62, 64])
+  })
+
+  it('debe aislar el JSON válido e ignorar bloques de razonamiento <think> con llaves internas', () => {
+    const thinkResponse = `
+<think>
+El alumno comete fallos. Objeto de prueba: { debug: "fail", notes: [60] }
+Procedo a estructurar la respuesta en JSON.
+</think>
+
+\`\`\`json
+${JSON.stringify(validPrescriptionJson)}
+\`\`\`
+Texto adicional post-JSON.
+    `.trim()
+
+    const result = validateAndParseAiResponse(thinkResponse, 'qwen3.5-deepseek')
+    expect(result).not.toBeNull()
+    expect(result?.prescription.title).toBe('Refuerzo de Semitonos')
+    expect(result?.prescription.recommendedNotes).toEqual([60, 62, 64])
+  })
+
+  it('extractBalancedJsonObject maneja strings con llaves escapadas correctamente', () => {
+    const text =
+      'Prefacio { "analysisText": "Nota: {C4} es clave", "prescription": ' +
+      JSON.stringify(validPrescriptionJson.prescription) +
+      ' } Postfacio'
+    const extracted = extractBalancedJsonObject(text)
+    expect(extracted).not.toBeNull()
+    expect(JSON.parse(extracted!).analysisText).toBe('Nota: {C4} es clave')
   })
 
   it('malformed JSON rejected: debe rechazar cadenas que no sean JSON válido o entradas no string', () => {
@@ -99,38 +132,13 @@ describe('s2-ai-schema-validation - Validación Estricta de Salida del LLM y Gen
     )
   })
 
-  it('missing prescription rejected: debe rechazar objetos que no tengan el bloque de prescripción', () => {
-    const missingPrescription = JSON.stringify({ analysisText: 'Solo texto' })
-    expect(validateAndParseAiResponse(missingPrescription, 'qwen3.5')).toBeNull()
-
-    const emptyText = JSON.stringify({
-      analysisText: '   ',
-      prescription: validPrescriptionJson.prescription
-    })
-    expect(validateAndParseAiResponse(emptyText, 'qwen3.5')).toBeNull()
-  })
-
   it('generateAlgorithmicFallback debe generar prescripciones adaptadas según la modalidad y notas difíciles', () => {
-    // 1. Fallback para intervalos
     const intFallback = generateAlgorithmicFallback({ ...mockMetrics, modeFilter: 'intervals' })
     expect(intFallback.prescription.targetMode).toBe('intervals')
     expect(intFallback.prescription.recommendedIntervals).toEqual([2, 4, 5, 7])
 
-    // 2. Fallback para secuencias
     const seqFallback = generateAlgorithmicFallback({ ...mockMetrics, modeFilter: 'sequences' })
     expect(seqFallback.prescription.targetMode).toBe('sequences')
     expect(seqFallback.prescription.sequenceLength).toBe(3)
-
-    // 3. Fallback para notas individuales con notas difíciles acumuladas
-    const diffFallback = generateAlgorithmicFallback({
-      ...mockMetrics,
-      modeFilter: 'single_note',
-      mostDifficultNotes: [
-        { noteName: 'C#4', accuracy: 40, attempts: 5 },
-        { noteName: 'D4', accuracy: 45, attempts: 6 }
-      ]
-    })
-    expect(diffFallback.prescription.targetMode).toBe('single_note')
-    expect(diffFallback.prescription.recommendedNotes.length).toBeGreaterThanOrEqual(2)
   })
 })

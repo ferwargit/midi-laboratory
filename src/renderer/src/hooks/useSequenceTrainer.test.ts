@@ -126,6 +126,41 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
     expect(result.current.isSessionActive).toBe(true)
   })
 
+  it('startSession con SequenceSessionOptions debe aplicar la configuración y guardar la telemetría enriquecida', () => {
+    const onPlaySequence = vi.fn()
+    const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence }))
+
+    act(() => {
+      result.current.startSession({
+        notes: [60, 64, 67, 72],
+        length: 4,
+        limitType: 'questions',
+        questionsCount: 5,
+        durationMinutes: 3,
+        advanceMode: 'manual'
+      })
+    })
+
+    expect(result.current.isSessionActive).toBe(true)
+    expect(result.current.customCandidateNotes).toEqual([60, 64, 67, 72])
+    expect(result.current.sequenceLength).toBe(4)
+    expect(result.current.sessionLimitType).toBe('questions')
+    expect(result.current.sessionQuestionsCount).toBe(5)
+    expect(result.current.advanceMode).toBe('manual')
+    expect(onPlaySequence).toHaveBeenCalledTimes(1)
+
+    // Tocamos las 4 notas generadas
+    const currentSeq = result.current.currentSequence
+    currentSeq.forEach((note) => {
+      act(() => {
+        result.current.handleUserNotePlayed(note, 'midi_hardware')
+      })
+    })
+
+    expect(result.current.lastResult).not.toBeNull()
+    expect(result.current.isWaitingManualAdvance).toBe(true)
+  })
+
   describe('Timers: auto-advance, cleanup y sesiones por tiempo', () => {
     it('el timer de auto-advance (modo smart, acierto) dispara advanceToNextSequence tras el delay', () => {
       vi.useFakeTimers()

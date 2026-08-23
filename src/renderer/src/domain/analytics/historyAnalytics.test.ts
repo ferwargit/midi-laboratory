@@ -546,4 +546,63 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(report.title).toContain('Informe')
     expect(report.concreteActionPlan.length).toBeGreaterThan(0)
   })
+
+  it('reconstructSessionConfig debe reconstruir todas las notas y la longitud de una sesión de secuencias desde reasonTelemetry', () => {
+    const sequenceSession: DbSessionRecord = {
+      id: 's_seq_hist_1',
+      createdAt: new Date('2026-08-20T16:00:00Z').toISOString(),
+      strategyId: 'sequences_v1',
+      instrumentId: 'piano_sequences',
+      presetName: 'Secuencias (4 notas) • Bloque 5 preguntas',
+      totalQuestions: 5,
+      correctAnswers: 4,
+      accuracyPercentage: 80,
+      avgResponseTimeMs: 2100,
+      durationSeconds: 90
+    }
+
+    const sequenceAnswers: DbAnswerRecord[] = [
+      {
+        id: 'ans_seq_1',
+        sessionId: 's_seq_hist_1',
+        questionIndex: 1,
+        expectedNote: 60,
+        playedNote: 72,
+        isCorrect: true,
+        semitoneDistance: 0,
+        responseTimeMs: 2000,
+        velocity: 90,
+        reasonTelemetry: 'Secuencia: [60, 64, 67, 72] | Tocadas: [60, 64, 67, 72]',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'ans_seq_2',
+        sessionId: 's_seq_hist_1',
+        questionIndex: 2,
+        expectedNote: 62,
+        playedNote: 71,
+        isCorrect: false,
+        semitoneDistance: 1,
+        responseTimeMs: 2200,
+        velocity: 90,
+        reasonTelemetry: 'Secuencia: [62, 65, 69, 71] | Tocadas: [62, 65, 69, 72]',
+        createdAt: new Date().toISOString()
+      }
+    ]
+
+    const prescription = reconstructSessionConfig(sequenceSession, sequenceAnswers)
+
+    expect(prescription.targetMode).toBe('sequences')
+    expect(prescription.sequenceLength).toBe(4)
+    // Debe haber recolectado las notas únicas de ambas secuencias: [60, 62, 64, 65, 67, 69, 71, 72]
+    expect(prescription.recommendedNotes).toContain(60)
+    expect(prescription.recommendedNotes).toContain(64)
+    expect(prescription.recommendedNotes).toContain(67)
+    expect(prescription.recommendedNotes).toContain(72)
+    expect(prescription.recommendedNotes).toContain(62)
+    expect(prescription.recommendedNotes).toContain(65)
+    expect(prescription.recommendedNotes).toContain(69)
+    expect(prescription.recommendedNotes).toContain(71)
+    expect(prescription.questionsCount).toBe(5)
+  })
 })

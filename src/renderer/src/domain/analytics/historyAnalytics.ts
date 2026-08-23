@@ -399,12 +399,29 @@ export function reconstructSessionConfig(
     recommendedIntervals = Array.from(new Set(stList)).sort((a, b) => a - b)
     if (recommendedIntervals.length === 0) recommendedIntervals = [2, 4, 5, 7, 12]
   } else if (targetMode === 'sequences') {
-    const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
-      (a, b) => a - b
-    )
+    const candidateSet = new Set<number>()
+    let detectedLength = 3
+
+    sessionAnswers.forEach((a) => {
+      const seqMatch = a.reasonTelemetry.match(/Secuencia:\s*\[([^\]]+)\]/i)
+      if (seqMatch && seqMatch[1]) {
+        const parsedNotes = seqMatch[1]
+          .split(',')
+          .map((n) => parseInt(n.trim(), 10))
+          .filter((n) => !isNaN(n))
+
+        parsedNotes.forEach((n) => candidateSet.add(n))
+        if (parsedNotes.length >= 3) {
+          detectedLength = parsedNotes.length
+        }
+      } else if (a.expectedNote) {
+        candidateSet.add(a.expectedNote)
+      }
+    })
+
+    const uniqueNotes = Array.from(candidateSet).sort((a, b) => a - b)
     recommendedNotes = uniqueNotes.length >= 2 ? uniqueNotes : [60, 62, 64, 65, 67]
-    sequenceLength =
-      sessionAnswers.length > 0 ? Math.min(6, Math.max(3, session.totalQuestions > 0 ? 3 : 4)) : 3
+    sequenceLength = detectedLength
   }
 
   const isTimed = pName.includes('tiempo') || pName.includes('cronometrado')

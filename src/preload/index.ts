@@ -6,6 +6,8 @@ const customAPI = {
   chatLmStudio: (payload: {
     model: string
     messages: unknown[]
+    temperature?: number
+    timeoutMs?: number
   }): Promise<{
     success: boolean
     content?: string

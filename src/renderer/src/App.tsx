@@ -214,40 +214,48 @@ export default function App(): React.ReactElement {
   const handleLoadPrescription = (p: AiExercisePrescription): void => {
     if (p.targetMode === 'single_note') {
       setAppMode('single_note')
+      const tonalMode =
+        p.tonalAnchorMode === 'drone_c'
+          ? 'drone'
+          : p.tonalAnchorMode === 'cadence_preview'
+            ? 'cadence'
+            : 'none'
+
       singleNoteTrainer.setSelectedInstrumentId(p.instrumentId)
       singleNoteTrainer.setSessionLimitType(p.limitType)
       singleNoteTrainer.setSessionQuestionsCount(p.questionsCount)
       singleNoteTrainer.setSessionDurationMinutes(p.durationMinutes)
       singleNoteTrainer.setAdvanceMode(p.advanceMode)
-      if (p.tonalAnchorMode) {
-        singleNoteTrainer.setTonalContextMode(
-          p.tonalAnchorMode === 'drone_c'
-            ? 'drone'
-            : p.tonalAnchorMode === 'cadence_preview'
-              ? 'cadence'
-              : 'none'
-        )
-      }
+      singleNoteTrainer.setTonalContextMode(tonalMode)
+
       singleNoteTrainer.startSession(p.recommendedNotes)
     } else if (p.targetMode === 'intervals') {
       setAppMode('intervals')
-      if (p.recommendedIntervals && p.recommendedIntervals.length > 0) {
-        intervalTrainer.setActiveIntervals(p.recommendedIntervals)
-      }
-      intervalTrainer.setSessionLimitType(p.limitType)
-      intervalTrainer.setSessionQuestionsCount(p.questionsCount)
-      intervalTrainer.setSessionDurationMinutes(p.durationMinutes)
-      intervalTrainer.setAdvanceMode(p.advanceMode)
-      intervalTrainer.startSession()
+      const intervals =
+        p.recommendedIntervals && p.recommendedIntervals.length > 0
+          ? p.recommendedIntervals
+          : [2, 4, 5, 7, 12]
+
+      intervalTrainer.startSession({
+        intervals,
+        roots: p.recommendedNotes && p.recommendedNotes.length > 0 ? p.recommendedNotes : undefined,
+        limitType: p.limitType,
+        questionsCount: p.questionsCount,
+        durationMinutes: p.durationMinutes,
+        advanceMode: p.advanceMode
+      })
     } else {
       setAppMode('sequences')
-      sequenceTrainer.setCustomCandidateNotes(p.recommendedNotes)
-      if (p.sequenceLength) sequenceTrainer.setSequenceLength(p.sequenceLength)
-      sequenceTrainer.setSessionLimitType(p.limitType)
-      sequenceTrainer.setSessionQuestionsCount(p.questionsCount)
-      sequenceTrainer.setSessionDurationMinutes(p.durationMinutes)
-      sequenceTrainer.setAdvanceMode(p.advanceMode)
-      sequenceTrainer.startSession()
+      const seqLen = p.sequenceLength || 3
+
+      sequenceTrainer.startSession({
+        notes: p.recommendedNotes,
+        length: seqLen,
+        limitType: p.limitType,
+        questionsCount: p.questionsCount,
+        durationMinutes: p.durationMinutes,
+        advanceMode: p.advanceMode
+      })
     }
   }
 

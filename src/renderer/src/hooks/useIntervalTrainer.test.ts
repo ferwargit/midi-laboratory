@@ -149,6 +149,31 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
     expect(result.current.isSessionActive).toBe(true)
   })
 
+  it('startSession con IntervalSessionOptions debe aplicar la configuración de forma síncrona y determinista', () => {
+    const onPlayInterval = vi.fn()
+    const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
+
+    act(() => {
+      result.current.startSession({
+        intervals: [1, 6, 12],
+        roots: [48, 60, 72],
+        limitType: 'time',
+        durationMinutes: 3,
+        advanceMode: 'manual',
+        directionMode: 'descending'
+      })
+    })
+
+    expect(result.current.isSessionActive).toBe(true)
+    expect(result.current.activeIntervals).toEqual([1, 6, 12])
+    expect(result.current.rootRangeNotes).toEqual([48, 60, 72])
+    expect(result.current.sessionLimitType).toBe('time')
+    expect(result.current.timeRemainingSeconds).toBe(180)
+    expect(result.current.advanceMode).toBe('manual')
+    expect(result.current.directionMode).toBe('descending')
+    expect(onPlayInterval).toHaveBeenCalledTimes(1)
+  })
+
   describe('Timers: auto-advance, cleanup y sesiones por tiempo', () => {
     it('el timer de auto-advance (modo smart, acierto) dispara advanceToNextInterval tras el delay', () => {
       vi.useFakeTimers()
