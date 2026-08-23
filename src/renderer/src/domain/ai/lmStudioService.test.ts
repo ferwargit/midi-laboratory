@@ -55,7 +55,8 @@ describe('ai - Servicios de IA, Prescripción, Tutor y Comparador Multi-Sesión'
       formatType: 'time',
       inputMethod: 'hardware',
       interSessionGapMs: null,
-      interSessionGapLabel: 'Inicio'
+      interSessionGapLabel: 'Inicio',
+      cpiScore: 650
     }
   ]
 

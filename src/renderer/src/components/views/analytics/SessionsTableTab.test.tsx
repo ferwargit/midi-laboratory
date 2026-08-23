@@ -1,5 +1,6 @@
+import { act } from 'react'
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { SessionsTableTab } from './SessionsTableTab'
 import { DetailedSessionAnalysis } from '../../../domain/analytics/historyAnalytics'
 
@@ -32,7 +33,8 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
       formatType: 'time',
       inputMethod: 'hardware',
       interSessionGapMs: null,
-      interSessionGapLabel: 'Inicio'
+      interSessionGapLabel: 'Inicio',
+      cpiScore: 560
     },
     {
       session: {
@@ -60,12 +62,13 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
       dominantBias: 'balanced',
       formatType: 'time',
       inputMethod: 'hardware',
-      interSessionGapMs: null,
-      interSessionGapLabel: 'Inicio'
+      interSessionGapMs: 86400000,
+      interSessionGapLabel: '1 d',
+      cpiScore: 890
     }
   ]
 
-  it('debe renderizar las columnas de la tabla y la sesión con sus badges', () => {
+  it('debe renderizar las columnas de la tabla y la sesión con sus badges y CPI Score', () => {
     render(
       <SessionsTableTab
         displayedList={mockAnalysisList}
@@ -82,6 +85,7 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
 
     expect(screen.getAllByText('Nivel 1 (C, D, E)').length).toBe(2)
     expect(screen.getAllByText('🎹 Roland FP-8').length).toBe(2)
+    expect(screen.getByText(/🌟 890/i)).toBeDefined() // Score CPI destacado
     expect(screen.getAllByText('Re-testar').length).toBe(2)
   })
 

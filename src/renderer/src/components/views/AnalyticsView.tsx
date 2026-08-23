@@ -132,6 +132,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       setSortKey(column)
       const defaultDescColumns: SortColumnKey[] = [
         'date',
+        'cpi', // Por defecto mayor CPI arriba
         'accuracy',
         'normalizedAccuracy',
         'fastPercent',
@@ -219,6 +220,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           break
         case 'rpm':
           comparison = a.responsesPerMinute - b.responsesPerMinute
+          break
+        case 'cpi':
+          comparison = a.cpiScore - b.cpiScore
           break
         default:
           comparison = 0

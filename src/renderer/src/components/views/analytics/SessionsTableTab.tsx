@@ -99,8 +99,8 @@ export function SessionsTableTab({
               Registro Histórico y Telemetría Clínica ({displayedList.length} sesiones)
             </h3>
             <p className="text-[11px] text-zinc-400 mt-0.5">
-              Marca 2 o más casillas para hacer una comparativa cruzada con IA Local o borrar en
-              lote:
+              Ordena por Score CPI para ver tu ranking de mejores sesiones o marca casillas para
+              comparar:
             </p>
           </div>
 
@@ -113,7 +113,7 @@ export function SessionsTableTab({
           </div>
         </div>
 
-        {/* BARRA FLOTANTE DE ACCIONES POR LOTE */}
+        {/* BARRA FLOTANTE */}
         {selectedIds.size > 0 && (
           <div className="p-2.5 bg-gradient-to-r from-sky-950/90 via-purple-950/90 to-zinc-950 border border-sky-500/50 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3 font-mono text-xs shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150">
             <div className="flex items-center gap-2">
@@ -125,7 +125,6 @@ export function SessionsTableTab({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* BOTÓN COMPARAR CON IA */}
               {selectedIds.size >= 2 && (
                 <Button
                   variant="primary"
@@ -169,7 +168,6 @@ export function SessionsTableTab({
             <table className="w-full text-left text-xs font-mono">
               <thead>
                 <tr className="border-b border-zinc-800 text-zinc-500 text-[10px] uppercase tracking-wider select-none">
-                  {/* Checkbox Maestro */}
                   <th className="pb-2.5 pl-2 w-8 text-center">
                     <input
                       type="checkbox"
@@ -185,7 +183,7 @@ export function SessionsTableTab({
                     className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
                   >
                     <div className="flex items-center">
-                      <span>Fecha</span>
+                      <span>Fecha & ISI</span>
                       {renderSortIndicator('date')}
                     </div>
                   </th>
@@ -207,6 +205,19 @@ export function SessionsTableTab({
                     <div className="flex items-center">
                       <span>Formato</span>
                       {renderSortIndicator('format')}
+                    </div>
+                  </th>
+
+                  {/* NUEVA COLUMNA: SCORE CPI */}
+                  <th
+                    onClick={(): void => onSortClick('cpi')}
+                    className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
+                  >
+                    <div className="flex items-center justify-center">
+                      <PedagogicalTooltip conceptId="cpi_score">
+                        <span>Score CPI</span>
+                      </PedagogicalTooltip>
+                      {renderSortIndicator('cpi')}
                     </div>
                   </th>
 
@@ -321,7 +332,6 @@ export function SessionsTableTab({
                         isSelected ? 'bg-sky-950/40 border-sky-800/60' : 'hover:bg-zinc-950/50'
                       }`}
                     >
-                      {/* Checkbox de fila */}
                       <td className="py-3 pl-2 text-center">
                         <input
                           type="checkbox"
@@ -331,7 +341,7 @@ export function SessionsTableTab({
                         />
                       </td>
 
-                      {/* 1. Fecha y Descanso Inter-Sesión (ISI) */}
+                      {/* 1. Fecha & Descanso ISI */}
                       <td className="py-3 text-zinc-400 text-[11px] whitespace-nowrap">
                         <div>
                           {new Date(s.createdAt).toLocaleDateString('es-AR', {
@@ -346,11 +356,11 @@ export function SessionsTableTab({
                             className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold ${
                               item.interSessionGapLabel === 'Inicio'
                                 ? 'bg-zinc-900 text-zinc-500 border border-zinc-800'
-                                : item.interSessionGapMs !== null && item.interSessionGapMs < 900000 // < 15 min (Masiva)
+                                : item.interSessionGapMs !== null && item.interSessionGapMs < 900000
                                   ? 'bg-amber-950/80 text-amber-300 border border-amber-800/80'
                                   : item.interSessionGapMs !== null &&
                                       item.interSessionGapMs >= 43200000 &&
-                                      item.interSessionGapMs <= 172800000 // 12h-48h (Óptima)
+                                      item.interSessionGapMs <= 172800000
                                     ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80'
                                     : 'bg-zinc-900 text-sky-400 border border-zinc-800'
                             }`}
@@ -363,7 +373,7 @@ export function SessionsTableTab({
                         </div>
                       </td>
 
-                      {/* 2. Contenido, Timbre y Fuente */}
+                      {/* 2. Contenido y Timbre */}
                       <td className="py-3 font-sans">
                         <div className="font-semibold text-zinc-100 text-xs">{displayContent}</div>
                         <div className="text-[10px] font-mono text-zinc-500 mt-0.5 flex items-center gap-2">
@@ -406,7 +416,26 @@ export function SessionsTableTab({
                         )}
                       </td>
 
-                      {/* 4. Carga (Pool) */}
+                      {/* 4. SCORE CPI */}
+                      <td className="py-3 text-center whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-lg border text-xs font-mono font-bold ${
+                            item.cpiScore >= 750
+                              ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                              : item.cpiScore >= 450
+                                ? 'bg-sky-950/80 border-sky-500/60 text-sky-300'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                          }`}
+                        >
+                          {item.cpiScore >= 750
+                            ? `🌟 ${item.cpiScore}`
+                            : item.cpiScore >= 450
+                              ? `🔥 ${item.cpiScore}`
+                              : `${item.cpiScore} pts`}
+                        </span>
+                      </td>
+
+                      {/* 5. Carga (Pool) */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <span className="text-zinc-300 font-bold">{item.poolSize} notas</span>
                         <span className="block text-[10px] text-purple-400">
@@ -414,23 +443,23 @@ export function SessionsTableTab({
                         </span>
                       </td>
 
-                      {/* 5. Preguntas */}
+                      {/* 6. Preguntas */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <span className="text-emerald-400 font-bold">{s.correctAnswers}</span> /{' '}
                         {s.totalQuestions}
                       </td>
 
-                      {/* 6. Duración */}
+                      {/* 7. Duración */}
                       <td className="py-3 text-center text-zinc-400 whitespace-nowrap">
                         {formatDuration(s.durationSeconds || 0)}
                       </td>
 
-                      {/* 7. Precisión Cruda */}
+                      {/* 8. Precisión Cruda */}
                       <td className="py-3 text-center text-zinc-200 font-bold whitespace-nowrap">
                         {s.accuracyPercentage}%
                       </td>
 
-                      {/* 8. Oído Real IRT */}
+                      {/* 9. Oído Real IRT */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <span
                           className={`font-bold ${
@@ -445,7 +474,7 @@ export function SessionsTableTab({
                         </span>
                       </td>
 
-                      {/* 9. Reflejo Inmediato */}
+                      {/* 10. Reflejo Inmediato */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <span
                           className={
@@ -460,7 +489,7 @@ export function SessionsTableTab({
                         </span>
                       </td>
 
-                      {/* 10. Sesgo Direccional */}
+                      {/* 11. Sesgo Direccional */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <span className="text-zinc-300 text-[10px]">
                           {item.dominantBias === 'sharp' ? (
@@ -473,13 +502,13 @@ export function SessionsTableTab({
                         </span>
                       </td>
 
-                      {/* 11. Cadencia / RPM */}
+                      {/* 12. Cadencia / RPM */}
                       <td className="py-3 text-right text-sky-400 font-bold whitespace-nowrap">
                         {item.responsesPerMinute}{' '}
                         <span className="text-[9px] font-normal text-zinc-500">RPM</span>
                       </td>
 
-                      {/* Acciones: Re-testar + Eliminar Individual */}
+                      {/* Acciones */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           <button

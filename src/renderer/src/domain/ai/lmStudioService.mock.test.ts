@@ -81,7 +81,8 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
       formatType: 'time',
       inputMethod: 'hardware',
       interSessionGapMs: null,
-      interSessionGapLabel: 'Inicio'
+      interSessionGapLabel: 'Inicio',
+      cpiScore: 650
     }
   ]
 

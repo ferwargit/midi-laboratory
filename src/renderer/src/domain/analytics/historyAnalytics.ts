@@ -4,17 +4,17 @@ import { EXERCISE_PRESETS } from '../music/presets'
 import { AiExercisePrescription } from '../ai/types'
 
 export const COGNITIVE_LATENCY_THRESHOLDS = {
-  FAST_MAX_MS: 1400, // < 1.4s = Reflejo Inmediato
-  MEDIUM_MAX_MS: 2800, // 1.4s - 2.8s = Deducción Activa
+  FAST_MAX_MS: 1400,
+  MEDIUM_MAX_MS: 2800,
   FAST_LABEL: '< 1.4s',
   MEDIUM_LABEL: '1.4s - 2.8s',
   SLOW_LABEL: '> 2.8s'
 } as const
 
 export const MASTERY_THRESHOLDS = {
-  MASTERED_MIN: 85, // >= 85% = Dominada (Verde)
-  LEARNING_MIN: 50, // 50% - 84% = En Progreso (Amarillo)
-  CRITICAL_MAX: 50 // < 50% = Crítica / A reforzar (Rojo)
+  MASTERED_MIN: 85,
+  LEARNING_MIN: 50,
+  CRITICAL_MAX: 50
 } as const
 
 export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences'
@@ -66,6 +66,7 @@ export interface DetailedSessionAnalysis {
   inputMethod: 'hardware' | 'virtual' | 'mixed'
   interSessionGapMs: number | null
   interSessionGapLabel: string
+  cpiScore: number // NUEVO: Índice Compuesto de Rendimiento (Puntuación 0 a 1000+)
 }
 
 export interface LongitudinalComparison {
@@ -99,6 +100,27 @@ export interface AnalyticsMetrics {
   strongestNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
   sessionPsychometricsList: DetailedSessionAnalysis[]
   longitudinalComparisons: LongitudinalComparison[]
+}
+
+/**
+ * Calcula el Índice Compuesto de Rendimiento Psicoacústico (CPI Score)
+ */
+export function calculateSessionCPI(
+  normalizedAccuracy: number,
+  entropyBits: number,
+  responsesPerMinute: number,
+  avgResponseTimeMs: number,
+  inputMethod: 'hardware' | 'virtual' | 'mixed'
+): number {
+  if (normalizedAccuracy <= 0) return 0
+
+  const entropyFactor = Math.max(0.5, entropyBits / 3.0) // 3 bits (8 notas) es 1.0x
+  const latencySec = Math.max(0.6, avgResponseTimeMs / 1000)
+  const speedFactor = Math.max(0.3, Math.min(2.5, (responsesPerMinute / 15.0) * (1.5 / latencySec)))
+  const inputFactor = inputMethod === 'hardware' ? 1.0 : inputMethod === 'mixed' ? 0.92 : 0.85
+
+  const rawScore = normalizedAccuracy * entropyFactor * speedFactor * inputFactor * 10
+  return Math.round(Math.max(0, rawScore))
 }
 
 export function formatInterSessionGap(gapMs: number | null): string {
@@ -438,7 +460,6 @@ export function computeAnalyticsMetrics(
     }
   }
 
-  // Ordenamos cronológicamente para calcular el descanso inter-sesión (ISI)
   const chronologicalSessions = [...filteredSessions].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   )
@@ -532,6 +553,15 @@ export function computeAnalyticsMetrics(
 
     const gapInfo = gapMap.get(session.id) || { gapMs: null, label: 'Inicio' }
 
+    // CÁLCULO DEL CPI SCORE PSICOACÚSTICO
+    const cpiScore = calculateSessionCPI(
+      normalizedAccuracy,
+      entropyBits,
+      responsesPerMinute,
+      session.avgResponseTimeMs,
+      inputMethod
+    )
+
     return {
       session,
       poolSize,
@@ -548,7 +578,8 @@ export function computeAnalyticsMetrics(
       formatType,
       inputMethod,
       interSessionGapMs: gapInfo.gapMs,
-      interSessionGapLabel: gapInfo.label
+      interSessionGapLabel: gapInfo.label,
+      cpiScore
     }
   })
 

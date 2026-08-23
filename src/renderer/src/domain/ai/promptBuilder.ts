@@ -111,6 +111,7 @@ export function buildUserPrompt(
     duracionSeg: s.session.durationSeconds,
     descansoPrevio: s.interSessionGapLabel,
     preguntas: `${s.session.correctAnswers}/${s.session.totalQuestions}`,
+    scoreCPI: s.cpiScore,
     precisionCruda: `${s.session.accuracyPercentage}%`,
     oidoRealIRT: `${s.normalizedAccuracy}%`,
     entropiaBits: s.entropyBits,

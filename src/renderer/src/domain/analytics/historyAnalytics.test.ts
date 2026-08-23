@@ -4,7 +4,8 @@ import {
   filterSessionsByMode,
   filterSessionsAdvanced,
   computeLongitudinalComparisons,
-  reconstructSessionConfig
+  reconstructSessionConfig,
+  calculateSessionCPI
 } from './historyAnalytics'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
@@ -200,7 +201,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(matched.map((s) => s.id)).toEqual(['s_legacy_1', 's_canon_1'])
   })
 
-  it('computeAnalyticsMetrics calcula telemetría clínica de alta resolución por sesión (RPM, reflejo, sesgo)', () => {
+  it('computeAnalyticsMetrics calcula telemetría clínica de alta resolución por sesión (RPM, reflejo, sesgo y CPI)', () => {
     const all = [sNotePiano, sNoteFlute]
     const metrics = computeAnalyticsMetrics(all, mockAnswers, 'single_note')
 
@@ -214,6 +215,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(pianoAnalysis?.responsesPerMinute).toBe(10)
     expect(pianoAnalysis?.fastPercent).toBe(100)
     expect(pianoAnalysis?.inputMethod).toBe('hardware')
+    expect(pianoAnalysis?.cpiScore).toBeGreaterThan(0) // Validación CPI Score
 
     const fluteAnalysis = metrics.sessionPsychometricsList.find(
       (p) => p.session.id === 's_note_flute'
@@ -221,6 +223,13 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(fluteAnalysis?.sharpBiasCount).toBe(1)
     expect(fluteAnalysis?.dominantBias).toBe('sharp')
     expect(fluteAnalysis?.inputMethod).toBe('virtual')
+  })
+
+  it('calculateSessionCPI debe premiar mayor entropía, reflejo rápido y ejecución en hardware', () => {
+    const scoreA = calculateSessionCPI(80, 1.58, 10, 1400, 'virtual')
+    const scoreB = calculateSessionCPI(80, 3.7, 22, 1100, 'hardware')
+
+    expect(scoreB).toBeGreaterThan(scoreA * 2)
   })
 
   it('computeAnalyticsMetrics debe calcular exactamente el descanso inter-sesión (ISI) en orden cronológico', () => {
@@ -239,7 +248,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
 
     const s2: DbSessionRecord = {
       id: 's_isi_2',
-      createdAt: new Date('2026-08-21T10:15:00Z').toISOString(), // 15 minutos después
+      createdAt: new Date('2026-08-21T10:15:00Z').toISOString(),
       strategyId: 'adaptive_v1',
       instrumentId: 'piano',
       presetName: 'Test',
@@ -252,7 +261,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
 
     const s3: DbSessionRecord = {
       id: 's_isi_3',
-      createdAt: new Date('2026-08-22T10:15:00Z').toISOString(), // 24 horas después
+      createdAt: new Date('2026-08-22T10:15:00Z').toISOString(),
       strategyId: 'adaptive_v1',
       instrumentId: 'piano',
       presetName: 'Test',
@@ -413,7 +422,8 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
         formatType: 'time',
         inputMethod: 'hardware',
         interSessionGapMs: null,
-        interSessionGapLabel: 'Inicio'
+        interSessionGapLabel: 'Inicio',
+        cpiScore: 350
       },
       {
         session: session2,
@@ -431,7 +441,8 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
         formatType: 'time',
         inputMethod: 'hardware',
         interSessionGapMs: 950400000,
-        interSessionGapLabel: '11 d'
+        interSessionGapLabel: '11 d',
+        cpiScore: 820
       }
     ])
 
@@ -448,7 +459,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       createdAt: new Date().toISOString(),
       strategyId: 'adaptive_v1',
       instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
       totalQuestions: 44,
       correctAnswers: 37,
       accuracyPercentage: 84,
@@ -461,7 +472,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       createdAt: new Date().toISOString(),
       strategyId: 'adaptive_v1',
       instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
       totalQuestions: 44,
       correctAnswers: 38,
       accuracyPercentage: 86,
@@ -474,7 +485,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       createdAt: new Date().toISOString(),
       strategyId: 'adaptive_v1',
       instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
       totalQuestions: 44,
       correctAnswers: 20,
       accuracyPercentage: 45,
@@ -513,7 +524,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       createdAt: new Date('2026-08-22T11:00:00Z').toISOString(),
       strategyId: 'adaptive_v1',
       instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
+      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
       totalQuestions: 40,
       correctAnswers: 31,
       accuracyPercentage: 78,

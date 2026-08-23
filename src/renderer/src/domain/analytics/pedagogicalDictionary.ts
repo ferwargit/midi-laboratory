@@ -97,6 +97,18 @@ export const PEDAGOGICAL_DICTIONARY: Record<string, PedagogicalConcept> = {
     formulaOrCalculation: 'ISI = Timestamp(Inicio Sesión Actual) - Timestamp(Fin Sesión Previa)',
     practicalTakeaway:
       '< 15 min: Práctica masiva (propensa a saturación y fatiga). 12h - 48h: Espaciamiento óptimo con consolidación durante el sueño. > 48h: Retención a largo plazo.'
+  },
+  cpi_score: {
+    id: 'cpi_score',
+    title: 'Índice de Rendimiento Compuesto (CPI)',
+    subtitle: 'Score Psicoacústico Global de Eficiencia',
+    category: 'psychometrics',
+    shortDefinition:
+      'Puntuación compuesta que evalúa el mérito cognitivo real integrando precisión IRT, entropía de notas, cadencia y velocidad de reflejo.',
+    formulaOrCalculation:
+      'CPI = Oído Real × (Entropía/3.0) × (RPM/15.0) × (1.5s/Latencia) × Factor Entrada × 10',
+    practicalTakeaway:
+      'Permite comparar sesiones de diferente dificultad: un 80% en 13 notas con el piano físico obtiene más puntos que un 80% en 3 notas con ratón.'
   }
 }
 

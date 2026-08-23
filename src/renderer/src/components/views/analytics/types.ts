@@ -10,6 +10,7 @@ export type SortColumnKey =
   | 'fastPercent'
   | 'bias'
   | 'rpm'
+  | 'cpi'
 
 export type SortDirection = 'asc' | 'desc'
 
