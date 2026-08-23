@@ -1,6 +1,6 @@
-import React, { useMemo, memo } from 'react'
+import React, { useMemo, useState, memo } from 'react'
 import { DbSessionRecord, DbAnswerRecord } from '../../domain/database/types'
-import { SessionPsychometrics } from '../../domain/analytics/historyAnalytics'
+import { SessionPsychometrics, MASTERY_THRESHOLDS } from '../../domain/analytics/historyAnalytics'
 
 interface AnalyticsChartsProps {
   sessions: DbSessionRecord[]
@@ -8,14 +8,27 @@ interface AnalyticsChartsProps {
   psychometrics?: SessionPsychometrics[]
 }
 
+interface HoveredPointInfo {
+  x: number
+  y: number
+  session: DbSessionRecord
+  psych?: SessionPsychometrics
+  rawAcc: number
+  normAcc: number
+  dateStr: string
+}
+
 function AnalyticsChartsComponent({
   sessions,
   answers,
   psychometrics = []
 }: AnalyticsChartsProps): React.ReactElement {
-  const recentSessions = useMemo(() => [...sessions].slice(0, 12).reverse(), [sessions])
+  const [hoveredPoint, setHoveredPoint] = useState<HoveredPointInfo | null>(null)
+
+  // Tomamos hasta 14 sesiones recientes en orden cronológico
+  const recentSessions = useMemo(() => [...sessions].slice(0, 14).reverse(), [sessions])
   const recentPsychometrics = useMemo(
-    () => [...psychometrics].slice(0, 12).reverse(),
+    () => [...psychometrics].slice(0, 14).reverse(),
     [psychometrics]
   )
 
@@ -43,97 +56,263 @@ function AnalyticsChartsComponent({
 
   return (
     <div className="space-y-4 select-none font-mono">
-      {/* 1. CURVA TEMPORAL DE PRECISIÓN */}
-      <div className="p-4 bg-zinc-950/80 backdrop-blur-xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl">
-        <div className="flex justify-between items-center text-xs">
+      {/* 1. CURVA TEMPORAL PSICOMÉTRICA CON EJES GRADUADOS */}
+      <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-2xl relative">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/80 text-xs">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
-            <span className="font-bold text-zinc-100">
-              CURVA PSICOMÉTRICA (PRECISIÓN CRUDA VS. OÍDO CORREGIDO POR AZAR):
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
+            <span className="font-bold text-zinc-100 uppercase tracking-wider">
+              Evolución Psicométrica: Precisión Cruda vs. Oído Real (IRT)
             </span>
           </div>
-          <div className="flex gap-3 text-[10px]">
-            <span className="text-sky-400">● Cruda</span>
-            <span className="text-purple-400">● Corregida (IRT)</span>
-            <span className="text-emerald-500 font-bold">--- Meta (85%)</span>
+          <div className="flex gap-4 text-xs font-semibold">
+            <span className="text-sky-400 flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" /> Cruda
+            </span>
+            <span className="text-purple-400 flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block" /> Oído Real
+              (IRT)
+            </span>
+            <span className="text-emerald-400 flex items-center gap-1.5">
+              <span className="w-3 h-0.5 border-t-2 border-dashed border-emerald-400 inline-block" />{' '}
+              Meta ({MASTERY_THRESHOLDS.MASTERED_MIN}%)
+            </span>
           </div>
         </div>
 
         {recentSessions.length < 2 ? (
-          <div className="h-36 flex items-center justify-center text-xs text-zinc-600 italic">
+          <div className="h-48 flex items-center justify-center text-xs text-zinc-600 italic">
             Completa al menos 2 sesiones para proyectar la curva psicométrica.
           </div>
         ) : (
-          <div className="h-40 w-full relative pt-2">
-            <svg
-              className="w-full h-full overflow-visible"
-              viewBox="0 0 500 100"
-              preserveAspectRatio="none"
-            >
-              {/* Línea de meta 85% */}
-              <line
-                x1="0"
-                y1="15"
-                x2="500"
-                y2="15"
-                stroke="#10b981"
-                strokeDasharray="4 4"
-                strokeWidth="1"
-                opacity="0.6"
-              />
+          <div className="relative pt-2 pb-6">
+            <div className="h-48 w-full relative">
+              <svg
+                className="w-full h-full overflow-visible"
+                viewBox="0 0 600 120"
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  {/* Gradiente Cyan para Precisión Cruda */}
+                  <linearGradient id="cyanAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
+                  </linearGradient>
 
-              {(() => {
-                const pointsRaw = recentSessions.map((s, idx) => {
-                  const x = (idx / (recentSessions.length - 1)) * 500
-                  const y = 100 - (s.accuracyPercentage / 100) * 100
-                  return { x, y }
-                })
-                const pointsNorm = recentPsychometrics.map((p, idx) => {
-                  const x = (idx / Math.max(1, recentPsychometrics.length - 1)) * 500
-                  const y = 100 - (p.normalizedAccuracy / 100) * 100
-                  return { x, y }
-                })
+                  {/* Gradiente Púrpura para Oído Real IRT */}
+                  <linearGradient id="purpleAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c084fc" stopOpacity="0.2" />
+                    <stop offset="100%" stopColor="#c084fc" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
 
-                const pathRaw = pointsRaw
-                  .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
-                  .join(' ')
-                const pathNorm = pointsNorm
-                  .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
-                  .join(' ')
+                {/* Líneas Guía del Eje Y */}
+                {/* 100% */}
+                <line x1="45" y1="10" x2="590" y2="10" stroke="#27272a" strokeWidth="1" />
+                <text x="5" y="13" fill="#71717a" fontSize="9" fontFamily="monospace">
+                  100%
+                </text>
 
-                return (
-                  <>
-                    <path
-                      d={pathNorm}
-                      fill="none"
-                      stroke="#c084fc"
-                      strokeWidth="2"
-                      strokeDasharray="4 4"
-                    />
-                    <path d={pathRaw} fill="none" stroke="#38bdf8" strokeWidth="2.5" />
-                    {pointsRaw.map((p, i) => (
-                      <circle
-                        key={i}
-                        cx={p.x}
-                        cy={p.y}
-                        r="3.5"
-                        fill="#0284c7"
-                        stroke="#38bdf8"
-                        strokeWidth="1.5"
+                {/* 85% (Meta de Maestría) */}
+                <line
+                  x1="45"
+                  y1="26.5"
+                  x2="590"
+                  y2="26.5"
+                  stroke="#10b981"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 4"
+                  opacity="0.7"
+                />
+                <text
+                  x="5"
+                  y="29.5"
+                  fill="#34d399"
+                  fontSize="9"
+                  fontFamily="monospace"
+                  fontWeight="bold"
+                >
+                  85%
+                </text>
+
+                {/* 50% */}
+                <line
+                  x1="45"
+                  y1="65"
+                  x2="590"
+                  y2="65"
+                  stroke="#27272a"
+                  strokeWidth="1"
+                  strokeDasharray="2 2"
+                />
+                <text x="12" y="68" fill="#71717a" fontSize="9" fontFamily="monospace">
+                  50%
+                </text>
+
+                {/* 0% (Eje X Base) */}
+                <line x1="45" y1="115" x2="590" y2="115" stroke="#3f3f46" strokeWidth="1" />
+                <text x="20" y="118" fill="#71717a" fontSize="9" fontFamily="monospace">
+                  0%
+                </text>
+
+                {(() => {
+                  const xStart = 55
+                  const xEnd = 585
+                  const yTop = 10
+                  const yBottom = 115
+                  const ySpan = yBottom - yTop
+
+                  const pointsRaw = recentSessions.map((s, idx) => {
+                    const x =
+                      xStart + (idx / Math.max(1, recentSessions.length - 1)) * (xEnd - xStart)
+                    const y = yBottom - (s.accuracyPercentage / 100) * ySpan
+                    return { x, y, s }
+                  })
+
+                  const pointsNorm = recentSessions.map((s, idx) => {
+                    const psych = recentPsychometrics[idx]
+                    const normAcc = psych ? psych.normalizedAccuracy : s.accuracyPercentage
+                    const x =
+                      xStart + (idx / Math.max(1, recentSessions.length - 1)) * (xEnd - xStart)
+                    const y = yBottom - (normAcc / 100) * ySpan
+                    return { x, y, s, psych, normAcc }
+                  })
+
+                  // Construcción de trazados SVG
+                  const pathRaw = pointsRaw
+                    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+                    .join(' ')
+                  const pathNorm = pointsNorm
+                    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+                    .join(' ')
+
+                  // Áreas sombreadas cerradas
+                  const areaRaw = `${pathRaw} L ${pointsRaw[pointsRaw.length - 1].x} ${yBottom} L ${pointsRaw[0].x} ${yBottom} Z`
+                  const areaNorm = `${pathNorm} L ${pointsNorm[pointsNorm.length - 1].x} ${yBottom} L ${pointsNorm[0].x} ${yBottom} Z`
+
+                  return (
+                    <>
+                      {/* Áreas bajo la curva */}
+                      <path d={areaNorm} fill="url(#purpleAreaGrad)" />
+                      <path d={areaRaw} fill="url(#cyanAreaGrad)" />
+
+                      {/* Líneas de Curva */}
+                      <path
+                        d={pathNorm}
+                        fill="none"
+                        stroke="#c084fc"
+                        strokeWidth="2"
+                        strokeDasharray="4 4"
                       />
-                    ))}
-                  </>
-                )
-              })()}
-            </svg>
+                      <path d={pathRaw} fill="none" stroke="#38bdf8" strokeWidth="2.5" />
+
+                      {/* Puntos Interactivos */}
+                      {pointsRaw.map((p, i) => {
+                        const psych = recentPsychometrics[i]
+                        const normP = pointsNorm[i]
+                        const dateStr = new Date(p.s.createdAt).toLocaleDateString('es-AR', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+
+                        return (
+                          <g key={i} className="cursor-pointer group">
+                            {/* Punto Púrpura (IRT) */}
+                            <circle
+                              cx={normP.x}
+                              cy={normP.y}
+                              r="3.5"
+                              fill="#9333ea"
+                              stroke="#c084fc"
+                              strokeWidth="1.5"
+                            />
+
+                            {/* Punto Cyan (Cruda) */}
+                            <circle
+                              cx={p.x}
+                              cy={p.y}
+                              r="4.5"
+                              fill="#0284c7"
+                              stroke="#38bdf8"
+                              strokeWidth="2"
+                              onMouseEnter={(): void =>
+                                setHoveredPoint({
+                                  x: p.x,
+                                  y: p.y,
+                                  session: p.s,
+                                  psych,
+                                  rawAcc: p.s.accuracyPercentage,
+                                  normAcc: normP.normAcc,
+                                  dateStr
+                                })
+                              }
+                              onMouseLeave={(): void => setHoveredPoint(null)}
+                            />
+
+                            {/* Etiqueta de fecha en el Eje X */}
+                            <text
+                              x={p.x}
+                              y={yBottom + 14}
+                              fill="#71717a"
+                              fontSize="8"
+                              textAnchor="middle"
+                              fontFamily="monospace"
+                            >
+                              {new Date(p.s.createdAt).toLocaleDateString('es-AR', {
+                                day: '2-digit',
+                                month: 'short'
+                              })}
+                            </text>
+                          </g>
+                        )
+                      })}
+                    </>
+                  )
+                })()}
+              </svg>
+
+              {/* HUD FLOTANTE INTERACTIVO AL PASAR EL MOUSE SOBRE UN PUNTO */}
+              {hoveredPoint && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${Math.min(75, Math.max(15, (hoveredPoint.x / 600) * 100))}%`,
+                    top: '-10px',
+                    transform: 'translate(-50%, -100%)'
+                  }}
+                  className="p-3 bg-zinc-950/95 border border-sky-500/60 rounded-xl shadow-2xl text-[11px] font-mono space-y-1 z-30 pointer-events-none whitespace-nowrap"
+                >
+                  <div className="font-bold text-zinc-100 flex justify-between gap-3 border-b border-zinc-800 pb-1">
+                    <span>{hoveredPoint.session.presetName}</span>
+                    <span className="text-zinc-500 text-[10px]">{hoveredPoint.dateStr}</span>
+                  </div>
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span className="text-sky-300">
+                      Cruda: <strong>{hoveredPoint.rawAcc}%</strong>
+                    </span>
+                    <span className="text-purple-300">
+                      Oído Real: <strong>{hoveredPoint.normAcc}%</strong>
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4 text-[10px] text-zinc-400 pt-0.5">
+                    <span>
+                      Latencia: {(hoveredPoint.session.avgResponseTimeMs / 1000).toFixed(2)}s
+                    </span>
+                    <span>{hoveredPoint.psych?.responsesPerMinute || '-'} RPM</span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* 2. HISTOGRAMA DE SESGOS Y ENTROPÍA */}
+      {/* 2. HISTOGRAMA DE SESGOS Y CARGA CONTEXTUAL */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Histograma direccional de errores */}
-        <div className="p-4 bg-zinc-950/80 backdrop-blur-xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl">
+        <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl">
           <div className="flex justify-between items-center text-xs">
             <span className="font-bold text-amber-400">🎯 SESGO DE DESVIACIÓN (-3st a +3st):</span>
             <span className="text-zinc-500 text-[10px]">0st = Centro Tonal Exacto</span>
@@ -151,7 +330,7 @@ function AnalyticsChartsComponent({
                   key={st}
                   className="flex-1 flex flex-col items-center h-full justify-end group"
                 >
-                  <span className="text-[9px] text-zinc-400 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-[10px] text-zinc-400 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {count}
                   </span>
                   <div
@@ -165,7 +344,7 @@ function AnalyticsChartsComponent({
                     style={{ height: `${Math.max(6, heightPercent)}%` }}
                   />
                   <span
-                    className={`text-[10px] mt-1.5 ${isExact ? 'text-emerald-400 font-bold' : 'text-zinc-400'}`}
+                    className={`text-xs mt-1.5 font-bold ${isExact ? 'text-emerald-400' : 'text-zinc-400'}`}
                   >
                     {st > 0 ? `+${st}` : st}
                   </span>
@@ -176,7 +355,7 @@ function AnalyticsChartsComponent({
         </div>
 
         {/* Resistencia a la entropía */}
-        <div className="p-4 bg-zinc-950/80 backdrop-blur-xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl text-xs">
+        <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl text-xs">
           <div className="flex justify-between items-center">
             <span className="font-bold text-purple-400">
               🧠 INCERTIDUMBRE Y ENTROPÍA (SHANNON):
@@ -184,11 +363,11 @@ function AnalyticsChartsComponent({
             <span className="text-zinc-500 text-[10px]">Carga Cognitiva</span>
           </div>
 
-          <div className="space-y-2 pt-1 text-[11px]">
+          <div className="space-y-2 pt-1 text-xs">
             {recentPsychometrics.slice(0, 3).map((p, idx) => (
               <div
                 key={idx}
-                className="p-2.5 bg-zinc-900/90 rounded-xl border border-zinc-800/80 space-y-1"
+                className="p-3 bg-zinc-900/90 rounded-xl border border-zinc-800/80 space-y-1"
               >
                 <div className="flex justify-between text-zinc-200">
                   <span>
@@ -196,7 +375,7 @@ function AnalyticsChartsComponent({
                   </span>
                   <span className="text-sky-400 font-bold">{p.rawAccuracy}% cruda</span>
                 </div>
-                <div className="flex justify-between text-[10px] text-zinc-500">
+                <div className="flex justify-between text-[11px] text-zinc-500 font-mono">
                   <span>Azar base: {p.chanceBaseline}%</span>
                   <span className="text-purple-400 font-bold">
                     Oído Real: {p.normalizedAccuracy}%

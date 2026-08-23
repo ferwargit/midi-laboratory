@@ -35,17 +35,17 @@ export function AnalyticsTabNav({
             key={tab.id}
             type="button"
             onClick={(): void => onSelectTab(tab.id)}
-            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+            className={`h-9 px-3.5 rounded-xl font-medium transition-all duration-150 cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
               active
                 ? tab.id === 'ai_report' ||
                   tab.id === 'ai_consultation' ||
                   tab.id === 'longitudinal'
-                  ? 'bg-purple-600 text-white font-bold shadow-[0_0_15px_rgba(168,85,247,0.35)]'
-                  : 'bg-zinc-800 text-zinc-100 font-bold border border-zinc-700'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  ? 'bg-purple-600 text-white font-bold shadow-[0_0_15px_rgba(168,85,247,0.35)] border border-purple-400/40'
+                  : 'bg-zinc-800 text-zinc-100 font-bold border border-zinc-700 shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
             }`}
           >
-            {tab.label}
+            <span>{tab.label}</span>
           </button>
         )
       })}

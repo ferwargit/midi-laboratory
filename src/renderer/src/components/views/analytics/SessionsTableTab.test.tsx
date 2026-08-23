@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { SessionsTableTab } from './SessionsTableTab'
 import { DetailedSessionAnalysis } from '../../../domain/analytics/historyAnalytics'
 
@@ -81,7 +81,7 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
     expect(screen.getAllByText('Re-testar').length).toBe(2)
   })
 
-  it('al marcar 2 casillas debe aparecer el botón de Comparar con IA Local e invocar onCompareSessionsWithAi', () => {
+  it('al marcar 2 casillas debe aparecer el botón de Comparar con IA Local e invocar onCompareSessionsWithAi', async () => {
     const onCompareSessionsWithAi = vi.fn()
 
     render(
@@ -99,17 +99,21 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
     )
 
     const checkboxes = screen.getAllByRole('checkbox')
-    fireEvent.click(checkboxes[1]) // Fila 1
-    fireEvent.click(checkboxes[2]) // Fila 2
+    await act(async () => {
+      fireEvent.click(checkboxes[1])
+      fireEvent.click(checkboxes[2])
+    })
 
     const compareBtn = screen.getByText(/Comparar con IA Local \(2\)/i)
     expect(compareBtn).toBeDefined()
 
-    fireEvent.click(compareBtn)
+    await act(async () => {
+      fireEvent.click(compareBtn)
+    })
     expect(onCompareSessionsWithAi).toHaveBeenCalledWith(['s_ui_1', 's_ui_2'])
   })
 
-  it('al pulsar el botón de eliminar individual debe abrir el modal y llamar a onDeleteSession', () => {
+  it('al pulsar el botón de eliminar individual debe abrir el modal y llamar a onDeleteSession', async () => {
     const onDeleteSession = vi.fn().mockResolvedValue(undefined)
 
     render(
@@ -126,21 +130,22 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
       />
     )
 
-    // Pulsamos la papelera de la primera fila
     const deleteButtons = screen.getAllByTitle('Eliminar esta sesión de la base de datos')
-    fireEvent.click(deleteButtons[0])
+    await act(async () => {
+      fireEvent.click(deleteButtons[0])
+    })
 
-    // El modal de confirmación debe ser visible
     expect(screen.getByText('¿Eliminar Sesión de Entrenamiento?')).toBeDefined()
 
-    // Confirmamos la eliminación
     const confirmBtn = screen.getByText('Sí, Eliminar')
-    fireEvent.click(confirmBtn)
+    await act(async () => {
+      fireEvent.click(confirmBtn)
+    })
 
     expect(onDeleteSession).toHaveBeenCalledWith('s_ui_1')
   })
 
-  it('al marcar sesiones y pulsar eliminar en lote debe llamar a onDeleteSessions con todos los IDs', () => {
+  it('al marcar sesiones y pulsar eliminar en lote debe llamar a onDeleteSessions con todos los IDs', async () => {
     const onDeleteSessions = vi.fn().mockResolvedValue(undefined)
 
     render(
@@ -157,19 +162,22 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
       />
     )
 
-    // Seleccionamos todas mediante el checkbox maestro
     const masterCheckbox = screen.getByTitle('Seleccionar todas las visibles')
-    fireEvent.click(masterCheckbox)
+    await act(async () => {
+      fireEvent.click(masterCheckbox)
+    })
 
-    // Pulsamos el botón de eliminar seleccionadas en la barra flotante
     const batchDeleteBtn = screen.getByText(/Eliminar Seleccionadas \(2\)/i)
-    fireEvent.click(batchDeleteBtn)
+    await act(async () => {
+      fireEvent.click(batchDeleteBtn)
+    })
 
-    // Modal de confirmación en lote
     expect(screen.getByText('¿Eliminar 2 Sesiones Seleccionadas?')).toBeDefined()
 
     const confirmBtn = screen.getByText('Sí, Eliminar')
-    fireEvent.click(confirmBtn)
+    await act(async () => {
+      fireEvent.click(confirmBtn)
+    })
 
     expect(onDeleteSessions).toHaveBeenCalledWith(['s_ui_1', 's_ui_2'])
   })
