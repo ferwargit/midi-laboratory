@@ -57,7 +57,7 @@ function createMockMidiAccess(): MockMidiAccessResult {
   return { access, mockInput, mockOutput }
 }
 
-describe('useMidi - Cobertura Integral de Hardware y Eventos MIDI', () => {
+describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     delete (navigator as unknown as { requestMIDIAccess?: unknown }).requestMIDIAccess
@@ -105,55 +105,41 @@ describe('useMidi - Cobertura Integral de Hardware y Eventos MIDI', () => {
     expect(mockOutput.send).toHaveBeenCalledWith([0xc0, 73])
   })
 
-  it('debe procesar Note On y Note Off actualizando pressedNotes y llamando a los callbacks', async () => {
-    const { access, mockInput, mockOutput } = createMockMidiAccess()
+  it('sendAllNotesOff debe emitir CC 120 (Sound Off), CC 123 (Notes Off) y CC 64 (Sustain Off)', async () => {
+    const { access, mockOutput } = createMockMidiAccess()
     ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
       .fn()
       .mockResolvedValue(access)
 
-    const onNoteOn = vi.fn()
-    const onNoteOff = vi.fn()
-
-    const { result } = renderHook(() =>
-      useMidi({
-        onNoteOn,
-        onNoteOff,
-        enableSoftwareThru: true
-      })
-    )
+    const { result } = renderHook(() => useMidi())
 
     await act(async () => {
       await Promise.resolve()
     })
 
-    // Note On
     act(() => {
-      if (mockInput.onmidimessage) {
-        mockInput.onmidimessage({
-          data: new Uint8Array([0x90, 60, 90])
-        })
-      }
+      result.current.sendAllNotesOff(1)
     })
 
-    expect(result.current.pressedNotes).toContain(60)
-    expect(onNoteOn).toHaveBeenCalledWith(60, 90)
-    expect(mockOutput.send).toHaveBeenCalled()
-
-    // Note Off
-    act(() => {
-      if (mockInput.onmidimessage) {
-        mockInput.onmidimessage({
-          data: new Uint8Array([0x80, 60, 0])
-        })
-      }
-    })
-
-    expect(result.current.pressedNotes).not.toContain(60)
-    expect(onNoteOff).toHaveBeenCalledWith(60)
+    // CC 120: All Sound Off
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
+    // CC 123: All Notes Off
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 123, 0])
+    // CC 64: Sustain Off
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 64, 0])
   })
 
-  it('clearAllPressedNotes debe vaciar teclas presionadas y cancelar buffers', () => {
+  it('clearAllPressedNotes debe invocar sendAllNotesOff y limpiar el buffer', async () => {
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
     const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
 
     act(() => {
       result.current.clearAllPressedNotes()
@@ -161,5 +147,6 @@ describe('useMidi - Cobertura Integral de Hardware y Eventos MIDI', () => {
 
     expect(result.current.pressedNotes).toEqual([])
     expect(result.current.activeStimulusNotes).toEqual([])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
   })
 })

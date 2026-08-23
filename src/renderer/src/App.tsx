@@ -259,6 +259,11 @@ export default function App(): React.ReactElement {
     }
   }
 
+  const handleSelectMode = (newMode: AppMode): void => {
+    midi.sendAllNotesOff()
+    setAppMode(newMode)
+  }
+
   const isAnySessionActive =
     singleNoteTrainer.isSessionActive ||
     intervalTrainer.isSessionActive ||
@@ -276,7 +281,7 @@ export default function App(): React.ReactElement {
       {/* 1. MASTER TOPBAR */}
       <StudioTopBar
         appMode={appMode}
-        onSelectMode={(m): void => setAppMode(m)}
+        onSelectMode={handleSelectMode}
         isSessionActive={isAnySessionActive}
         visualCueMode={visualCueMode}
         onToggleVisualCue={(m): void => setVisualCueMode(m)}

@@ -32,9 +32,10 @@ export interface UseMidiReturn {
   activeStimulusNotes: number[] // Notas que están sonando por el estímulo de la app
   logs: MidiLogEntry[]
   addLog: (entry: Omit<MidiLogEntry, 'id' | 'time'>) => void
-  sendNote: (noteNumber: number, durationMs?: number, velocity?: number) => void
+  sendNote: (noteNumber: number, durationMs?: number, velocity?: number, channel?: number) => void
   changeProgram: (programNumber: number, channel?: number) => void
   clearAllPressedNotes: () => void
+  sendAllNotesOff: (channel?: number) => void
 }
 
 export function useMidi({
@@ -61,6 +62,7 @@ export function useMidi({
 
   const filterRef = useRef<MidiInputFilter>(new MidiInputFilter(35))
   const hungNotesTimersRef = useRef<Map<number, NodeJS.Timeout>>(new Map())
+  const stimulusTimersRef = useRef<Map<number, NodeJS.Timeout>>(new Map())
   const lastKnownInputNameRef = useRef<string>('UM-ONE')
   const previousConnectionStateRef = useRef<boolean | null>(null)
 
@@ -89,13 +91,52 @@ export function useMidi({
     setLogs((prev) => [...prev.slice(-35), { id: Date.now() + Math.random(), time, ...entry }])
   }, [])
 
+  /**
+   * Envía comando MIDI Panic estándar (CC 120 All Sound Off + CC 123 All Notes Off + CC 64 Sustain Off)
+   * y silencia de forma determinista cualquier nota colgada en el hardware Korg/Roland.
+   */
+  const sendAllNotesOff = useCallback(
+    (channel = 1): void => {
+      // 1. Limpiar todos los temporizadores de Note Off pendientes
+      stimulusTimersRef.current.forEach((t) => clearTimeout(t))
+      stimulusTimersRef.current.clear()
+
+      hungNotesTimersRef.current.forEach((t) => clearTimeout(t))
+      hungNotesTimersRef.current.clear()
+
+      filterRef.current.clearHistory()
+      setPressedNotes([])
+      setActiveStimulusNotes([])
+
+      if (!midiAccess || !selectedOutputId || isDeviceDisconnected) return
+      const outputPort = midiAccess.outputs.get(selectedOutputId)
+      if (!outputPort) return
+
+      const chByte = (channel - 1) & 0x0f
+      const ccStatus = 0xb0 | chByte
+
+      try {
+        // CC 120: All Sound Off (Corte inmediato)
+        outputPort.send([ccStatus, 120, 0])
+        // CC 123: All Notes Off (Liberación de teclas)
+        outputPort.send([ccStatus, 123, 0])
+        // CC 64: Sustain Pedal Off (Evitar resonancia colgada)
+        outputPort.send([ccStatus, 64, 0])
+
+        // Note Off explícito de respaldo para canales estándar
+        for (let note = 36; note <= 84; note++) {
+          outputPort.send([0x80 | chByte, note, 0])
+        }
+      } catch (err) {
+        console.warn('[useMidi] Error al emitir MIDI Panic:', err)
+      }
+    },
+    [midiAccess, selectedOutputId, isDeviceDisconnected]
+  )
+
   const clearAllPressedNotes = useCallback((): void => {
-    setPressedNotes([])
-    setActiveStimulusNotes([])
-    hungNotesTimersRef.current.forEach((t) => clearTimeout(t))
-    hungNotesTimersRef.current.clear()
-    filterRef.current.clearHistory()
-  }, [])
+    sendAllNotesOff()
+  }, [sendAllNotesOff])
 
   const refreshPorts = useCallback((access: MIDIAccess): void => {
     const inPorts: MIDIInput[] = []
@@ -168,6 +209,13 @@ export function useMidi({
       isMounted = false
     }
   }, [refreshPorts])
+
+  // Silenciar el hardware al desmontar el hook
+  useEffect(() => {
+    return (): void => {
+      sendAllNotesOff()
+    }
+  }, [sendAllNotesOff])
 
   useEffect(() => {
     if (!midiAccess || !selectedInputId || isDeviceDisconnected) return
@@ -243,27 +291,44 @@ export function useMidi({
       const outputPort = midiAccess.outputs.get(selectedOutputId)
       if (!outputPort) return
 
+      // Silenciar cualquier tono anterior antes del cambio de parche
+      sendAllNotesOff(channel)
+
       const statusByte = 0xc0 | ((channel - 1) & 0x0f)
       outputPort.send([statusByte, programNumber])
     },
-    [midiAccess, selectedOutputId, isDeviceDisconnected]
+    [midiAccess, selectedOutputId, isDeviceDisconnected, sendAllNotesOff]
   )
 
   const sendNote = useCallback(
-    (noteNumber: number, durationMs = 600, velocity = 100): void => {
+    (noteNumber: number, durationMs = 600, velocity = 100, channel = 1): void => {
       if (!midiAccess || !selectedOutputId || isDeviceDisconnected) return
       const outputPort = midiAccess.outputs.get(selectedOutputId)
       if (!outputPort) return
 
+      const chByte = (channel - 1) & 0x0f
+
+      // Cancelar timer de Note Off previo si esta misma nota ya estaba programada
+      if (stimulusTimersRef.current.has(noteNumber)) {
+        clearTimeout(stimulusTimersRef.current.get(noteNumber)!)
+      }
+
       // Note ON
-      outputPort.send([0x90, noteNumber, velocity])
+      outputPort.send([0x90 | chByte, noteNumber, velocity])
       setActiveStimulusNotes((prev) => (prev.includes(noteNumber) ? prev : [...prev, noteNumber]))
 
-      // Note OFF tras la duración exacta
-      setTimeout(() => {
-        outputPort.send([0x80, noteNumber, 0])
+      // Note OFF tras la duración exacta con registro en Watchdog
+      const timer = setTimeout(() => {
+        try {
+          outputPort.send([0x80 | chByte, noteNumber, 0])
+        } catch {
+          // No-op si el puerto se cerró
+        }
         setActiveStimulusNotes((prev) => prev.filter((n) => n !== noteNumber))
+        stimulusTimersRef.current.delete(noteNumber)
       }, durationMs)
+
+      stimulusTimersRef.current.set(noteNumber, timer)
     },
     [midiAccess, selectedOutputId, isDeviceDisconnected]
   )
@@ -283,6 +348,7 @@ export function useMidi({
     addLog,
     sendNote,
     changeProgram,
-    clearAllPressedNotes
+    clearAllPressedNotes,
+    sendAllNotesOff
   }
 }
