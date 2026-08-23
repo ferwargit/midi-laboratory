@@ -96,13 +96,12 @@ export function sanitizePrescription(
     }
   })
 
-  // Si el texto menciona notas concretas (ej: B4) pero el LLM puso la octava equivocada (ej: B5/83)
+  // Si el texto menciona notas concretas pero el LLM colocó la octava equivocada
   if (mentionedMidiNotes.size > 0 && Array.isArray(p.recommendedNotes)) {
     const correctedNotes = p.recommendedNotes.map((note) => {
-      // Si la nota en el array está a una octava (+12 o -12) de una nota explícitamente nombrada en el texto
       for (const targetMidi of mentionedMidiNotes) {
         if (Math.abs(note - targetMidi) === 12) {
-          return targetMidi // Corrige B5 (83) -> B4 (71)
+          return targetMidi
         }
       }
       return note

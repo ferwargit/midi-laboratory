@@ -456,4 +456,78 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(matched.length).toBe(3)
     expect(matched.map((s) => s.id)).toEqual(['s_legacy_1', 's_canon_1', 's_legacy_2'])
   })
+
+  it('generateDiagnosticReport debe generar devoluciones para precisión intermedia, baja, sesgo agudo y grave', () => {
+    // 1. Sin sesiones registradas
+    const emptyReport = generateDiagnosticReport({
+      modeFilter: 'all',
+      filteredSessionsCount: 0,
+      totalAnswers: 0,
+      totalCorrect: 0,
+      overallAccuracy: 0,
+      normalizedOverallAccuracy: 0,
+      avgEntropyBits: 0,
+      avgResponseTimeMs: 0,
+      fastResponsesCount: 0,
+      mediumResponsesCount: 0,
+      slowResponsesCount: 0,
+      sharpBiasCount: 0,
+      flatBiasCount: 0,
+      topConfusions: [],
+      mostDifficultNotes: [],
+      strongestNotes: [],
+      sessionPsychometricsList: [],
+      longitudinalComparisons: []
+    })
+    expect(emptyReport.executiveSummary).toContain('No se registran sesiones')
+
+    // 2. Nivel Intermedio y sesgo hacia lo grave
+    const flatReport = generateDiagnosticReport({
+      modeFilter: 'single_note',
+      filteredSessionsCount: 2,
+      totalAnswers: 20,
+      totalCorrect: 14,
+      overallAccuracy: 70, // Intermedio
+      normalizedOverallAccuracy: 65,
+      avgEntropyBits: 2.0,
+      avgResponseTimeMs: 3100, // Lento
+      fastResponsesCount: 2,
+      mediumResponsesCount: 4,
+      slowResponsesCount: 14, // >35% lento
+      sharpBiasCount: 1,
+      flatBiasCount: 5, // Sesgo grave dominante
+      topConfusions: [{ expected: 'C4', played: 'B3', count: 3 }],
+      mostDifficultNotes: [{ noteName: 'C4', accuracy: 50, attempts: 6 }],
+      strongestNotes: [],
+      sessionPsychometricsList: [],
+      longitudinalComparisons: []
+    })
+    expect(flatReport.executiveSummary).toContain('INTERMEDIO CONSOLIDADO')
+    expect(flatReport.directionalBiasAnalysis).toContain('SESGO HACIA LO GRAVE')
+    expect(flatReport.cognitiveLatencyAnalysis).toContain('conteo mental')
+
+    // 3. Nivel Formativo
+    const lowReport = generateDiagnosticReport({
+      modeFilter: 'single_note',
+      filteredSessionsCount: 1,
+      totalAnswers: 10,
+      totalCorrect: 4,
+      overallAccuracy: 40, // Formativo
+      normalizedOverallAccuracy: 30,
+      avgEntropyBits: 1.5,
+      avgResponseTimeMs: 1800,
+      fastResponsesCount: 3,
+      mediumResponsesCount: 6,
+      slowResponsesCount: 1,
+      sharpBiasCount: 0,
+      flatBiasCount: 0,
+      topConfusions: [],
+      mostDifficultNotes: [],
+      strongestNotes: [],
+      sessionPsychometricsList: [],
+      longitudinalComparisons: []
+    })
+    expect(lowReport.executiveSummary).toContain('ENTRENAMIENTO FORMATIVO')
+    expect(lowReport.directionalBiasAnalysis).toContain('Sin errores registrados')
+  })
 })

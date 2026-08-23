@@ -86,6 +86,14 @@ describe('ai - Servicios de IA, Prescripción, Tutor y Comparador Multi-Sesión'
     expect(await service.checkConnection()).toBe(false)
   })
 
+  it('analyzeAndPrescribe debe activar fallback si no hay modelo cargado en el servidor', async () => {
+    const service = new LmStudioService('http://127.0.0.1:9999')
+    vi.spyOn(service, 'getLoadedModelId').mockResolvedValue(null)
+
+    const result = await service.analyzeAndPrescribe(mockMetrics)
+    expect(result.source).toBe('algorithmic_fallback')
+  })
+
   it('LmStudioService retorna fallback rápidamente si el puerto no responde sin bloquear la práctica', async () => {
     const fastCircuitBreaker = new CircuitBreaker({
       failureThreshold: 2,

@@ -116,4 +116,29 @@ describe('s4-spaced-repetition - Motor de Repetición Espaciada Leitner / SM-2',
       })
     ).toThrow(/no hay notas/i)
   })
+
+  it('debe degradar inmediatamente a Caja 1 tras un fallo después de haber estado en Caja 3', () => {
+    const strategy = new SpacedRepetitionStrategy()
+    const activeNotes = [60, 62]
+
+    // 3 aciertos (promoción a Caja 3) y luego un fallo (degradación a Caja 1)
+    const history: ExerciseResult[] = [
+      { expectedNote: 60, playedNote: 60, correct: true, semitoneDistance: 0, responseTimeMs: 800 },
+      { expectedNote: 60, playedNote: 60, correct: true, semitoneDistance: 0, responseTimeMs: 800 },
+      { expectedNote: 60, playedNote: 60, correct: true, semitoneDistance: 0, responseTimeMs: 800 },
+      {
+        expectedNote: 60,
+        playedNote: 61,
+        correct: false,
+        semitoneDistance: 1,
+        responseTimeMs: 1600
+      }
+    ]
+
+    const perfs = strategy.getNotePerformances(activeNotes, history)
+    const c4Perf = perfs.get(60)!
+
+    expect(c4Perf.weight).toBe(4.0) // Caja 1
+    expect(c4Perf.lastResultWasCorrect).toBe(false)
+  })
 })

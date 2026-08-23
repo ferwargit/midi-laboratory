@@ -171,8 +171,26 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
     expect(global.fetch).toHaveBeenCalledTimes(2)
   })
 
+  it('askCustomConsultation debe comunicarse vía Electron IPC customAPI si está disponible', async () => {
+    window.customAPI = {
+      checkLmStudioModels: vi.fn().mockResolvedValue('qwen-ipc-model'),
+      chatLmStudio: vi.fn().mockResolvedValue({
+        success: true,
+        model: 'qwen-ipc-model',
+        content: 'Respuesta del tutor vía IPC.'
+      })
+    }
+
+    const service = new LmStudioService()
+    const result = await service.askCustomConsultation('Consulta IPC', mockMetrics)
+
+    expect(result.modelName).toBe('qwen-ipc-model')
+    expect(result.content).toBe('Respuesta del tutor vía IPC.')
+
+    delete (window as unknown as { customAPI?: unknown }).customAPI
+  })
+
   it('askMultiSessionComparison debe transmitir la telemetría cruzada de las sesiones seleccionadas vía IPC', async () => {
-    // @ts-ignore -- Mock temporal de window.customAPI para comparativa multi-sesión
     window.customAPI = {
       checkLmStudioModels: vi.fn().mockResolvedValue('qwen-ipc-model'),
       chatLmStudio: vi.fn().mockResolvedValue({
@@ -188,12 +206,10 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
     expect(result.modelName).toBe('qwen-ipc-model')
     expect(result.content).toBe('Informe comparativo cruzado generado exitosamente por IPC.')
 
-    // @ts-ignore -- Limpieza de window.customAPI
-    delete window.customAPI
+    delete (window as unknown as { customAPI?: unknown }).customAPI
   })
 
-  it('debe comunicarse exitosamente vía Electron IPC customAPI si está disponible', async () => {
-    // @ts-ignore -- Mock temporal de window.customAPI
+  it('debe comunicarse exitosamente vía Electron IPC customAPI en analyzeAndPrescribe', async () => {
     window.customAPI = {
       checkLmStudioModels: vi.fn().mockResolvedValue('qwen-ipc-model'),
       chatLmStudio: vi.fn().mockResolvedValue({
@@ -225,7 +241,6 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
     expect(result.analysisText).toBe('Diagnóstico IPC mock.')
     expect(result.prescription.targetMode).toBe('intervals')
 
-    // @ts-ignore -- Limpieza de window.customAPI
-    delete window.customAPI
+    delete (window as unknown as { customAPI?: unknown }).customAPI
   })
 })
