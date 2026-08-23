@@ -88,6 +88,149 @@ describe('useTrainerCore - Kernel Unificado del Ciclo de Vida de Sesión', () =>
     expect(result.current.sessionHistory.length).toBe(1)
   })
 
+  it('advanceToNextQuestion en modo mastery finaliza y guarda la sesión cuando checkIsMasteryCompleted es true', async () => {
+    const saveSpy = vi
+      .spyOn(useDatabaseStore.getState(), 'saveSession')
+      .mockResolvedValue(undefined)
+    const checkIsMasteryCompleted = vi.fn().mockReturnValue(true)
+
+    const onBuildSessionRecord = vi.fn().mockReturnValue({
+      id: 'sess_mastery_1',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Maestría',
+      totalQuestions: 2,
+      correctAnswers: 2,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 900,
+      durationSeconds: 15
+    })
+
+    const { result } = renderHook(() =>
+      useTrainerCore({
+        onBuildSessionRecord,
+        checkIsMasteryCompleted
+      })
+    )
+
+    act(() => {
+      result.current.startCoreSession({ limitType: 'mastery' })
+      result.current.generateQuestionToken()
+    })
+
+    act(() => {
+      result.current.recordAnswer(
+        { correct: true },
+        {
+          id: 'a1',
+          sessionId: result.current.sessionId,
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 900,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: new Date().toISOString()
+        },
+        true,
+        vi.fn()
+      )
+    })
+
+    const onTriggerNext = vi.fn()
+    act(() => {
+      result.current.advanceToNextQuestion(onTriggerNext)
+    })
+
+    expect(result.current.isSessionActive).toBe(false)
+    expect(result.current.isSessionFinished).toBe(true)
+    expect(onTriggerNext).not.toHaveBeenCalled()
+    expect(saveSpy).toHaveBeenCalledTimes(1)
+
+    saveSpy.mockRestore()
+  })
+
+  it('recordAnswer en modo auto_slow programa el avance automático con el delay de 3500ms', () => {
+    vi.useFakeTimers()
+    const onAdvance = vi.fn()
+
+    const { result } = renderHook(() =>
+      useTrainerCore({
+        defaultAdvanceMode: 'auto_slow',
+        autoAdvanceSlowDelayMs: 3500,
+        onBuildSessionRecord: vi.fn()
+      })
+    )
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken()
+    })
+
+    act(() => {
+      result.current.recordAnswer(
+        { correct: true },
+        {
+          id: 'a1',
+          sessionId: result.current.sessionId,
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 900,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: new Date().toISOString()
+        },
+        true,
+        onAdvance
+      )
+    })
+
+    expect(onAdvance).not.toHaveBeenCalled()
+
+    // A los 2000ms aún no debe haber avanzado
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    expect(onAdvance).not.toHaveBeenCalled()
+
+    // A los 3600ms debe haberse ejecutado
+    act(() => {
+      vi.advanceTimersByTime(1600)
+    })
+    expect(onAdvance).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
+  })
+
+  it('stopCoreSession y resetCoreToConfig invalidan el token y limpian los temporizadores', () => {
+    const { result } = renderHook(() =>
+      useTrainerCore({
+        onBuildSessionRecord: vi.fn()
+      })
+    )
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken()
+    })
+
+    expect(result.current.isSessionActive).toBe(true)
+    expect(result.current.questionToken).not.toBeNull()
+
+    act(() => {
+      result.current.resetCoreToConfig()
+    })
+
+    expect(result.current.isSessionActive).toBe(false)
+    expect(result.current.questionToken).toBeNull()
+  })
+
   it('cuenta regresiva por tiempo finaliza y persiste en base de datos al llegar a 0', async () => {
     vi.useFakeTimers()
     const saveSpy = vi
