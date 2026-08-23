@@ -3,6 +3,20 @@ import { midiNoteToName } from '../music/noteUtils'
 import { EXERCISE_PRESETS } from '../music/presets'
 import { AiExercisePrescription } from '../ai/types'
 
+export const COGNITIVE_LATENCY_THRESHOLDS = {
+  FAST_MAX_MS: 1400, // < 1.4s = Reflejo Inmediato (considerando 500ms de audio + 900ms reacción motora)
+  MEDIUM_MAX_MS: 2800, // 1.4s - 2.8s = Deducción Activa
+  FAST_LABEL: '< 1.4s',
+  MEDIUM_LABEL: '1.4s - 2.8s',
+  SLOW_LABEL: '> 2.8s'
+} as const
+
+export const MASTERY_THRESHOLDS = {
+  MASTERED_MIN: 85, // >= 85% = Dominada (Verde)
+  LEARNING_MIN: 50, // 50% - 84% = En Progreso (Amarillo)
+  CRITICAL_MAX: 50 // < 50% = Crítica / A reforzar (Rojo)
+} as const
+
 export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences'
 export type AnalyticsMasteryFilter = 'all' | 'mastered' | 'learning' | 'critical'
 
@@ -456,8 +470,8 @@ export function computeAnalyticsMetrics(
     let virtualCount = 0
 
     sAnswers.forEach((ans) => {
-      if (ans.responseTimeMs < 1400) sFast++
-      else if (ans.responseTimeMs <= 2800) sMed++
+      if (ans.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) sFast++
+      else if (ans.responseTimeMs <= COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_MAX_MS) sMed++
       else sSlow++
 
       if (!ans.isCorrect) {

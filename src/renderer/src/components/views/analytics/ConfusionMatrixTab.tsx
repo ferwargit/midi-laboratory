@@ -1,5 +1,9 @@
 import React from 'react'
-import { AnalyticsMetrics, AnalyticsModeFilter } from '../../../domain/analytics/historyAnalytics'
+import {
+  AnalyticsMetrics,
+  AnalyticsModeFilter,
+  COGNITIVE_LATENCY_THRESHOLDS
+} from '../../../domain/analytics/historyAnalytics'
 import { Card } from '../../ui/Card'
 
 interface ConfusionMatrixTabProps {
@@ -24,7 +28,7 @@ export function ConfusionMatrixTab({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono">
         {/* Top pares confundidos */}
-        <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-800/80 space-y-2.5">
+        <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-800 space-y-2.5">
           <span className="text-xs font-bold text-rose-400 block uppercase">
             Top Pares Confundidos:
           </span>
@@ -52,8 +56,8 @@ export function ConfusionMatrixTab({
           )}
         </div>
 
-        {/* Distribución de velocidad */}
-        <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-800/80 space-y-3.5 text-xs">
+        {/* Distribución de velocidad cognitiva calibrada */}
+        <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-800 space-y-3.5 text-xs">
           <span className="font-bold text-sky-400 block uppercase">
             Distribución de Velocidad Cognitiva:
           </span>
@@ -61,7 +65,7 @@ export function ConfusionMatrixTab({
             <div>
               <div className="flex justify-between text-[11px] mb-1">
                 <span className="text-emerald-400 font-semibold">
-                  ⚡ Reflejo Inmediato (&lt; 1.2s)
+                  ⚡ Reflejo Inmediato ({COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})
                 </span>
                 <span className="font-bold text-zinc-300">
                   {metrics.fastResponsesCount} respuestas
@@ -80,7 +84,7 @@ export function ConfusionMatrixTab({
             <div>
               <div className="flex justify-between text-[11px] mb-1">
                 <span className="text-amber-400 font-semibold">
-                  🤔 Deducción Activa (1.2s - 2.8s)
+                  🤔 Deducción Activa ({COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL})
                 </span>
                 <span className="font-bold text-zinc-300">
                   {metrics.mediumResponsesCount} respuestas
@@ -98,7 +102,9 @@ export function ConfusionMatrixTab({
 
             <div>
               <div className="flex justify-between text-[11px] mb-1">
-                <span className="text-rose-400 font-semibold">⏳ Inseguridad (&gt; 2.8s)</span>
+                <span className="text-rose-400 font-semibold">
+                  ⏳ Inseguridad ({COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL})
+                </span>
                 <span className="font-bold text-zinc-300">
                   {metrics.slowResponsesCount} respuestas
                 </span>

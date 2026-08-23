@@ -1,4 +1,5 @@
 import React from 'react'
+import { COGNITIVE_LATENCY_THRESHOLDS } from '../../../domain/analytics/historyAnalytics'
 
 export function LatencySpectrumDiagram(): React.ReactElement {
   return (
@@ -24,10 +25,10 @@ export function LatencySpectrumDiagram(): React.ReactElement {
           </div>
         </div>
 
-        {/* Marcadores de tiempo */}
+        {/* Marcadores de tiempo calibrados */}
         <div className="flex justify-between text-[10px] text-zinc-400 px-1 font-mono">
           <span>0.0s</span>
-          <span>1.2s (Umbral de Reflejo)</span>
+          <span>1.4s (Umbral de Reflejo)</span>
           <span>2.8s (Umbral de Fatiga)</span>
           <span>5.0s+</span>
         </div>
@@ -36,7 +37,7 @@ export function LatencySpectrumDiagram(): React.ReactElement {
       <div className="grid grid-cols-3 gap-2 pt-2 text-[11px] font-sans text-zinc-300">
         <div className="p-2.5 bg-zinc-900/80 rounded-xl border border-emerald-800/40 space-y-1">
           <strong className="text-emerald-400 block font-mono text-[10px] uppercase">
-            Zona 1 (&lt; 1.2s)
+            Zona 1 ({COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})
           </strong>
           <span>
             Acceso instantáneo a la imagen mental interna del tono. La nota está totalmente
@@ -45,13 +46,13 @@ export function LatencySpectrumDiagram(): React.ReactElement {
         </div>
         <div className="p-2.5 bg-zinc-900/80 rounded-xl border border-amber-800/40 space-y-1">
           <strong className="text-amber-400 block font-mono text-[10px] uppercase">
-            Zona 2 (1.2s - 2.8s)
+            Zona 2 ({COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL})
           </strong>
           <span>El cerebro realiza cálculo interválico por descarte antes de pulsar la tecla.</span>
         </div>
         <div className="p-2.5 bg-zinc-900/80 rounded-xl border border-rose-800/40 space-y-1">
           <strong className="text-rose-400 block font-mono text-[10px] uppercase">
-            Zona 3 (&gt; 2.8s)
+            Zona 3 ({COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL})
           </strong>
           <span>
             Búsqueda al azar o fatiga auditiva: el oído se satura de armónicos y pierde

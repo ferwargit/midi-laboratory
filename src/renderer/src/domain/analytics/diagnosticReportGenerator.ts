@@ -66,7 +66,7 @@ export function generateDiagnosticReport(metrics: AnalyticsMetrics): DiagnosticR
   let cognitiveLatencyAnalysis = `Tiempo de respuesta promedio: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s. `
 
   if (fastPercent >= 60) {
-    cognitiveLatencyAnalysis += `El ${fastPercent}% de tus respuestas son de REFLEJO INMEDIATO (< 1.2s), indicando una sólida representación mental interna del tono.`
+    cognitiveLatencyAnalysis += `El ${fastPercent}% de tus respuestas son de REFLEJO INMEDIATO (< 1.4s), indicando una sólida representación mental interna del tono.`
   } else if (slowPercent >= 35) {
     cognitiveLatencyAnalysis += `El ${slowPercent}% de tus respuestas requieren más de 2.8s de procesamiento, lo que sugiere que tu cerebro realiza deducción interválica o conteo mental antes de pulsar.`
   } else {

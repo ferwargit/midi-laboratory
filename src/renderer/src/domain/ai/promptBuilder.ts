@@ -14,7 +14,7 @@ export function buildSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
     specializedInstructions = `
 ENFOQUE CLÍNICO PARA NOTA INDIVIDUAL (PITCH DISCRIMINATION):
 - Analiza el sesgo de semitono (+st hacia agudo vs -st hacia grave).
-- Examina la velocidad de reflejo inmediato (<1.2s) vs sobrepensamiento (>2.8s).
+- Examina la velocidad de reflejo inmediato (<1.4s) vs sobrepensamiento (>2.8s).
 - Identifica zonas de incertidumbre en teclas negras (alteraciones) vs teclas blancas (diatónicas).
 - En la prescripción, targetMode DEBE ser 'single_note' y DEBES recomendar un pool de 2 a 8 notas MIDI exactas.`
   } else if (mode === 'intervals') {
@@ -141,7 +141,7 @@ export function buildUserPrompt(
 - Precisión Corregida por Azar (Oído Real Normalizado): ${metrics.normalizedOverallAccuracy}%
 - Entropía Media del Contexto (Incertidumbre del Pool): ${metrics.avgEntropyBits} bits
 - Tiempo Medio de Reacción: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s
-- Respuestas Rápidas (<1.2s): ${metrics.fastResponsesCount} | Medias (1.2-2.8s): ${metrics.mediumResponsesCount} | Lentas (>2.8s): ${metrics.slowResponsesCount}
+- Respuestas Rápidas (<1.4s): ${metrics.fastResponsesCount} | Medias (1.4-2.8s): ${metrics.mediumResponsesCount} | Lentas (>2.8s): ${metrics.slowResponsesCount}
 - Sesgo Hacia lo Agudo (+st): ${metrics.sharpBiasCount} | Sesgo Hacia lo Grave (-st): ${metrics.flatBiasCount}
 - Top Pares de Confusión Recurrentes: ${JSON.stringify(metrics.topConfusions)}
 - Notas con Mayor Dificultad (<80%): ${JSON.stringify(metrics.mostDifficultNotes)}
