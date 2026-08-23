@@ -5,6 +5,7 @@ import { AVAILABLE_STRATEGIES } from '../../domain/adaptation/adaptiveEngine'
 import { StrategyId } from '../../domain/adaptation/types'
 import { INSTRUMENT_CATALOG } from '../../domain/music/instruments'
 import { ADVANCE_MODE_OPTIONS, AdvanceMode, SessionLimitType } from '../../domain/exercise/types'
+import { TONAL_CONTEXT_OPTIONS, TonalContextMode } from '../../domain/music/tonalContext'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -53,7 +54,6 @@ export function SingleNoteView({
     return `Pregunta ${trainer.currentQuestionIndex} de ${trainer.sessionQuestionsCount}`
   }
 
-  // 1. PANTALLA DE RESULTADOS
   if (trainer.isSessionFinished) {
     return (
       <Card className="border-sky-500/30 bg-zinc-900/80 backdrop-blur-2xl space-y-4 shadow-2xl">
@@ -127,7 +127,7 @@ export function SingleNoteView({
 
   return (
     <div className="space-y-3">
-      {/* 2. CABECERA DE SESIÓN (h-14 ESTANDARIZADA) */}
+      {/* CABECERA DE SESIÓN */}
       <div className="flex justify-between items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-lg h-14">
         <div className="flex items-center gap-3 font-mono">
           <span className="px-2 py-0.5 rounded-md bg-sky-950/80 border border-sky-800 text-sky-300 text-xs font-bold">
@@ -163,7 +163,7 @@ export function SingleNoteView({
         </div>
       </div>
 
-      {/* 3. DISPLAY OLED HUD (SOLO VISIBLE CUANDO HAY SESIÓN ACTIVA) */}
+      {/* DISPLAY OLED HUD */}
       {trainer.isSessionActive && (
         <FeedbackPanel
           isWaitingAnswer={trainer.isWaitingAnswer}
@@ -173,7 +173,7 @@ export function SingleNoteView({
         />
       )}
 
-      {/* 4. PIANO HERO CENTRAL (ANCLADO EN POSICIÓN IDÉNTICA) */}
+      {/* PIANO HERO CENTRAL */}
       <div className="space-y-1.5">
         <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1">
           <span>
@@ -199,7 +199,7 @@ export function SingleNoteView({
         />
       </div>
 
-      {/* 5. DECK DE CONFIGURACIÓN */}
+      {/* DECK DE CONFIGURACIÓN CON SELECTOR DE CONTEXTO TONAL */}
       {!trainer.isSessionActive && (
         <Card className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-4 space-y-4 rounded-2xl">
           <div>
@@ -238,7 +238,8 @@ export function SingleNoteView({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-zinc-800/80 text-xs font-mono">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-3 border-t border-zinc-800/80 text-xs font-mono">
+            {/* 1. Timbre */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Timbre / Instrumento:
@@ -256,6 +257,27 @@ export function SingleNoteView({
               </select>
             </div>
 
+            {/* 2. Contexto Tonal / Cadencia */}
+            <div>
+              <label className="block text-xs uppercase text-purple-400 mb-1 font-bold">
+                Contexto Tonal Inicial:
+              </label>
+              <select
+                value={trainer.tonalContextMode}
+                onChange={(e): void =>
+                  trainer.setTonalContextMode(e.target.value as TonalContextMode)
+                }
+                className="w-full bg-zinc-950 border border-purple-800/60 text-purple-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-500 font-semibold"
+              >
+                {TONAL_CONTEXT_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id} title={opt.description}>
+                    {opt.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. Motor */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Motor de Adaptabilidad:
@@ -273,6 +295,7 @@ export function SingleNoteView({
               </select>
             </div>
 
+            {/* 4. Avance */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Modo de Avance:
@@ -290,6 +313,7 @@ export function SingleNoteView({
               </select>
             </div>
 
+            {/* 5. Criterio de Fin */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Criterio de Fin:
@@ -340,7 +364,7 @@ export function SingleNoteView({
         </Card>
       )}
 
-      {/* 6. TELEMETRÍA EN VIVO */}
+      {/* TELEMETRÍA EN VIVO */}
       {trainer.isSessionActive && (
         <div className="grid grid-cols-4 gap-2.5 font-mono text-center select-none">
           <div className="bg-zinc-950/80 p-2.5 rounded-xl border border-zinc-800/80">

@@ -9,13 +9,15 @@ import { evaluateSingleNoteAnswer, calculateSessionStats } from '../domain/exerc
 import { StrategyId, NotePerformance, SelectionDecision } from '../domain/adaptation/types'
 import { createStrategy } from '../domain/adaptation/adaptiveEngine'
 import { InstrumentProfile, getInstrumentById } from '../domain/music/instruments'
+import { resolveNotePresetName } from '../domain/music/presets'
+import { TonalContextMode, getTotalContextDurationMs } from '../domain/music/tonalContext'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
-import { resolveNotePresetName } from '../domain/music/presets'
 
 interface TrainerOptions {
   onPlayStimulus: (noteNumber: number, decision: SelectionDecision) => void
   onInstrumentChanged: (programNumber: number) => void
+  onPlayTonalContext?: (mode: TonalContextMode, rootNote: number) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
 }
 
@@ -37,6 +39,9 @@ export interface UseSingleNoteTrainerReturn {
 
   advanceMode: AdvanceMode
   setAdvanceMode: (mode: AdvanceMode) => void
+
+  tonalContextMode: TonalContextMode
+  setTonalContextMode: (mode: TonalContextMode) => void
 
   selectedStrategyId: StrategyId
   setSelectedStrategyId: (id: StrategyId) => void
@@ -68,6 +73,7 @@ export interface UseSingleNoteTrainerReturn {
 export function useSingleNoteTrainer({
   onPlayStimulus,
   onInstrumentChanged,
+  onPlayTonalContext,
   onTelemetryLog
 }: TrainerOptions): UseSingleNoteTrainerReturn {
   const defaultNotes = [60, 62, 64, 65, 67, 69, 71, 72]
@@ -79,6 +85,7 @@ export function useSingleNoteTrainer({
   const [timeRemainingSeconds, setTimeRemainingSecondsState] = useState<number>(300)
   const [sessionElapsedSeconds, setSessionElapsedSecondsState] = useState<number>(0)
   const [advanceMode, setAdvanceModeState] = useState<AdvanceMode>('smart')
+  const [tonalContextMode, setTonalContextModeState] = useState<TonalContextMode>('none')
   const [selectedStrategyId, setSelectedStrategyIdState] = useState<StrategyId>('adaptive_v1')
   const [selectedInstrumentId, setSelectedInstrumentIdState] =
     useState<string>('acoustic_grand_piano')
@@ -115,6 +122,7 @@ export function useSingleNoteTrainer({
   const timeRemainingRef = useRef<number>(300)
   const sessionElapsedSecondsRef = useRef<number>(0)
   const advanceModeRef = useRef<AdvanceMode>('smart')
+  const tonalContextModeRef = useRef<TonalContextMode>('none')
   const selectedStrategyIdRef = useRef<StrategyId>('adaptive_v1')
   const selectedInstrumentRef = useRef<InstrumentProfile>(getInstrumentById('acoustic_grand_piano'))
 
@@ -133,6 +141,7 @@ export function useSingleNoteTrainer({
 
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sessionCountdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const preRollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const finalizingSessionsRef = useRef<Set<string>>(new Set())
   const finalizeAndSaveSessionRef = useRef<() => Promise<void>>(async () => {})
@@ -229,6 +238,11 @@ export function useSingleNoteTrainer({
     setAdvanceModeState(mode)
   }, [])
 
+  const setTonalContextMode = useCallback((mode: TonalContextMode): void => {
+    tonalContextModeRef.current = mode
+    setTonalContextModeState(mode)
+  }, [])
+
   const setSelectedStrategyId = useCallback((id: StrategyId): void => {
     selectedStrategyIdRef.current = id
     setSelectedStrategyIdState(id)
@@ -272,6 +286,10 @@ export function useSingleNoteTrainer({
   useEffect(() => {
     advanceModeRef.current = advanceMode
   }, [advanceMode])
+
+  useEffect(() => {
+    tonalContextModeRef.current = tonalContextMode
+  }, [tonalContextMode])
 
   useEffect(() => {
     selectedStrategyIdRef.current = selectedStrategyId
@@ -326,6 +344,11 @@ export function useSingleNoteTrainer({
     if (sessionCountdownTimerRef.current) {
       clearInterval(sessionCountdownTimerRef.current)
       sessionCountdownTimerRef.current = null
+    }
+
+    if (preRollTimerRef.current) {
+      clearTimeout(preRollTimerRef.current)
+      preRollTimerRef.current = null
     }
   }, [])
 
@@ -407,7 +430,6 @@ export function useSingleNoteTrainer({
     const finalInstrument = activeSessionInstrumentRef.current
 
     const activePool = activeNotesBufferRef.current
-    // Resolución automática canónica desde la fuente única de verdad
     const contentName = resolveNotePresetName(activePool)
 
     const formatTag =
@@ -494,19 +516,15 @@ export function useSingleNoteTrainer({
 
     if (sessionLimitTypeRef.current === 'time') {
       const initialSeconds = sessionDurationMinutesBufferRef.current * 60
-
       setTimeRemainingSeconds(initialSeconds)
 
       const scheduledSessionId = newSessionId
-
       const interval = setInterval(() => {
         if (sessionIdRef.current !== scheduledSessionId) {
           clearInterval(interval)
-
           if (sessionCountdownTimerRef.current === interval) {
             sessionCountdownTimerRef.current = null
           }
-
           return
         }
 
@@ -515,11 +533,9 @@ export function useSingleNoteTrainer({
 
         if (next <= 0) {
           clearInterval(interval)
-
           if (sessionCountdownTimerRef.current === interval) {
             sessionCountdownTimerRef.current = null
           }
-
           void finalizeAndSaveSessionRef.current()
         }
       }, 1000)
@@ -528,7 +544,21 @@ export function useSingleNoteTrainer({
     }
 
     onInstrumentChanged(selectedInstrumentRef.current.programNumber)
-    triggerNextQuestion(notesToUse)
+
+    // ANCLAJE TONAL DINÁMICO
+    const currentMode = tonalContextModeRef.current
+    const rootNote = notesToUse[0] || 60
+
+    if (currentMode !== 'none' && onPlayTonalContext) {
+      onPlayTonalContext(currentMode, rootNote)
+      const preRollDuration = getTotalContextDurationMs(currentMode, rootNote)
+
+      preRollTimerRef.current = setTimeout(() => {
+        triggerNextQuestion(notesToUse)
+      }, preRollDuration)
+    } else {
+      triggerNextQuestion(notesToUse)
+    }
   }
 
   const advanceToNextQuestion = useCallback((): void => {
@@ -739,6 +769,11 @@ export function useSingleNoteTrainer({
       return advanceModeRef.current
     },
     setAdvanceMode,
+
+    get tonalContextMode() {
+      return tonalContextModeRef.current
+    },
+    setTonalContextMode,
 
     get selectedStrategyId() {
       return selectedStrategyIdRef.current

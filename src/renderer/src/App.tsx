@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { generateMidiRange, midiNoteToName } from './domain/music/noteUtils'
 import { VisualCueMode } from './domain/exercise/visualAudioSync'
+import { TonalContextMode, getTonalContextSteps } from './domain/music/tonalContext'
 import { useMidi } from './hooks/useMidi'
 import { useSingleNoteTrainer } from './hooks/useSingleNoteTrainer'
 import { useIntervalTrainer } from './hooks/useIntervalTrainer'
@@ -37,6 +38,30 @@ export default function App(): React.ReactElement {
     enableSoftwareThru: true
   })
 
+  // Reproductor MIDI de Cadencias y Contexto Tonal Dinámico
+  const playTonalContextMidi = useCallback(
+    (mode: TonalContextMode, rootNote: number): void => {
+      const steps = getTonalContextSteps(mode, rootNote)
+      if (steps.length === 0) return
+
+      let accumulatedDelay = 0
+      midi.addLog({
+        type: 'OUT',
+        message: `🎼 Pre-Roll Tonal activado: ${mode.toUpperCase()} (Raíz: ${midiNoteToName(rootNote)})`
+      })
+
+      steps.forEach((step) => {
+        setTimeout(() => {
+          step.notes.forEach((note) => {
+            midi.sendNote(note, step.durationMs, 85)
+          })
+        }, accumulatedDelay)
+        accumulatedDelay += step.delayAfterMs
+      })
+    },
+    [midi]
+  )
+
   // 1. Modalidad 1: Nota Individual
   const singleNoteTrainer = useSingleNoteTrainer({
     onPlayStimulus: (note, decision) => {
@@ -62,6 +87,7 @@ export default function App(): React.ReactElement {
         message: `🎛️ Cambio de Timbre MIDI Program Change -> ${programNumber}`
       })
     },
+    onPlayTonalContext: playTonalContextMidi,
     onTelemetryLog: (type, message) => {
       midi.addLog({ type, message })
     }
@@ -126,7 +152,6 @@ export default function App(): React.ReactElement {
     sequenceTrainer.handleUserNotePlayed
   ])
 
-  // Atajos de Teclado con filtro inteligente de campos de texto
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       const target = e.target as HTMLElement | null
@@ -137,7 +162,6 @@ export default function App(): React.ReactElement {
           target.tagName === 'SELECT' ||
           target.isContentEditable)
 
-      // Si el usuario está escribiendo en el chat o buscador, no capturar las teclas
       if (isTyping) {
         return
       }
@@ -195,6 +219,15 @@ export default function App(): React.ReactElement {
       singleNoteTrainer.setSessionQuestionsCount(p.questionsCount)
       singleNoteTrainer.setSessionDurationMinutes(p.durationMinutes)
       singleNoteTrainer.setAdvanceMode(p.advanceMode)
+      if (p.tonalAnchorMode) {
+        singleNoteTrainer.setTonalContextMode(
+          p.tonalAnchorMode === 'drone_c'
+            ? 'drone'
+            : p.tonalAnchorMode === 'cadence_preview'
+              ? 'cadence'
+              : 'none'
+        )
+      }
       singleNoteTrainer.startSession(p.recommendedNotes)
     } else if (p.targetMode === 'intervals') {
       setAppMode('intervals')
@@ -231,7 +264,6 @@ export default function App(): React.ReactElement {
   const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
 
   return (
-    // Ampliado a max-w-[1540px] para ocupar con elegancia los monitores panorámicos
     <div className="min-h-screen flex flex-col justify-between p-4 md:p-6 max-w-[1540px] w-full mx-auto space-y-3 font-sans">
       {/* 1. MASTER TOPBAR */}
       <StudioTopBar

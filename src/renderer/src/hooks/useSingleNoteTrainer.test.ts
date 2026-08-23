@@ -86,7 +86,6 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       result.current.startSession([60, 62])
     })
 
-    // Simulamos respuesta tocada desde el ratón virtual
     act(() => {
       result.current.handleUserNotePlayed(60, 'virtual_ui')
     })
@@ -360,6 +359,41 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       expect(savedAnswers[0].inputSource).toBe('midi_hardware')
 
       saveSpy.mockRestore()
+    })
+
+    // TEST DE CADENCIA DINÁMICA
+    it('al activar cadencia previa debe invocar onPlayTonalContext con la nota raíz antes de iniciar la primera pregunta', () => {
+      vi.useFakeTimers()
+      const onPlayStimulus = vi.fn()
+      const onPlayTonalContext = vi.fn()
+
+      const { result } = renderHook(() =>
+        useSingleNoteTrainer({
+          onPlayStimulus,
+          onInstrumentChanged: vi.fn(),
+          onPlayTonalContext
+        })
+      )
+
+      act(() => {
+        result.current.setTonalContextMode('cadence')
+      })
+
+      // Iniciamos sesión con Re (62) como nota raíz
+      act(() => {
+        result.current.startSession([62, 64, 66])
+      })
+
+      // Verifica que se invoque con 'cadence' y la raíz dinámica 62 (Re)
+      expect(onPlayTonalContext).toHaveBeenCalledWith('cadence', 62)
+      expect(onPlayStimulus).toHaveBeenCalledTimes(0)
+
+      act(() => {
+        vi.advanceTimersByTime(2000)
+      })
+
+      expect(onPlayStimulus).toHaveBeenCalledTimes(1)
+      vi.useRealTimers()
     })
   })
 })
