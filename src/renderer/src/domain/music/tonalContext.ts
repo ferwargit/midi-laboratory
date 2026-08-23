@@ -44,31 +44,28 @@ export const TONAL_CONTEXT_OPTIONS: TonalContextOption[] = [
 ]
 
 /**
- * Genera la secuencia armónica I - IV - V7 - I transportada automáticamente a cualquier nota raíz.
+ * Genera la secuencia armónica I - IV - V7 - I con 1000ms de asentamiento tonal antes del primer ejercicio.
  */
 export function generateCadenceSteps(rootMidi = 60): MidiChordStep[] {
-  // Ajuste para registro medio confortable
   const root = rootMidi < 55 ? rootMidi + 12 : rootMidi > 72 ? rootMidi - 12 : rootMidi
 
   return [
-    // I: Acorde Mayor Fundamental (Tónica, 3ªM, 5ªJ)
     { notes: [root, root + 4, root + 7], durationMs: 350, delayAfterMs: 380 },
-    // IV: Subdominante en 2ª Inversión (5ª, Tónica, 3ª)
     { notes: [root - 3, root, root + 5], durationMs: 350, delayAfterMs: 380 },
-    // V7: Dominante con 7ma (Sensible, 2ª, 4ª, 5ª)
     { notes: [root - 1, root + 2, root + 5, root + 7], durationMs: 400, delayAfterMs: 430 },
-    // I: Resolución en Tónica Fundamental
-    { notes: [root, root + 4, root + 7], durationMs: 600, delayAfterMs: 650 }
+    // Resolución con 1000ms de decaimiento y silencio
+    { notes: [root, root + 4, root + 7], durationMs: 650, delayAfterMs: 1650 }
   ]
 }
 
 export function generateTonicStep(rootMidi = 60): MidiChordStep[] {
-  return [{ notes: [rootMidi], durationMs: 800, delayAfterMs: 850 }]
+  // Nota tónica de 800ms + 1000ms de silencio de asentamiento
+  return [{ notes: [rootMidi], durationMs: 800, delayAfterMs: 1800 }]
 }
 
 export function generateDroneStep(rootMidi = 60): MidiChordStep[] {
   const lowRoot = rootMidi >= 60 ? rootMidi - 12 : rootMidi
-  return [{ notes: [lowRoot], durationMs: 1200, delayAfterMs: 1250 }]
+  return [{ notes: [lowRoot], durationMs: 1200, delayAfterMs: 2200 }]
 }
 
 export function getTonalContextSteps(mode: TonalContextMode, rootMidi = 60): MidiChordStep[] {

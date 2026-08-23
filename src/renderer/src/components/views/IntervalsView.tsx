@@ -1,11 +1,11 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { UseIntervalTrainerReturn } from '../../hooks/useIntervalTrainer'
 import { getIntervalDefinition } from '../../domain/music/intervals'
 import { ADVANCE_MODE_OPTIONS, AdvanceMode, SessionLimitType } from '../../domain/exercise/types'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
-import { PianoKeyboard } from '../trainer/PianoKeyboard'
+import { PianoKeyboard, KeyboardVisualTheme } from '../trainer/PianoKeyboard'
 import { IntervalFeedbackPanel } from '../trainer/IntervalFeedbackPanel'
 import { IntervalSummaryCard } from '../trainer/IntervalSummaryCard'
 
@@ -30,6 +30,8 @@ export function IntervalsView({
   stimulusNotes = [],
   onVirtualKeyPress
 }: IntervalsViewProps): React.ReactElement {
+  const [visualTheme, setVisualTheme] = useState<KeyboardVisualTheme>('ghost_neon')
+
   const liveActiveNotes = trainer.isSessionActive
     ? trainer.firstNotePlayed !== null
       ? [trainer.firstNotePlayed]
@@ -46,12 +48,11 @@ export function IntervalsView({
     return `Pregunta ${trainer.currentQuestionIndex} de ${trainer.sessionQuestionsCount}`
   }
 
-  // 1. PANTALLA DE RESULTADOS
   if (trainer.isSessionFinished) {
     return (
       <IntervalSummaryCard
         history={trainer.sessionHistory}
-        onRepeatSession={trainer.startSession}
+        onRepeatSession={(): void => trainer.startSession()}
         onTrainWeakOnly={trainer.trainWeakIntervalsOnly}
         onResetToConfig={trainer.resetToConfig}
       />
@@ -60,7 +61,7 @@ export function IntervalsView({
 
   return (
     <div className="space-y-3">
-      {/* 2. CABECERA DINÁMICA (h-14 ESTANDARIZADA) */}
+      {/* CABECERA DINÁMICA */}
       <div className="flex justify-between items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-lg h-14">
         <div className="flex items-center gap-3 font-mono">
           <span className="px-2 py-0.5 rounded-md bg-sky-950/80 border border-sky-800 text-sky-300 text-xs font-bold">
@@ -96,7 +97,7 @@ export function IntervalsView({
         </div>
       </div>
 
-      {/* 3. DISPLAY OLED HUD (SOLO VISIBLE CUANDO HAY SESIÓN ACTIVA) */}
+      {/* DISPLAY OLED HUD */}
       {trainer.isSessionActive && (
         <IntervalFeedbackPanel
           isSessionActive={trainer.isSessionActive}
@@ -109,7 +110,7 @@ export function IntervalsView({
         />
       )}
 
-      {/* 4. PIANO HERO CENTRAL (ANCLADO EN POSICIÓN IDÉNTICA) */}
+      {/* PIANO HERO CON SELECTOR DE TEMA VISUAL */}
       <div className="space-y-1.5">
         <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1">
           <span>
@@ -119,9 +120,28 @@ export function IntervalsView({
                 : `🎹 PASO 2: [1ª Nota: ${midiNoteToName(trainer.firstNotePlayed!)}] ➔ TOCA LA 2ª NOTA DEL INTERVALO:`
               : `RANGO DE NOTAS BASE DE PARTIDA (${trainer.rootRangeNotes.length} TONOS):`}
           </span>
-          {!trainer.isSessionActive && (
-            <span className="text-xs text-zinc-500">Selecciona las notas base posibles</span>
-          )}
+
+          <div className="flex items-center gap-1 bg-zinc-950/90 p-1 rounded-xl border border-zinc-800/80 text-[10px] select-none">
+            <span className="text-zinc-500 px-1 uppercase font-semibold">Estilo:</span>
+            {[
+              ['ghost_neon', '👻 Silueta'],
+              ['ambient_glow', '✨ Aura'],
+              ['pool_heatmap', '🎨 Pool']
+            ].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={(): void => setVisualTheme(mode as KeyboardVisualTheme)}
+                className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                  visualTheme === mode
+                    ? 'bg-sky-600 text-white shadow-[0_0_8px_rgba(56,189,248,0.4)]'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <PianoKeyboard
@@ -132,10 +152,11 @@ export function IntervalsView({
           isInteractiveTraining={trainer.isSessionActive}
           onPlayNoteVirtual={onVirtualKeyPress}
           onToggleNote={!trainer.isSessionActive ? trainer.toggleRootNote : undefined}
+          visualTheme={visualTheme}
         />
       </div>
 
-      {/* 5. DECK DE CONFIGURACIÓN */}
+      {/* DECK DE CONFIGURACIÓN */}
       {!trainer.isSessionActive && (
         <Card className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-4 space-y-4 rounded-2xl">
           <div>
@@ -279,7 +300,7 @@ export function IntervalsView({
         </Card>
       )}
 
-      {/* 6. TELEMETRÍA EN VIVO */}
+      {/* TELEMETRÍA EN VIVO */}
       {trainer.isSessionActive && (
         <div className="grid grid-cols-3 gap-2.5 font-mono text-center select-none">
           <div className="bg-zinc-950/80 p-2.5 rounded-xl border border-zinc-800/80">

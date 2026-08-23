@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { UseSingleNoteTrainerReturn } from '../../hooks/useSingleNoteTrainer'
 import { EXERCISE_PRESETS } from '../../domain/music/presets'
 import { AVAILABLE_STRATEGIES } from '../../domain/adaptation/adaptiveEngine'
@@ -9,7 +9,7 @@ import { TONAL_CONTEXT_OPTIONS, TonalContextMode } from '../../domain/music/tona
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
-import { PianoKeyboard } from '../trainer/PianoKeyboard'
+import { PianoKeyboard, KeyboardVisualTheme } from '../trainer/PianoKeyboard'
 import { FeedbackPanel } from '../trainer/FeedbackPanel'
 
 interface SingleNoteViewProps {
@@ -33,6 +33,8 @@ export function SingleNoteView({
   stimulusNotes = [],
   onVirtualKeyPress
 }: SingleNoteViewProps): React.ReactElement {
+  const [visualTheme, setVisualTheme] = useState<KeyboardVisualTheme>('ghost_neon')
+
   const weakNotesList = Array.from(trainer.performances.values())
     .filter((p) => p.attempts > 0 && p.accuracyPercentage < 85)
     .map((p) => ({
@@ -72,7 +74,7 @@ export function SingleNoteView({
                 🎯 Reforzar Débiles ({weakNotesList.length})
               </Button>
             )}
-            <Button variant="primary" size="sm" onClick={trainer.startSession}>
+            <Button variant="primary" size="sm" onClick={(): void => trainer.startSession()}>
               🔄 Repetir Sesión
             </Button>
             <Button variant="secondary" size="sm" onClick={trainer.resetToConfig}>
@@ -97,6 +99,7 @@ export function SingleNoteView({
             performances={trainer.performances}
             showHeatmap={true}
             disabled={true}
+            visualTheme={visualTheme}
           />
         </div>
 
@@ -173,7 +176,7 @@ export function SingleNoteView({
         />
       )}
 
-      {/* PIANO HERO CENTRAL */}
+      {/* PIANO HERO CON SELECTOR DE TEMA VISUAL */}
       <div className="space-y-1.5">
         <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1">
           <span>
@@ -181,9 +184,29 @@ export function SingleNoteView({
               ? '🎹 ENTRADA MIDI EN VIVO (TOCA EN EL FP-8 O CLIC VIRTUAL):'
               : `SELECCIÓN DE NOTAS ACTIVAS (${trainer.activeNotes.length} TONOS ACTIVOS):`}
           </span>
-          {!trainer.isSessionActive && (
-            <span className="text-xs text-zinc-500">Haz clic para activar/desactivar notas</span>
-          )}
+
+          {/* SELECTOR DE ESTILO VISUAL DEL PIANO */}
+          <div className="flex items-center gap-1 bg-zinc-950/90 p-1 rounded-xl border border-zinc-800/80 text-[10px] select-none">
+            <span className="text-zinc-500 px-1 uppercase font-semibold">Estilo:</span>
+            {[
+              ['ghost_neon', '👻 Silueta'],
+              ['ambient_glow', '✨ Aura'],
+              ['pool_heatmap', '🎨 Pool']
+            ].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={(): void => setVisualTheme(mode as KeyboardVisualTheme)}
+                className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                  visualTheme === mode
+                    ? 'bg-sky-600 text-white shadow-[0_0_8px_rgba(56,189,248,0.4)]'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <PianoKeyboard
@@ -196,10 +219,11 @@ export function SingleNoteView({
           onToggleNote={!trainer.isSessionActive ? trainer.toggleNote : undefined}
           performances={trainer.isSessionActive ? trainer.performances : undefined}
           showHeatmap={trainer.isSessionActive}
+          visualTheme={visualTheme}
         />
       </div>
 
-      {/* DECK DE CONFIGURACIÓN CON SELECTOR DE CONTEXTO TONAL */}
+      {/* DECK DE CONFIGURACIÓN */}
       {!trainer.isSessionActive && (
         <Card className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-4 space-y-4 rounded-2xl">
           <div>
@@ -257,7 +281,7 @@ export function SingleNoteView({
               </select>
             </div>
 
-            {/* 2. Contexto Tonal / Cadencia */}
+            {/* 2. Contexto Tonal Dinámico */}
             <div>
               <label className="block text-xs uppercase text-purple-400 mb-1 font-bold">
                 Contexto Tonal Inicial:

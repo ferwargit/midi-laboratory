@@ -2,6 +2,8 @@ import React, { useState, memo } from 'react'
 import { isBlackKey, midiNoteToName } from '../../domain/music/noteUtils'
 import { NotePerformance } from '../../domain/adaptation/types'
 
+export type KeyboardVisualTheme = 'ghost_neon' | 'ambient_glow' | 'pool_heatmap'
+
 interface PianoKeyboardProps {
   keys: number[]
   activeNotes?: number[]
@@ -13,6 +15,7 @@ interface PianoKeyboardProps {
   showHeatmap?: boolean
   isInteractiveTraining?: boolean
   disabled?: boolean
+  visualTheme?: KeyboardVisualTheme
 }
 
 function PianoKeyboardComponent({
@@ -25,7 +28,8 @@ function PianoKeyboardComponent({
   performances,
   showHeatmap = false,
   isInteractiveTraining = false,
-  disabled = false
+  disabled = false,
+  visualTheme = 'ghost_neon'
 }: PianoKeyboardProps): React.ReactElement {
   const whiteKeys = keys.filter((k) => !isBlackKey(k))
   const [clickedNote, setClickedNote] = useState<number | null>(null)
@@ -48,18 +52,18 @@ function PianoKeyboardComponent({
   const getKeyStyle = (
     note: number,
     black: boolean
-  ): { bg: string; text: string; dot?: boolean; border?: string } => {
+  ): { bg: string; text: string; dot?: boolean; borderBottom?: string; opacity?: string } => {
     const isPhysicallyPressed = Array.isArray(pressedNotes) && pressedNotes.includes(note)
     const isVirtualClicked = clickedNote === note
     const isCurrentlyActive = isPhysicallyPressed || isVirtualClicked
     const isStimulusPlaying = Array.isArray(stimulusNotes) && stimulusNotes.includes(note)
 
-    // 1. PRIORIDAD: Tecla pulsada por el usuario (Ámbar Neón)
+    // 1. PRIORIDAD MÁXIMA: Tecla pulsada por el usuario (Ámbar Neón)
     if (isCurrentlyActive) {
       return {
         bg: black
-          ? 'bg-amber-400 shadow-[0_0_20px_rgba(251,191,36,1)] brightness-125'
-          : 'bg-amber-300 shadow-[0_0_25px_rgba(251,191,36,1)] brightness-125',
+          ? 'bg-amber-400 shadow-[0_0_25px_rgba(251,191,36,1)] brightness-125'
+          : 'bg-amber-300 shadow-[0_0_28px_rgba(251,191,36,1)] brightness-125',
         text: 'text-zinc-950 font-black'
       }
     }
@@ -68,68 +72,103 @@ function PianoKeyboardComponent({
     if (isStimulusPlaying) {
       return {
         bg: black
-          ? 'bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,1)] brightness-125'
-          : 'bg-cyan-300 shadow-[0_0_25px_rgba(34,211,238,1)] brightness-125',
+          ? 'bg-cyan-400 shadow-[0_0_25px_rgba(34,211,238,1)] brightness-125'
+          : 'bg-cyan-300 shadow-[0_0_28px_rgba(34,211,238,1)] brightness-125',
         text: 'text-zinc-950 font-black'
       }
     }
 
     const isNoteActive = Array.isArray(activeNotes) && activeNotes.includes(note)
 
-    // 3. HEATMAP ANALÍTICO
+    // 3. MODO HEATMAP DURANTE LA SESIÓN / RESUMEN
     if (showHeatmap) {
       const perf = performances?.get(note)
       const attempts = perf?.attempts ?? 0
       const accuracy = perf?.accuracyPercentage ?? 0
 
+      // Si ya tiene intentos evaluados
       if (attempts > 0) {
         if (accuracy >= 85) {
           return {
-            bg: black ? 'bg-emerald-600 shadow-inner' : 'bg-emerald-500 shadow-inner',
+            bg: black
+              ? 'bg-emerald-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.5),0_0_12px_rgba(16,185,129,0.5)]'
+              : 'bg-emerald-500 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.2),0_0_12px_rgba(16,185,129,0.4)]',
             text: 'text-white font-bold'
           }
         }
         if (accuracy >= 50) {
           return {
-            bg: black ? 'bg-amber-600 shadow-inner' : 'bg-amber-400 shadow-inner',
-            text: 'text-zinc-950 font-bold'
+            bg: black
+              ? 'bg-amber-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.5),0_0_12px_rgba(245,158,11,0.5)]'
+              : 'bg-amber-400 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.2),0_0_12px_rgba(245,158,11,0.4)]',
+            text: 'text-zinc-950 font-black'
           }
         }
         return {
-          bg: black ? 'bg-rose-600 shadow-inner' : 'bg-rose-500 shadow-inner',
+          bg: black
+            ? 'bg-rose-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.5),0_0_12px_rgba(244,63,94,0.5)]'
+            : 'bg-rose-500 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.2),0_0_12px_rgba(244,63,94,0.4)]',
           text: 'text-white font-bold'
         }
       }
 
+      // Si es una tecla activa pero aún con 0 intentos: aplicamos el tema visual elegido
       if (isNoteActive) {
+        if (visualTheme === 'ghost_neon') {
+          return {
+            bg: black
+              ? 'bg-gradient-to-b from-zinc-800 via-zinc-900 to-zinc-950 border-b-4 border-sky-400 shadow-[0_4px_12px_rgba(56,189,248,0.3)]'
+              : 'bg-gradient-to-b from-white via-zinc-100 to-zinc-200 border-b-4 border-sky-500 shadow-[0_4px_12px_rgba(56,189,248,0.25)]',
+            text: black ? 'text-white font-bold' : 'text-zinc-950 font-black',
+            dot: true
+          }
+        }
+
+        if (visualTheme === 'ambient_glow') {
+          return {
+            bg: black
+              ? 'bg-gradient-to-b from-zinc-800 to-zinc-950 shadow-[inset_0_4px_10px_rgba(56,189,248,0.5)]'
+              : 'bg-gradient-to-b from-white via-zinc-50 to-zinc-200 shadow-[inset_0_4px_12px_rgba(56,189,248,0.35)]',
+            text: 'text-sky-400 font-black',
+            dot: true
+          }
+        }
+
+        // pool_heatmap
         return {
           bg: black
-            ? 'bg-gradient-to-b from-zinc-800 to-zinc-950 shadow-md'
-            : 'bg-gradient-to-b from-zinc-100 via-zinc-200 to-zinc-300 shadow-sm',
-          text: black ? 'text-zinc-400' : 'text-zinc-700',
-          dot: true
+            ? 'bg-sky-900 border border-sky-500/60 shadow-[0_0_10px_rgba(56,189,248,0.4)]'
+            : 'bg-sky-950/70 border border-sky-500/50 text-sky-200',
+          text: black ? 'text-sky-100 font-bold' : 'text-sky-300 font-bold'
+        }
+      }
+
+      // Teclas inactivas durante la sesión
+      if (visualTheme === 'ghost_neon') {
+        return {
+          bg: black ? 'bg-zinc-900/60 border-zinc-900' : 'bg-zinc-800/40 border-zinc-800/50',
+          text: 'text-zinc-600 font-normal',
+          opacity: 'opacity-25'
         }
       }
 
       return {
-        bg: black
-          ? 'bg-zinc-900 border-zinc-800 text-zinc-600'
-          : 'bg-zinc-300/30 border-zinc-700/30 text-zinc-500',
-        text: black ? 'text-zinc-600' : 'text-zinc-500'
+        bg: black ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-300/30 border-zinc-700/30',
+        text: 'text-zinc-600 font-medium',
+        opacity: 'opacity-40'
       }
     }
 
-    // 4. MODO CONFIGURACIÓN PREVIA (Pool Activo)
+    // 4. MODO CONFIGURACIÓN PREVIA
     if (isNoteActive) {
       return {
         bg: black
-          ? 'bg-sky-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.5),0_0_12px_rgba(2,132,199,0.5)]'
-          : 'bg-sky-400 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.2),0_0_15px_rgba(56,189,248,0.4)]',
+          ? 'bg-sky-600 shadow-[inset_0_-4px_6px_rgba(0,0,0,0.5),0_0_15px_rgba(2,132,199,0.5)]'
+          : 'bg-sky-400 shadow-[inset_0_-6px_8px_rgba(0,0,0,0.2),0_0_18px_rgba(56,189,248,0.4)]',
         text: black ? 'text-white font-bold' : 'text-zinc-950 font-black'
       }
     }
 
-    // 5. ESTADO EN REPOSO ESTÁNDAR
     if (black) {
       return {
         bg: 'bg-gradient-to-b from-zinc-800 via-zinc-900 to-zinc-950 shadow-[0_8px_14px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.15)]',
@@ -166,15 +205,15 @@ function PianoKeyboardComponent({
               disabled={disabled}
               onClick={(): void => handleKeyInteraction(note)}
               title={`${midiNoteToName(note)} (${note})`}
-              className={`relative flex-1 h-full rounded-b-lg border-r border-zinc-400/40 last:border-r-0 flex flex-col justify-end items-center pb-2 transition-all duration-75 cursor-pointer active:translate-y-[2px] ${
+              className={`relative flex-1 h-full rounded-b-lg border-r border-zinc-400/40 last:border-r-0 flex flex-col justify-end items-center pb-2 transition-all duration-100 cursor-pointer active:translate-y-[2px] ${
                 style.bg
-              } ${style.text} ${disabled ? 'cursor-default' : ''}`}
+              } ${style.text} ${style.opacity || 'opacity-100'} ${disabled ? 'cursor-default' : ''}`}
             >
               <span className="text-[10px] md:text-xs font-bold tracking-tighter leading-none">
                 {midiNoteToName(note)}
               </span>
               {style.dot && (
-                <span className="absolute top-2.5 w-2 h-2 rounded-full bg-sky-500 shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
+                <span className="absolute top-2.5 w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)]" />
               )}
             </button>
           )
@@ -202,15 +241,15 @@ function PianoKeyboardComponent({
                   left: `${leftPercent}%`,
                   width: `${blackKeyWidthPercent}%`
                 }}
-                className={`absolute top-0 h-[64%] rounded-b-md z-20 flex flex-col justify-end items-center pb-1.5 transition-all duration-75 cursor-pointer border-x border-b border-black/80 active:translate-y-[2px] ${
+                className={`absolute top-0 h-[64%] rounded-b-md z-20 flex flex-col justify-end items-center pb-1.5 transition-all duration-100 cursor-pointer border-x border-b border-black/80 active:translate-y-[2px] ${
                   style.bg
-                } ${style.text} ${disabled ? 'cursor-default' : ''}`}
+                } ${style.text} ${style.opacity || 'opacity-100'} ${disabled ? 'cursor-default' : ''}`}
               >
                 <span className="text-[8px] md:text-[9px] font-semibold tracking-tight leading-none scale-90">
                   {midiNoteToName(note)}
                 </span>
                 {style.dot && (
-                  <span className="absolute top-2 w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
+                  <span className="absolute top-2 w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,1)]" />
                 )}
               </button>
             )

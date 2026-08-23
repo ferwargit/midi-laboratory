@@ -361,7 +361,6 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       saveSpy.mockRestore()
     })
 
-    // TEST DE CADENCIA DINÁMICA
     it('al activar cadencia previa debe invocar onPlayTonalContext con la nota raíz antes de iniciar la primera pregunta', () => {
       vi.useFakeTimers()
       const onPlayStimulus = vi.fn()
@@ -379,17 +378,16 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
         result.current.setTonalContextMode('cadence')
       })
 
-      // Iniciamos sesión con Re (62) como nota raíz
       act(() => {
         result.current.startSession([62, 64, 66])
       })
 
-      // Verifica que se invoque con 'cadence' y la raíz dinámica 62 (Re)
       expect(onPlayTonalContext).toHaveBeenCalledWith('cadence', 62)
       expect(onPlayStimulus).toHaveBeenCalledTimes(0)
 
+      // Se avanza el pre-roll completo (2.84s + margen)
       act(() => {
-        vi.advanceTimersByTime(2000)
+        vi.advanceTimersByTime(3500)
       })
 
       expect(onPlayStimulus).toHaveBeenCalledTimes(1)
