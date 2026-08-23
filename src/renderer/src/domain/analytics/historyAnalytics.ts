@@ -25,10 +25,12 @@ export interface AnalyticsFilterOptions {
   instrumentId?: string
   strategyId?: string
   presetFilter?: string
-  format?: 'all' | 'time' | 'questions' | 'mastery'
+  format?: string // Soporta: 'all', 'time_all', 'time_1', 'time_3', 'time_5', 'questions_all', 'questions_10', 'mastery', etc.
   mastery?: AnalyticsMasteryFilter
   inputSource?: 'all' | 'hardware' | 'virtual'
   biasFilter?: 'all' | 'sharp' | 'flat' | 'balanced'
+  poolSizeFilter?: string // 'all', '3', '4', '5', '6', '7', '8', '13'
+  isiFilter?: 'all' | 'massed' | 'optimal' | 'spaced'
   searchQuery?: string
 }
 
@@ -66,7 +68,7 @@ export interface DetailedSessionAnalysis {
   inputMethod: 'hardware' | 'virtual' | 'mixed'
   interSessionGapMs: number | null
   interSessionGapLabel: string
-  cpiScore: number // NUEVO: Índice Compuesto de Rendimiento (Puntuación 0 a 1000+)
+  cpiScore: number
 }
 
 export interface LongitudinalComparison {
@@ -102,9 +104,6 @@ export interface AnalyticsMetrics {
   longitudinalComparisons: LongitudinalComparison[]
 }
 
-/**
- * Calcula el Índice Compuesto de Rendimiento Psicoacústico (CPI Score)
- */
 export function calculateSessionCPI(
   normalizedAccuracy: number,
   entropyBits: number,
@@ -114,7 +113,7 @@ export function calculateSessionCPI(
 ): number {
   if (normalizedAccuracy <= 0) return 0
 
-  const entropyFactor = Math.max(0.5, entropyBits / 3.0) // 3 bits (8 notas) es 1.0x
+  const entropyFactor = Math.max(0.5, entropyBits / 3.0)
   const latencySec = Math.max(0.6, avgResponseTimeMs / 1000)
   const speedFactor = Math.max(0.3, Math.min(2.5, (responsesPerMinute / 15.0) * (1.5 / latencySec)))
   const inputFactor = inputMethod === 'hardware' ? 1.0 : inputMethod === 'mixed' ? 0.92 : 0.85
@@ -189,10 +188,12 @@ export function filterSessionsAdvanced(
   filters: AnalyticsFilterOptions
 ): DbSessionRecord[] {
   return sessions.filter((s) => {
+    // 1. Modalidad
     if (filters.mode === 'single_note' && !isSingleNoteSession(s)) return false
     if (filters.mode === 'intervals' && !isIntervalSession(s)) return false
     if (filters.mode === 'sequences' && !isSequenceSession(s)) return false
 
+    // 2. Instrumento
     if (
       filters.instrumentId &&
       filters.instrumentId !== 'all' &&
@@ -201,10 +202,12 @@ export function filterSessionsAdvanced(
       return false
     }
 
+    // 3. Estrategia / Motor
     if (filters.strategyId && filters.strategyId !== 'all' && s.strategyId !== filters.strategyId) {
       return false
     }
 
+    // 4. Preset / Contenido Musical
     if (filters.presetFilter && filters.presetFilter !== 'all') {
       const pName = (s.presetName || '').toLowerCase()
       const target = filters.presetFilter.toLowerCase()
@@ -238,19 +241,87 @@ export function filterSessionsAdvanced(
       }
     }
 
+    // 5. Formato y Duración Quirúrgica
     const name = (s.presetName || '').toLowerCase()
     const isTimed = name.includes('tiempo') || name.includes('cronometrado')
     const isMastery = name.includes('maestría')
 
-    if (filters.format === 'time' && !isTimed) return false
-    if (filters.format === 'mastery' && !isMastery) return false
-    if (filters.format === 'questions' && (isTimed || isMastery)) return false
+    if (filters.format && filters.format !== 'all') {
+      if (filters.format === 'time' || filters.format === 'time_all') {
+        if (!isTimed) return false
+      } else if (filters.format === 'time_1') {
+        if (
+          !isTimed ||
+          (s.durationSeconds !== 59 &&
+            s.durationSeconds !== 60 &&
+            !name.includes('1m') &&
+            !name.includes('1 min'))
+        )
+          return false
+      } else if (filters.format === 'time_3') {
+        if (
+          !isTimed ||
+          (!name.includes('3m') &&
+            !name.includes('3 min') &&
+            (s.durationSeconds < 170 || s.durationSeconds > 190))
+        )
+          return false
+      } else if (filters.format === 'time_5') {
+        if (
+          !isTimed ||
+          (!name.includes('5m') &&
+            !name.includes('5 min') &&
+            (s.durationSeconds < 290 || s.durationSeconds > 310))
+        )
+          return false
+      } else if (filters.format === 'time_10') {
+        if (
+          !isTimed ||
+          (!name.includes('10m') && !name.includes('10 min') && s.durationSeconds < 550)
+        )
+          return false
+      } else if (filters.format === 'questions' || filters.format === 'questions_all') {
+        if (isTimed || isMastery) return false
+      } else if (filters.format === 'questions_5') {
+        if (
+          isTimed ||
+          isMastery ||
+          (s.totalQuestions !== 5 && !name.includes('5 preguntas') && !name.includes('5 ej'))
+        )
+          return false
+      } else if (filters.format === 'questions_10') {
+        if (
+          isTimed ||
+          isMastery ||
+          (s.totalQuestions !== 10 && !name.includes('10 preguntas') && !name.includes('10 ej'))
+        )
+          return false
+      } else if (filters.format === 'questions_20') {
+        if (
+          isTimed ||
+          isMastery ||
+          (s.totalQuestions !== 20 && !name.includes('20 preguntas') && !name.includes('20 ej'))
+        )
+          return false
+      } else if (filters.format === 'mastery') {
+        if (!isMastery) return false
+      }
+    }
 
+    // 6. Carga / Tamaño de Pool
+    if (filters.poolSizeFilter && filters.poolSizeFilter !== 'all') {
+      const targetPool = parseInt(filters.poolSizeFilter, 10)
+      const nominalPool = resolveNominalPoolSize(s, 0)
+      if (nominalPool !== targetPool) return false
+    }
+
+    // 7. Nivel de Dominio
     if (filters.mastery === 'mastered' && s.accuracyPercentage < 85) return false
     if (filters.mastery === 'learning' && (s.accuracyPercentage < 50 || s.accuracyPercentage >= 85))
       return false
     if (filters.mastery === 'critical' && s.accuracyPercentage >= 50) return false
 
+    // 8. Búsqueda por texto
     if (filters.searchQuery && filters.searchQuery.trim().length > 0) {
       const q = filters.searchQuery.toLowerCase()
       const matchName = (s.presetName || '').toLowerCase().includes(q)
@@ -553,7 +624,6 @@ export function computeAnalyticsMetrics(
 
     const gapInfo = gapMap.get(session.id) || { gapMs: null, label: 'Inicio' }
 
-    // CÁLCULO DEL CPI SCORE PSICOACÚSTICO
     const cpiScore = calculateSessionCPI(
       normalizedAccuracy,
       entropyBits,

@@ -24,14 +24,18 @@ interface AnalyticsFilterBarProps {
   onStrategyChange: (id: string) => void
   selectedPreset: string
   onPresetChange: (preset: string) => void
-  selectedFormat: 'all' | 'time' | 'questions' | 'mastery'
-  onFormatChange: (f: 'all' | 'time' | 'questions' | 'mastery') => void
+  selectedFormat: string
+  onFormatChange: (f: string) => void
   selectedMastery: AnalyticsMasteryFilter
   onMasteryChange: (m: AnalyticsMasteryFilter) => void
   selectedInputSource: 'all' | 'hardware' | 'virtual'
   onInputSourceChange: (s: 'all' | 'hardware' | 'virtual') => void
   selectedBias: 'all' | 'sharp' | 'flat' | 'balanced'
   onBiasChange: (b: 'all' | 'sharp' | 'flat' | 'balanced') => void
+  selectedPoolSize: string
+  onPoolSizeChange: (p: string) => void
+  selectedIsi: 'all' | 'massed' | 'optimal' | 'spaced'
+  onIsiChange: (isi: 'all' | 'massed' | 'optimal' | 'spaced') => void
   onResetAllFilters: () => void
 }
 
@@ -56,6 +60,10 @@ export function AnalyticsFilterBar({
   onInputSourceChange,
   selectedBias,
   onBiasChange,
+  selectedPoolSize,
+  onPoolSizeChange,
+  selectedIsi,
+  onIsiChange,
   onResetAllFilters
 }: AnalyticsFilterBarProps): React.ReactElement {
   const [isGuideOpen, setIsGuideOpen] = useState(false)
@@ -68,9 +76,10 @@ export function AnalyticsFilterBar({
     selectedFormat !== 'all' ||
     selectedMastery !== 'all' ||
     selectedInputSource !== 'all' ||
-    selectedBias !== 'all'
+    selectedBias !== 'all' ||
+    selectedPoolSize !== 'all' ||
+    selectedIsi !== 'all'
 
-  // Presets dinámicos según la modalidad activa
   const dynamicPresets =
     modeFilter === 'intervals'
       ? INTERVAL_PRESETS.map((p) => ({ id: p.id, name: p.name }))
@@ -84,7 +93,7 @@ export function AnalyticsFilterBar({
         {/* FILA 1: MODALIDAD PRINCIPAL + GUÍA PSICOACÚSTICA + ESTADO GPU */}
         <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-zinc-500 text-[10px] uppercase font-bold px-1">Modalidad:</span>
+            <span className="text-zinc-500 text-xs uppercase font-bold px-1">Modalidad:</span>
             {(
               [
                 ['all', 'Global'],
@@ -118,9 +127,9 @@ export function AnalyticsFilterBar({
               <span>Guía Psicoacústica</span>
             </button>
 
-            <span className="text-zinc-500 text-[11px] ml-1">LM Studio:</span>
+            <span className="text-zinc-500 text-xs ml-1">LM Studio:</span>
             <span
-              className={`px-2.5 py-0.5 rounded-lg border text-[10px] font-bold ${
+              className={`px-2.5 py-0.5 rounded-lg border text-xs font-bold ${
                 isLmStudioOnline
                   ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
                   : 'bg-amber-950/80 border-amber-500/50 text-amber-300'
@@ -139,8 +148,8 @@ export function AnalyticsFilterBar({
           </div>
         </div>
 
-        {/* FILA 2: BÚSQUEDA Y FILTROS DE CONTENIDO MUSICAL */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-800/80 text-[11px]">
+        {/* FILA 2: BÚSQUEDA, PRESETS, TIMBRES Y MOTORES */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-800/80 text-xs">
           <input
             type="text"
             placeholder="🔍 Buscar por nombre, nota o fecha..."
@@ -152,7 +161,7 @@ export function AnalyticsFilterBar({
           <select
             value={selectedPreset}
             onChange={(e): void => onPresetChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
             <option value="all">🎵 Todos los Presets</option>
             {dynamicPresets.map((p) => (
@@ -166,7 +175,7 @@ export function AnalyticsFilterBar({
           <select
             value={selectedInstrument}
             onChange={(e): void => onInstrumentChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
             <option value="all">🎹 Todos los Timbres</option>
             {INSTRUMENT_CATALOG.map((inst) => (
@@ -179,7 +188,7 @@ export function AnalyticsFilterBar({
           <select
             value={selectedStrategy}
             onChange={(e): void => onStrategyChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
             <option value="all">🧠 Todos los Motores</option>
             {AVAILABLE_STRATEGIES.map((st) => (
@@ -190,19 +199,50 @@ export function AnalyticsFilterBar({
           </select>
         </div>
 
-        {/* FILA 3: FILTROS PSICOMÉTRICOS, ENTRADA, SESGO Y BOTÓN DE RESET */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-[11px]">
+        {/* FILA 3: FORMATO (<optgroup>), CARGA, MAESTRÍA, ENTRADA, SESGO, DESCANSO ISI Y LIMPIEZA */}
+        <div className="grid grid-cols-2 sm:grid-cols-7 gap-2 pt-1 text-xs">
+          {/* 1. Formato con subgrupos de tiempo */}
           <select
             value={selectedFormat}
-            onChange={(e): void => onFormatChange(e.target.value as typeof selectedFormat)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            onChange={(e): void => onFormatChange(e.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500 font-semibold"
           >
             <option value="all">⏱️ Todos los Formatos</option>
-            <option value="time">⏱️ Cronometrado</option>
-            <option value="mastery">🎯 Modo Maestría</option>
-            <option value="questions">🔢 Por Preguntas</option>
+            <optgroup label="⏱️ Cronometrado por Tiempo">
+              <option value="time_all">⏱️ Cualquier Tiempo</option>
+              <option value="time_1">⏱️ Cronometrado 1 min</option>
+              <option value="time_3">⏱️ Cronometrado 3 min</option>
+              <option value="time_5">⏱️ Cronometrado 5 min</option>
+              <option value="time_10">⏱️ Cronometrado 10 min</option>
+            </optgroup>
+            <optgroup label="🔢 Por Volumen de Preguntas">
+              <option value="questions_all">🔢 Cualquier Serie</option>
+              <option value="questions_5">🔢 Bloque 5 preguntas</option>
+              <option value="questions_10">🔢 Bloque 10 preguntas</option>
+              <option value="questions_20">🔢 Bloque 20 preguntas</option>
+            </optgroup>
+            <optgroup label="🎯 Criterios Especiales">
+              <option value="mastery">🎯 Modo Maestría (≥85%)</option>
+            </optgroup>
           </select>
 
+          {/* 2. Carga Contextual / Tamaño de Pool */}
+          <select
+            value={selectedPoolSize}
+            onChange={(e): void => onPoolSizeChange(e.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+          >
+            <option value="all">🧠 Toda Carga (Pool)</option>
+            <option value="3">3 notas (1.58 bits)</option>
+            <option value="4">4 notas (2.00 bits)</option>
+            <option value="5">5 notas (2.32 bits)</option>
+            <option value="6">6 notas (2.58 bits)</option>
+            <option value="7">7 notas (2.81 bits)</option>
+            <option value="8">8 notas (3.00 bits)</option>
+            <option value="13">13 notas (3.70 bits)</option>
+          </select>
+
+          {/* 3. Nivel de Dominio */}
           <select
             value={selectedMastery}
             onChange={(e): void => onMasteryChange(e.target.value as AnalyticsMasteryFilter)}
@@ -216,6 +256,7 @@ export function AnalyticsFilterBar({
             <option value="critical">🔴 Críticas (&lt;{MASTERY_THRESHOLDS.CRITICAL_MAX}%)</option>
           </select>
 
+          {/* 4. Fuente de Entrada */}
           <select
             value={selectedInputSource}
             onChange={(e): void =>
@@ -228,6 +269,7 @@ export function AnalyticsFilterBar({
             <option value="virtual">🖱️ Ratón Virtual</option>
           </select>
 
+          {/* 5. Sesgo Tonal */}
           <select
             value={selectedBias}
             onChange={(e): void => onBiasChange(e.target.value as typeof selectedBias)}
@@ -239,6 +281,19 @@ export function AnalyticsFilterBar({
             <option value="balanced">● Neutro / Equilibrado</option>
           </select>
 
+          {/* 6. Descanso Inter-Sesión (ISI) */}
+          <select
+            value={selectedIsi}
+            onChange={(e): void => onIsiChange(e.target.value as typeof selectedIsi)}
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+          >
+            <option value="all">⏳ Todo Descanso (ISI)</option>
+            <option value="massed">⚠️ Práctica Masiva (&lt; 15 min)</option>
+            <option value="optimal">🌙 Consolidación Óptima (12h - 48h)</option>
+            <option value="spaced">📅 Espaciada Larga (&gt; 48h)</option>
+          </select>
+
+          {/* 7. Botón Limpiar */}
           <button
             type="button"
             disabled={!hasActiveFilters}
@@ -247,7 +302,7 @@ export function AnalyticsFilterBar({
             title="Restablecer todos los filtros a sus valores predeterminados"
           >
             <span>✕</span>
-            <span>Limpiar Filtros</span>
+            <span>Limpiar</span>
           </button>
         </div>
       </div>

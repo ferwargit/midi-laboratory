@@ -54,18 +54,18 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
 
   const [activeTab, setActiveTab] = useState<AnalyticsTabKey>('sessions')
 
-  // Filtros Secundarios y de Estudio
+  // Filtros Secundarios
   const [selectedInstrument, setSelectedInstrument] = useState<string>('all')
   const [selectedStrategy, setSelectedStrategy] = useState<string>('all')
   const [selectedPreset, setSelectedPreset] = useState<string>('all')
-  const [selectedFormat, setSelectedFormat] = useState<'all' | 'time' | 'questions' | 'mastery'>(
-    'all'
-  )
+  const [selectedFormat, setSelectedFormat] = useState<string>('all')
   const [selectedMastery, setSelectedMastery] = useState<AnalyticsMasteryFilter>('all')
   const [selectedInputSource, setSelectedInputSource] = useState<'all' | 'hardware' | 'virtual'>(
     'all'
   )
   const [selectedBias, setSelectedBias] = useState<'all' | 'sharp' | 'flat' | 'balanced'>('all')
+  const [selectedPoolSize, setSelectedPoolSize] = useState<string>('all')
+  const [selectedIsi, setSelectedIsi] = useState<'all' | 'massed' | 'optimal' | 'spaced'>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
 
   // Estado de Ordenamiento
@@ -123,6 +123,8 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     setSelectedMastery('all')
     setSelectedInputSource('all')
     setSelectedBias('all')
+    setSelectedPoolSize('all')
+    setSelectedIsi('all')
   }
 
   const handleSortClick = (column: SortColumnKey): void => {
@@ -132,7 +134,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       setSortKey(column)
       const defaultDescColumns: SortColumnKey[] = [
         'date',
-        'cpi', // Por defecto mayor CPI arriba
+        'cpi',
         'accuracy',
         'normalizedAccuracy',
         'fastPercent',
@@ -153,6 +155,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       presetFilter: selectedPreset,
       format: selectedFormat,
       mastery: selectedMastery,
+      poolSizeFilter: selectedPoolSize,
       searchQuery
     })
     const validIds = new Set(filteredRaw.map((s) => s.id))
@@ -168,6 +171,17 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       list = list.filter((item) => item.dominantBias === selectedBias)
     }
 
+    if (selectedIsi !== 'all') {
+      list = list.filter((item) => {
+        const gap = item.interSessionGapMs
+        if (gap === null) return selectedIsi === 'spaced'
+        if (selectedIsi === 'massed') return gap < 900000 // < 15m
+        if (selectedIsi === 'optimal') return gap >= 43200000 && gap <= 172800000 // 12h-48h
+        if (selectedIsi === 'spaced') return gap > 172800000 // > 48h
+        return true
+      })
+    }
+
     return [...list].sort((a, b) => {
       let comparison = 0
 
@@ -178,6 +192,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           break
         case 'content':
           comparison = (a.session.presetName || '').localeCompare(b.session.presetName || '')
+          break
+        case 'cpi':
+          comparison = a.cpiScore - b.cpiScore
           break
         case 'format': {
           if (a.formatType === 'time' && b.formatType === 'time') {
@@ -221,9 +238,6 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         case 'rpm':
           comparison = a.responsesPerMinute - b.responsesPerMinute
           break
-        case 'cpi':
-          comparison = a.cpiScore - b.cpiScore
-          break
         default:
           comparison = 0
       }
@@ -240,18 +254,18 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     selectedMastery,
     selectedInputSource,
     selectedBias,
+    selectedPoolSize,
+    selectedIsi,
     searchQuery,
     metrics,
     sortKey,
     sortDirection
   ])
 
-  // MANEJADOR DEL COMPARADOR MULTI-SESIÓN CON IA LOCAL
   const handleCompareSessionsWithAi = async (selectedIds: string[]): Promise<void> => {
     const selectedAnalysis = displayedAnalysisList.filter((d) => selectedIds.includes(d.session.id))
     if (selectedAnalysis.length < 2) return
 
-    // Cambiar a la pestaña del Tutor para visualizar la respuesta
     setActiveTab('ai_consultation')
 
     try {
@@ -287,7 +301,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       {/* 1. KPIs Psicométricos Superiores */}
       <AnalyticsKpiCards metrics={metrics} totalFilteredSessions={displayedAnalysisList.length} />
 
-      {/* 2. Barra de Filtros Multidimensionales */}
+      {/* 2. Barra de Filtros Multidimensionales con Sub-Grupos de Tiempo y Carga */}
       <AnalyticsFilterBar
         modeFilter={modeFilter}
         onSelectModeFilter={(m): void => setModeFilter(m, sessions, answers)}
@@ -309,6 +323,10 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         onInputSourceChange={setSelectedInputSource}
         selectedBias={selectedBias}
         onBiasChange={setSelectedBias}
+        selectedPoolSize={selectedPoolSize}
+        onPoolSizeChange={setSelectedPoolSize}
+        selectedIsi={selectedIsi}
+        onIsiChange={setSelectedIsi}
         onResetAllFilters={handleResetAllFilters}
       />
 
