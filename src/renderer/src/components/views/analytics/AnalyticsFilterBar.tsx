@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import {
   AnalyticsModeFilter,
-  AnalyticsMasteryFilter
+  AnalyticsMasteryFilter,
+  MASTERY_THRESHOLDS
 } from '../../../domain/analytics/historyAnalytics'
 import { INSTRUMENT_CATALOG } from '../../../domain/music/instruments'
 import { AVAILABLE_STRATEGIES } from '../../../domain/adaptation/adaptiveEngine'
@@ -208,9 +209,11 @@ export function AnalyticsFilterBar({
             className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
             <option value="all">🎯 Todo Nivel de Éxito</option>
-            <option value="mastered">🟢 Dominadas (≥85%)</option>
-            <option value="learning">🟡 En Progreso (50-85%)</option>
-            <option value="critical">🔴 Críticas (&lt;50%)</option>
+            <option value="mastered">🟢 Dominadas (≥{MASTERY_THRESHOLDS.MASTERED_MIN}%)</option>
+            <option value="learning">
+              🟡 En Progreso ({MASTERY_THRESHOLDS.LEARNING_MIN}-{MASTERY_THRESHOLDS.MASTERED_MIN}%)
+            </option>
+            <option value="critical">🔴 Críticas (&lt;{MASTERY_THRESHOLDS.CRITICAL_MAX}%)</option>
           </select>
 
           <select

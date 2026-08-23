@@ -1,4 +1,4 @@
-import { AnalyticsMetrics } from './historyAnalytics'
+import { AnalyticsMetrics, COGNITIVE_LATENCY_THRESHOLDS } from './historyAnalytics'
 
 export interface DiagnosticReport {
   title: string
@@ -60,15 +60,15 @@ export function generateDiagnosticReport(metrics: AnalyticsMetrics): DiagnosticR
     perceptualDiagnosis += `Principales pares de confusión: ${confList}.`
   }
 
-  // 3. Análisis de Latencia Cognitiva
+  // 3. Análisis de Latencia Cognitiva (Consumiendo la Fuente Única de Verdad)
   const fastPercent = Math.round((metrics.fastResponsesCount / metrics.totalAnswers) * 100)
   const slowPercent = Math.round((metrics.slowResponsesCount / metrics.totalAnswers) * 100)
   let cognitiveLatencyAnalysis = `Tiempo de respuesta promedio: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s. `
 
   if (fastPercent >= 60) {
-    cognitiveLatencyAnalysis += `El ${fastPercent}% de tus respuestas son de REFLEJO INMEDIATO (< 1.4s), indicando una sólida representación mental interna del tono.`
+    cognitiveLatencyAnalysis += `El ${fastPercent}% de tus respuestas son de REFLEJO INMEDIATO (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}), indicando una sólida representación mental interna del tono.`
   } else if (slowPercent >= 35) {
-    cognitiveLatencyAnalysis += `El ${slowPercent}% de tus respuestas requieren más de 2.8s de procesamiento, lo que sugiere que tu cerebro realiza deducción interválica o conteo mental antes de pulsar.`
+    cognitiveLatencyAnalysis += `El ${slowPercent}% de tus respuestas requieren ${COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL} de procesamiento, lo que sugiere que tu cerebro realiza deducción interválica o conteo mental antes de pulsar.`
   } else {
     cognitiveLatencyAnalysis += 'Equilibrio adecuado entre velocidad de decisión y precisión.'
   }

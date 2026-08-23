@@ -83,29 +83,39 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
     expect(metrics.slowResponsesCount).toBe(1) // 3200ms
   })
 
-  it('ConfusionMatrixTab debe renderizar estrictamente < 1.4s y 1.4s - 2.8s', () => {
+  it('ConfusionMatrixTab debe renderizar estrictamente las etiquetas de la SSOT', () => {
     const metrics = computeAnalyticsMetrics([mockSession], mockAnswers, 'all')
     render(<ConfusionMatrixTab modeFilter="single_note" metrics={metrics} />)
 
-    expect(screen.getByText(/Reflejo Inmediato \(< 1.4s\)/i)).toBeDefined()
-    expect(screen.getByText(/Deducción Activa \(1.4s - 2.8s\)/i)).toBeDefined()
+    expect(
+      screen.getByText(
+        new RegExp(`Reflejo Inmediato \\(${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}\\)`, 'i')
+      )
+    ).toBeDefined()
+    expect(
+      screen.getByText(
+        new RegExp(`Deducción Activa \\(${COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL}\\)`, 'i')
+      )
+    ).toBeDefined()
     expect(screen.queryByText(/< 1.2s/i)).toBeNull()
   })
 
-  it('LatencySpectrumDiagram debe renderizar las etiquetas calibradas a 1.4s', () => {
+  it('LatencySpectrumDiagram debe renderizar las etiquetas calibradas desde la SSOT', () => {
     render(<LatencySpectrumDiagram />)
 
-    expect(screen.getByText(/1.4s \(Umbral de Reflejo\)/i)).toBeDefined()
-    expect(screen.getByText(/Zona 1 \(< 1.4s\)/i)).toBeDefined()
+    expect(
+      screen.getByText(new RegExp(`Zona 1 \\(${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}\\)`, 'i'))
+    ).toBeDefined()
     expect(screen.queryByText(/1.2s/i)).toBeNull()
   })
 
-  it('diagnosticReportGenerator y promptBuilder deben contener < 1.4s', () => {
+  it('diagnosticReportGenerator y promptBuilder deben derivar de la constante canónica', () => {
     const metrics = computeAnalyticsMetrics([mockSession], [mockAnswers[0]], 'all')
     const report = generateDiagnosticReport(metrics)
-    expect(report.cognitiveLatencyAnalysis).toContain('< 1.4s')
+    expect(report.cognitiveLatencyAnalysis).toContain(COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL)
 
     const prompt = buildUserPrompt(metrics)
-    expect(prompt).toContain('Respuestas Rápidas (<1.4s)')
+    // Validación usando la constante central
+    expect(prompt).toContain(`Respuestas Rápidas (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})`)
   })
 })

@@ -2,6 +2,9 @@ import React from 'react'
 import { COGNITIVE_LATENCY_THRESHOLDS } from '../../../domain/analytics/historyAnalytics'
 
 export function LatencySpectrumDiagram(): React.ReactElement {
+  const fastLimitSec = (COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS / 1000).toFixed(1)
+  const medLimitSec = (COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_MAX_MS / 1000).toFixed(1)
+
   return (
     <div className="p-4 bg-zinc-950/90 rounded-2xl border border-zinc-800/80 space-y-3 font-mono">
       <div className="flex justify-between items-center text-xs">
@@ -25,11 +28,11 @@ export function LatencySpectrumDiagram(): React.ReactElement {
           </div>
         </div>
 
-        {/* Marcadores de tiempo calibrados */}
+        {/* Marcadores de tiempo dinámicos desde la SSOT */}
         <div className="flex justify-between text-[10px] text-zinc-400 px-1 font-mono">
           <span>0.0s</span>
-          <span>1.4s (Umbral de Reflejo)</span>
-          <span>2.8s (Umbral de Fatiga)</span>
+          <span>{fastLimitSec}s (Umbral de Reflejo)</span>
+          <span>{medLimitSec}s (Umbral de Fatiga)</span>
           <span>5.0s+</span>
         </div>
       </div>

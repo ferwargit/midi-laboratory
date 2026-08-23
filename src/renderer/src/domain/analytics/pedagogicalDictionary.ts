@@ -1,3 +1,5 @@
+import { COGNITIVE_LATENCY_THRESHOLDS } from './historyAnalytics'
+
 export interface PedagogicalConcept {
   id: string
   title: string
@@ -39,8 +41,7 @@ export const PEDAGOGICAL_DICTIONARY: Record<string, PedagogicalConcept> = {
     shortDefinition:
       'Tiempo transcurrido desde que suena el tono hasta que presionas la tecla en tu teclado MIDI.',
     formulaOrCalculation: 'Tiempo de Reacción = Timestamp(Pulsación) - Timestamp(Estímulo)',
-    practicalTakeaway:
-      '< 1.4s: Reflejo directo (tono consolidado). 1.4s - 2.8s: Deducción interválica consciente. > 2.8s: Vacilación, búsqueda al azar o fatiga auditiva.'
+    practicalTakeaway: `${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}: Reflejo directo (tono consolidado). ${COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL}: Deducción interválica consciente. ${COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL}: Vacilación, búsqueda al azar o fatiga auditiva.`
   },
   responses_per_minute: {
     id: 'responses_per_minute',

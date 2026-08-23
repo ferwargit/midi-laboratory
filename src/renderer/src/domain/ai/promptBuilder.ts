@@ -1,4 +1,8 @@
-import { AnalyticsMetrics, AnalyticsModeFilter } from '../analytics/historyAnalytics'
+import {
+  AnalyticsMetrics,
+  AnalyticsModeFilter,
+  COGNITIVE_LATENCY_THRESHOLDS
+} from '../analytics/historyAnalytics'
 import { getConcept } from '../analytics/pedagogicalDictionary'
 import { DbAiConsultationRecord, DbAiReportRecord } from '../database/types'
 
@@ -14,7 +18,7 @@ export function buildSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
     specializedInstructions = `
 ENFOQUE CLÍNICO PARA NOTA INDIVIDUAL (PITCH DISCRIMINATION):
 - Analiza el sesgo de semitono (+st hacia agudo vs -st hacia grave).
-- Examina la velocidad de reflejo inmediato (<1.4s) vs sobrepensamiento (>2.8s).
+- Examina la velocidad de reflejo inmediato (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}) vs sobrepensamiento (${COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL}).
 - Identifica zonas de incertidumbre en teclas negras (alteraciones) vs teclas blancas (diatónicas).
 - En la prescripción, targetMode DEBE ser 'single_note' y DEBES recomendar un pool de 2 a 8 notas MIDI exactas.`
   } else if (mode === 'intervals') {
@@ -111,7 +115,7 @@ export function buildUserPrompt(
     poolNotas: s.poolSize,
     cadenciaRPM: s.responsesPerMinute,
     tiempoMedioMs: s.session.avgResponseTimeMs,
-    reflejoInmediatoPct: `${s.fastPercent}% (<1.4s)`,
+    reflejoInmediatoPct: `${s.fastPercent}% (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})`,
     sesgoDominante:
       s.dominantBias === 'sharp'
         ? 'Hacia lo Agudo (+st)'
@@ -141,7 +145,7 @@ export function buildUserPrompt(
 - Precisión Corregida por Azar (Oído Real Normalizado): ${metrics.normalizedOverallAccuracy}%
 - Entropía Media del Contexto (Incertidumbre del Pool): ${metrics.avgEntropyBits} bits
 - Tiempo Medio de Reacción: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s
-- Respuestas Rápidas (<1.4s): ${metrics.fastResponsesCount} | Medias (1.4-2.8s): ${metrics.mediumResponsesCount} | Lentas (>2.8s): ${metrics.slowResponsesCount}
+- Respuestas Rápidas (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}): ${metrics.fastResponsesCount} | Medias (${COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL}): ${metrics.mediumResponsesCount} | Lentas (${COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL}): ${metrics.slowResponsesCount}
 - Sesgo Hacia lo Agudo (+st): ${metrics.sharpBiasCount} | Sesgo Hacia lo Grave (-st): ${metrics.flatBiasCount}
 - Top Pares de Confusión Recurrentes: ${JSON.stringify(metrics.topConfusions)}
 - Notas con Mayor Dificultad (<80%): ${JSON.stringify(metrics.mostDifficultNotes)}
@@ -210,7 +214,7 @@ PERFIL Y TELEMETRÍA DEL ALUMNO (Contexto clínico):
 - Total Ejercicios: ${metrics.totalAnswers} en ${metrics.filteredSessionsCount} sesiones.
 - Precisión Cruda: ${metrics.overallAccuracy}% | Oído Real IRT: ${metrics.normalizedOverallAccuracy}%
 - Entropía Media: ${metrics.avgEntropyBits} bits.
-- Latencia Media: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s (Reflejo: ${metrics.fastResponsesCount} resp, Deducción: ${metrics.mediumResponsesCount} resp, Fatiga/Lentas: ${metrics.slowResponsesCount} resp).
+- Latencia Media: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s (Reflejo: ${metrics.fastResponsesCount} resp ${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}, Deducción: ${metrics.mediumResponsesCount} resp ${COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL}, Fatiga/Lentas: ${metrics.slowResponsesCount} resp ${COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL}).
 - Sesgos: +st Agudo (${metrics.sharpBiasCount}) vs -st Grave (${metrics.flatBiasCount}).
 - Pares Confundidos: ${JSON.stringify(metrics.topConfusions)}
 - Tonos Críticos: ${JSON.stringify(metrics.mostDifficultNotes)}
@@ -218,9 +222,6 @@ PERFIL Y TELEMETRÍA DEL ALUMNO (Contexto clínico):
 Por favor, respóndele en detalle explicando la teoría y conectándola con sus datos personales.`
 }
 
-/**
- * Construye la secuencia completa de mensajes Multi-Turn con historial conversacional para LM Studio.
- */
 export function buildConversationalMessages(
   userQuery: string,
   metrics: AnalyticsMetrics,
@@ -230,13 +231,11 @@ export function buildConversationalMessages(
 ): ChatMessage[] {
   const messages: ChatMessage[] = []
 
-  // 1. Mensaje de Sistema con directivas y contexto de prescripciones
   messages.push({
     role: 'system',
     content: buildConsultationSystemPrompt(metrics.modeFilter, recentReports)
   })
 
-  // 2. Historial de Diálogos Previos (Últimas 4 consultas en orden cronológico)
   const historySlice = [...pastConsultations]
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     .slice(-4)
@@ -252,7 +251,6 @@ export function buildConversationalMessages(
     })
   })
 
-  // 3. Consulta Actual del Alumno con Telemetría Psicométrica
   messages.push({
     role: 'user',
     content: buildConsultationUserPrompt(userQuery, metrics, conceptId)
