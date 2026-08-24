@@ -80,6 +80,55 @@ describe('adaptiveEngine - Estrategias de selección de ejercicios', () => {
       expect(decision.weightsSnapshot['C4']).toBe(1.0)
       expect(decision.weightsSnapshot['D4']).toBe(1.0)
     })
+
+    it('la matriz de confusión real otorga peso extra solo ante repetición del par específico (>= 2 veces)', () => {
+      const strategy = new AdaptiveV1SelectionStrategy()
+      const activeNotes = [60, 62, 64]
+
+      // Solo 1 error aislado entre 60 y 62 (accidente motor o resbalón)
+      const singleErrorHistory: ExerciseResult[] = [
+        {
+          expectedNote: 60,
+          playedNote: 62,
+          correct: false,
+          semitoneDistance: 2,
+          responseTimeMs: 1200
+        },
+        {
+          expectedNote: 60,
+          playedNote: 60,
+          correct: true,
+          semitoneDistance: 0,
+          responseTimeMs: 1000
+        }
+      ]
+
+      const perfSingle = strategy.getNotePerformances(activeNotes, singleErrorHistory)
+      // 62 no debe recibir el boost de confusión recurrente porque solo ocurrió 1 vez
+      expect(perfSingle.get(62)!.weight).toBe(1.0)
+
+      // 2 errores en el mismo par específico 60 -> 62 (patrón real de confusión)
+      const recurringErrorHistory: ExerciseResult[] = [
+        {
+          expectedNote: 60,
+          playedNote: 62,
+          correct: false,
+          semitoneDistance: 2,
+          responseTimeMs: 1200
+        },
+        {
+          expectedNote: 60,
+          playedNote: 62,
+          correct: false,
+          semitoneDistance: 2,
+          responseTimeMs: 1300
+        }
+      ]
+
+      const perfRecurring = strategy.getNotePerformances(activeNotes, recurringErrorHistory)
+      // Ahora 62 sí recibe el peso extra (+1.5) por confusión recurrente
+      expect(perfRecurring.get(62)!.weight).toBeGreaterThanOrEqual(2.5)
+    })
   })
 
   describe('Simulación de convergencia adaptativa', () => {

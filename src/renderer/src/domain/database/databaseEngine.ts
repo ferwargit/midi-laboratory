@@ -3,7 +3,9 @@ import {
   DbSessionRecord,
   DbAiReportRecord,
   DbAiConsultationRecord,
-  DatabaseSummary
+  DatabaseSummary,
+  DatabaseBackupPayload,
+  ImportResult
 } from './types'
 import {
   isValidSessionRecord,
@@ -117,12 +119,10 @@ export class DatabaseEngine {
 
       const idSet = new Set(sessionIds)
 
-      // 1. Eliminar las sesiones de la tabla principal
       sessionIds.forEach((id) => {
         sessionsStore.delete(id)
       })
 
-      // 2. Borrado en cascada de las respuestas asociadas en exercise_answers
       const cursorRequest = index.openKeyCursor()
       cursorRequest.onsuccess = (): void => {
         const cursor = cursorRequest.result
@@ -287,6 +287,82 @@ export class DatabaseEngine {
       }
 
       request.onerror = (): void => reject(request.error)
+    })
+  }
+
+  async exportDatabase(): Promise<DatabaseBackupPayload> {
+    if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    const summary = await this.getSummary()
+    const sessions = await this.getAllSessions()
+    const answers = await this.getAllAnswers()
+    const aiReports = await this.getAllAiReports()
+    const aiConsultations = await this.getAllAiConsultations()
+
+    return {
+      version: this.getVersion(),
+      exportedAt: new Date().toISOString(),
+      summary,
+      sessions,
+      answers,
+      aiReports,
+      aiConsultations
+    }
+  }
+
+  async importDatabase(
+    backup: DatabaseBackupPayload,
+    mode: 'merge' | 'replace' = 'merge'
+  ): Promise<ImportResult> {
+    if (!this.db) throw new Error('Base de datos no inicializada.')
+
+    if (!backup || typeof backup !== 'object') {
+      throw new Error('Formato de archivo de respaldo inválido.')
+    }
+
+    if (!Array.isArray(backup.sessions) || !Array.isArray(backup.answers)) {
+      throw new Error('El respaldo no contiene colecciones válidas de sesiones o respuestas.')
+    }
+
+    if (mode === 'replace') {
+      await this.clearDatabase()
+    }
+
+    const validSessions = backup.sessions.filter((s) => isValidSessionRecord(s))
+    const validAnswers = backup.answers.filter((a) => isValidAnswerRecord(a))
+    const validReports = (backup.aiReports || []).filter((r) => isValidAiReportRecord(r))
+    const validConsultations = (backup.aiConsultations || []).filter((c) =>
+      isValidAiConsultationRecord(c)
+    )
+
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(
+        [SESSIONS_STORE, ANSWERS_STORE, AI_REPORTS_STORE, AI_CONSULTATIONS_STORE],
+        'readwrite'
+      )
+      const sessionsStore = tx.objectStore(SESSIONS_STORE)
+      const answersStore = tx.objectStore(ANSWERS_STORE)
+      const reportsStore = tx.objectStore(AI_REPORTS_STORE)
+      const consultationsStore = tx.objectStore(AI_CONSULTATIONS_STORE)
+
+      validSessions.forEach((s) => sessionsStore.put(s))
+      validAnswers.forEach((a) => answersStore.put(a))
+      validReports.forEach((r) => reportsStore.put(r))
+      validConsultations.forEach((c) => consultationsStore.put(c))
+
+      tx.oncomplete = (): void => {
+        resolve({
+          success: true,
+          sessionsImported: validSessions.length,
+          answersImported: validAnswers.length,
+          aiReportsImported: validReports.length,
+          aiConsultationsImported: validConsultations.length
+        })
+      }
+
+      tx.onerror = (): void => {
+        reject(new Error(`Error al importar respaldo: ${tx.error?.message}`))
+      }
     })
   }
 

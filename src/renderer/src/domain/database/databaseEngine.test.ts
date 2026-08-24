@@ -305,4 +305,54 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
     await engine.deleteSessions(['s_batch_1', 's_batch_2'])
     expect((await engine.getAllSessions()).length).toBe(0)
   })
+
+  it('exportDatabase e importDatabase deben serializar y restaurar fielmente la base de datos', async () => {
+    const session: DbSessionRecord = {
+      id: 'sess_export_test',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Backup Test',
+      totalQuestions: 2,
+      correctAnswers: 2,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 15
+    }
+
+    const answer: DbAnswerRecord = {
+      id: 'ans_export_test',
+      sessionId: 'sess_export_test',
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 60,
+      isCorrect: true,
+      semitoneDistance: 0,
+      responseTimeMs: 950,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: new Date().toISOString()
+    }
+
+    await engine.saveSession(session, [answer])
+
+    const backup = await engine.exportDatabase()
+    expect(backup.sessions.length).toBe(1)
+    expect(backup.answers.length).toBe(1)
+    expect(backup.sessions[0].id).toBe('sess_export_test')
+
+    // Limpiamos la base
+    await engine.clearDatabase()
+    expect((await engine.getAllSessions()).length).toBe(0)
+
+    // Importamos el backup
+    const importResult = await engine.importDatabase(backup, 'replace')
+    expect(importResult.success).toBe(true)
+    expect(importResult.sessionsImported).toBe(1)
+    expect(importResult.answersImported).toBe(1)
+
+    const restoredSessions = await engine.getAllSessions()
+    expect(restoredSessions.length).toBe(1)
+    expect(restoredSessions[0].id).toBe('sess_export_test')
+  })
 })

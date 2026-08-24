@@ -27,9 +27,9 @@ export interface SingleNoteSessionOptions extends CoreStartSessionOptions {
   instrumentId?: string
 }
 
+export type SingleNoteStartArg = number[] | SingleNoteSessionOptions
+
 export interface UseSingleNoteTrainerReturn {
-  saveError: string | null
-  clearSaveError: () => void
   activeNotes: number[]
   setActiveNotes: (notes: number[]) => void
   toggleNote: (note: number) => void
@@ -59,7 +59,10 @@ export interface UseSingleNoteTrainerReturn {
   sessionElapsedSeconds: number
   stats: SessionStats
   performances: Map<number, NotePerformance>
-  startSession: (overrideConfigOrNotes?: unknown) => void
+  saveError: string | null
+  clearSaveError: () => void
+  startSession: (configOrNotes?: SingleNoteStartArg) => void
+  startWithNotePool: (notes: number[]) => void
   stopSession: () => void
   advanceToNextQuestion: () => void
   repeatCurrentNote: () => void
@@ -139,7 +142,7 @@ export function useSingleNoteTrainer({
         accuracyPercentage: calculatedStats.accuracyPercentage,
         avgResponseTimeMs: calculatedStats.avgResponseTimeMs,
         durationSeconds: totalSeconds,
-        targetMode: 'single_note' // 👈 CANÓNICO
+        targetMode: 'single_note'
       }
     },
     []
@@ -164,8 +167,6 @@ export function useSingleNoteTrainer({
     defaultQuestionsCount: 10,
     defaultDurationMinutes: 5,
     defaultAdvanceMode: 'smart',
-    autoAdvanceFastDelayMs: 1400,
-    autoAdvanceSlowDelayMs: 3500,
     onBuildSessionRecord,
     checkIsMasteryCompleted
   })
@@ -224,7 +225,7 @@ export function useSingleNoteTrainer({
   )
 
   const startSession = useCallback(
-    (overrideConfigOrNotes?: unknown): void => {
+    (configOrNotes?: SingleNoteStartArg): void => {
       if (preRollTimerRef.current) {
         clearTimeout(preRollTimerRef.current)
         preRollTimerRef.current = null
@@ -233,10 +234,12 @@ export function useSingleNoteTrainer({
       let notesToUse = activeNotesBufferRef.current
       let coreOptions: CoreStartSessionOptions | undefined = undefined
 
-      if (Array.isArray(overrideConfigOrNotes) && overrideConfigOrNotes.length > 0) {
-        notesToUse = overrideConfigOrNotes as number[]
-      } else if (overrideConfigOrNotes && typeof overrideConfigOrNotes === 'object') {
-        const opts = overrideConfigOrNotes as SingleNoteSessionOptions
+      if (Array.isArray(configOrNotes)) {
+        if (configOrNotes.length >= 2) {
+          notesToUse = configOrNotes
+        }
+      } else if (configOrNotes && typeof configOrNotes === 'object') {
+        const opts = configOrNotes as SingleNoteSessionOptions
         if (Array.isArray(opts.notes) && opts.notes.length >= 2) {
           notesToUse = opts.notes
         }
@@ -285,6 +288,13 @@ export function useSingleNoteTrainer({
       setSelectedInstrumentId,
       triggerNextQuestion
     ]
+  )
+
+  const startWithNotePool = useCallback(
+    (notes: number[]): void => {
+      startSession(notes)
+    },
+    [startSession]
   )
 
   const advanceToNextQuestion = useCallback((): void => {
@@ -337,7 +347,7 @@ export function useSingleNoteTrainer({
       const result = evaluateSingleNoteAnswer(expected, playedNoteNumber, responseTimeMs)
 
       const answerRecord: DbAnswerRecord = {
-        id: `ans_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        id: `ans_${crypto.randomUUID()}`,
         sessionId: core.sessionId,
         questionIndex: core.currentQuestionIndex,
         expectedNote: expected,
@@ -401,8 +411,6 @@ export function useSingleNoteTrainer({
   }, [performances, startSession])
 
   return {
-    saveError: core.saveError,
-    clearSaveError: core.clearSaveError,
     activeNotes,
     setActiveNotes,
     toggleNote,
@@ -432,7 +440,10 @@ export function useSingleNoteTrainer({
     sessionHistory: core.sessionHistory,
     stats,
     performances,
+    saveError: core.saveError,
+    clearSaveError: core.clearSaveError,
     startSession,
+    startWithNotePool,
     stopSession,
     advanceToNextQuestion,
     repeatCurrentNote,

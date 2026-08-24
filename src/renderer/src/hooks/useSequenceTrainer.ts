@@ -22,9 +22,9 @@ export interface SequenceSessionOptions extends CoreStartSessionOptions {
   length?: number
 }
 
+export type SequenceStartArg = number[] | SequenceSessionOptions
+
 export interface UseSequenceTrainerReturn {
-  saveError: string | null
-  clearSaveError: () => void
   presets: SequencePreset[]
   selectedPresetId: string
   setSelectedPresetId: (id: string) => void
@@ -50,7 +50,10 @@ export interface UseSequenceTrainerReturn {
   capturedNotes: number[]
   lastResult: SequenceExerciseResult | null
   sessionHistory: SequenceExerciseResult[]
-  startSession: (overrideConfigOrNotes?: unknown, overrideLength?: unknown) => void
+  saveError: string | null
+  clearSaveError: () => void
+  startSession: (configOrNotes?: SequenceStartArg, overrideLength?: number) => void
+  startWithSequencePool: (notes: number[], length?: number) => void
   stopSession: () => void
   advanceToNextSequence: () => void
   repeatCurrentSequence: () => void
@@ -119,7 +122,7 @@ export function useSequenceTrainer({
         accuracyPercentage: avgScore,
         avgResponseTimeMs: avgTime,
         durationSeconds: totalSeconds,
-        targetMode: 'sequences' // 👈 CANÓNICO
+        targetMode: 'sequences'
       }
     },
     []
@@ -130,8 +133,6 @@ export function useSequenceTrainer({
     defaultQuestionsCount: 10,
     defaultDurationMinutes: 5,
     defaultAdvanceMode: 'smart',
-    autoAdvanceFastDelayMs: 1800,
-    autoAdvanceSlowDelayMs: 3500,
     onBuildSessionRecord
   })
 
@@ -198,18 +199,20 @@ export function useSequenceTrainer({
   )
 
   const startSession = useCallback(
-    (overrideConfigOrNotes?: unknown, overrideLength?: unknown): void => {
+    (configOrNotes?: SequenceStartArg, overrideLength?: number): void => {
       let notesToUse = customCandidateNotesBufferRef.current
       let lengthToUse = sequenceLengthBufferRef.current
       let coreOptions: CoreStartSessionOptions | undefined = undefined
 
-      if (Array.isArray(overrideConfigOrNotes) && overrideConfigOrNotes.length > 0) {
-        notesToUse = overrideConfigOrNotes as number[]
+      if (Array.isArray(configOrNotes)) {
+        if (configOrNotes.length >= 2) {
+          notesToUse = configOrNotes
+        }
         if (typeof overrideLength === 'number' && overrideLength >= 3) {
           lengthToUse = overrideLength
         }
-      } else if (overrideConfigOrNotes && typeof overrideConfigOrNotes === 'object') {
-        const opts = overrideConfigOrNotes as SequenceSessionOptions
+      } else if (configOrNotes && typeof configOrNotes === 'object') {
+        const opts = configOrNotes as SequenceSessionOptions
         if (Array.isArray(opts.notes) && opts.notes.length >= 2) {
           notesToUse = opts.notes
         }
@@ -230,6 +233,13 @@ export function useSequenceTrainer({
       })
     },
     [core, setCustomCandidateNotes, setSequenceLength, triggerNextSequence]
+  )
+
+  const startWithSequencePool = useCallback(
+    (notes: number[], length?: number): void => {
+      startSession(notes, length)
+    },
+    [startSession]
   )
 
   const advanceToNextSequence = useCallback((): void => {
@@ -276,7 +286,7 @@ export function useSequenceTrainer({
           const result = evaluateSequenceAnswer(seq, updated, responseTimeMs)
 
           const answerRecord: DbAnswerRecord = {
-            id: `ans_seq_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            id: `ans_seq_${crypto.randomUUID()}`,
             sessionId: core.sessionId,
             questionIndex: core.currentQuestionIndex,
             expectedNote: seq[0],
@@ -320,8 +330,6 @@ export function useSequenceTrainer({
   }, [sessionHistory, startSession])
 
   return {
-    saveError: core.saveError,
-    clearSaveError: core.clearSaveError,
     presets: SEQUENCE_PRESETS,
     selectedPresetId,
     setSelectedPresetId,
@@ -347,7 +355,10 @@ export function useSequenceTrainer({
     capturedNotes,
     lastResult: core.lastResult,
     sessionHistory: core.sessionHistory,
+    saveError: core.saveError,
+    clearSaveError: core.clearSaveError,
     startSession,
+    startWithSequencePool,
     stopSession,
     advanceToNextSequence,
     repeatCurrentSequence,

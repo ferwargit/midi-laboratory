@@ -56,13 +56,13 @@ export class RandomSelectionStrategy implements ExerciseSelectionStrategy {
 }
 
 /**
- * Estrategia 2: Motor Adaptativo v1 (Ponderado por Memoria de Errores y Matriz de Confusión)
+ * Estrategia 2: Motor Adaptativo v1 (Ponderado por Memoria de Errores y Matriz de Confusión Real)
  */
 export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
   readonly id: StrategyId = 'adaptive_v1'
   readonly name = 'Adaptativo Inteligente (v1)'
   readonly description =
-    'Prioriza notas con fallos frecuentes, errores recientes y pares de confusión de semitono.'
+    'Prioriza notas con fallos frecuentes, errores recientes y patrones recurrentes de confusión.'
 
   selectNextNote(context: SelectionContext): SelectionDecision {
     const { activeNotes, history, lastPlayedNote } = context
@@ -82,14 +82,12 @@ export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
         ? activeNotes.filter((n) => n !== lastPlayedNote)
         : activeNotes
 
-    // Snapshot de pesos formateado para telemetría
     const weightsSnapshot: Record<string, number> = {}
     activeNotes.forEach((note) => {
       const perf = performances.get(note)
       weightsSnapshot[midiNoteToName(note)] = perf ? Number(perf.weight.toFixed(1)) : 1.0
     })
 
-    // Selección por Ruleta Ponderada
     let totalWeight = 0
     for (const note of candidates) {
       const perf = performances.get(note)
@@ -109,7 +107,6 @@ export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
       randomThreshold -= weight
     }
 
-    // Explicación de la decisión (Telemetría de la IA)
     const perf = performances.get(chosenNote)
     let reason = 'Exploración inicial'
     if (perf && perf.attempts > 0) {
@@ -135,28 +132,34 @@ export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
     activeNotes: number[],
     history: ExerciseResult[]
   ): Map<number, NotePerformance> {
-    return calculateBasePerformances(activeNotes, history, (perf, _, confusions) => {
-      let weight = 1.0
+    return calculateBasePerformances(
+      activeNotes,
+      history,
+      (perf, _recentMistakes, recurrentConfusions) => {
+        let weight = 1.0
 
-      if (perf.attempts === 0) return 1.0
+        if (perf.attempts > 0) {
+          const errorRate = 1 - perf.accuracyPercentage / 100
+          weight += errorRate * 2.5
 
-      const errorRate = 1 - perf.accuracyPercentage / 100
-      weight += errorRate * 2.5
+          if (perf.lastResultWasCorrect === false) {
+            weight += 2.0
+          }
 
-      if (perf.lastResultWasCorrect === false) {
-        weight += 2.0
+          if (perf.accuracyPercentage >= 85 && perf.attempts >= 3) {
+            weight = 0.3
+          }
+        }
+
+        // Matriz de confusión real: si la nota forma parte de un par recurrente (>= 2 veces),
+        // recibe peso extra (+1.5) para que el motor presente ambas notas y resuelva la interferencia
+        if (recurrentConfusions.has(perf.noteNumber)) {
+          weight += 1.5
+        }
+
+        return Math.max(0.2, weight)
       }
-
-      if (confusions.has(perf.noteNumber)) {
-        weight += 1.5
-      }
-
-      if (perf.accuracyPercentage >= 85 && perf.attempts >= 3) {
-        weight = 0.3
-      }
-
-      return Math.max(0.2, weight)
-    })
+    )
   }
 }
 
@@ -166,12 +169,13 @@ function calculateBasePerformances(
   weightCalculator: (
     perf: NotePerformance,
     recentMistakes: Set<number>,
-    confusions: Set<number>
+    recurrentConfusions: Set<number>
   ) => number
 ): Map<number, NotePerformance> {
   const result = new Map<number, NotePerformance>()
   const recentMistakes = new Set<number>()
-  const confusions = new Set<number>()
+  const pairCounts = new Map<string, number>()
+  const recurrentConfusions = new Set<number>()
 
   for (const note of activeNotes) {
     result.set(note, {
@@ -195,13 +199,22 @@ function calculateBasePerformances(
     } else {
       perf.lastResultWasCorrect = false
       recentMistakes.add(item.expectedNote)
-      confusions.add(item.playedNote)
+
+      // Registrar el par específico en la matriz de confusión
+      const pairKey = `${item.expectedNote}_${item.playedNote}`
+      const count = (pairCounts.get(pairKey) || 0) + 1
+      pairCounts.set(pairKey, count)
+
+      if (count >= 2) {
+        recurrentConfusions.add(item.expectedNote)
+        recurrentConfusions.add(item.playedNote)
+      }
     }
     perf.accuracyPercentage = Math.round((perf.correct / perf.attempts) * 100)
   }
 
   for (const [, perf] of result) {
-    perf.weight = weightCalculator(perf, recentMistakes, confusions)
+    perf.weight = weightCalculator(perf, recentMistakes, recurrentConfusions)
   }
 
   return result

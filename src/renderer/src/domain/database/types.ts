@@ -63,3 +63,23 @@ export interface DatabaseSummary {
   overallAvgTimeMs: number
   totalDurationSeconds: number
 }
+
+// NUEVO: Respaldo estructurado e importación
+export interface DatabaseBackupPayload {
+  version: number
+  exportedAt: string
+  summary: DatabaseSummary
+  sessions: DbSessionRecord[]
+  answers: DbAnswerRecord[]
+  aiReports: DbAiReportRecord[]
+  aiConsultations: DbAiConsultationRecord[]
+}
+
+export interface ImportResult {
+  success: boolean
+  sessionsImported: number
+  answersImported: number
+  aiReportsImported: number
+  aiConsultationsImported: number
+  error?: string
+}

@@ -5,7 +5,9 @@ import {
   DbAnswerRecord,
   DbSessionRecord,
   DbAiReportRecord,
-  DbAiConsultationRecord
+  DbAiConsultationRecord,
+  DatabaseBackupPayload,
+  ImportResult
 } from '../domain/database/types'
 import { useAiStore } from './useAiStore'
 
@@ -25,6 +27,8 @@ interface DatabaseState {
   saveAiConsultation: (consultation: DbAiConsultationRecord) => Promise<void>
   clearDatabase: () => Promise<void>
   reloadAllData: () => Promise<void>
+  exportBackupJson: () => Promise<string>
+  importBackupJson: (jsonContent: string, mode?: 'merge' | 'replace') => Promise<ImportResult>
 }
 
 export const useDatabaseStore = create<DatabaseState>((set, get) => ({
@@ -101,6 +105,38 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
     if (!engine) return
     await engine.saveAiConsultation(consultation)
     await reloadAllData()
+  },
+
+  exportBackupJson: async (): Promise<string> => {
+    const { engine } = get()
+    if (!engine) throw new Error('Base de datos no inicializada.')
+    const backup = await engine.exportDatabase()
+    return JSON.stringify(backup, null, 2)
+  },
+
+  importBackupJson: async (
+    jsonContent: string,
+    mode: 'merge' | 'replace' = 'merge'
+  ): Promise<ImportResult> => {
+    const { engine, reloadAllData } = get()
+    if (!engine) throw new Error('Base de datos no inicializada.')
+
+    try {
+      const parsed = JSON.parse(jsonContent) as DatabaseBackupPayload
+      const result = await engine.importDatabase(parsed, mode)
+      await reloadAllData()
+      return result
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      return {
+        success: false,
+        sessionsImported: 0,
+        answersImported: 0,
+        aiReportsImported: 0,
+        aiConsultationsImported: 0,
+        error: errMsg
+      }
+    }
   },
 
   clearDatabase: async (): Promise<void> => {

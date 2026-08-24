@@ -26,9 +26,9 @@ export interface IntervalSessionOptions extends CoreStartSessionOptions {
   directionMode?: DirectionSelection
 }
 
+export type IntervalStartArg = number[] | IntervalSessionOptions
+
 export interface UseIntervalTrainerReturn {
-  saveError: string | null
-  clearSaveError: () => void
   presets: IntervalPreset[]
   selectedPresetId: string
   setSelectedPresetId: (id: string) => void
@@ -58,7 +58,10 @@ export interface UseIntervalTrainerReturn {
   firstNotePlayed: number | null
   lastResult: IntervalExerciseResult | null
   sessionHistory: IntervalExerciseResult[]
-  startSession: (overrideConfigOrIntervals?: unknown, overrideRoots?: unknown) => void
+  saveError: string | null
+  clearSaveError: () => void
+  startSession: (configOrIntervals?: IntervalStartArg, overrideRoots?: number[]) => void
+  startWithIntervalPool: (intervals: number[], roots?: number[]) => void
   stopSession: () => void
   advanceToNextInterval: () => void
   repeatCurrentInterval: () => void
@@ -126,7 +129,7 @@ export function useIntervalTrainer({
         accuracyPercentage: accPercent,
         avgResponseTimeMs: avgTime,
         durationSeconds: totalSeconds,
-        targetMode: 'intervals' // 👈 CANÓNICO
+        targetMode: 'intervals'
       }
     },
     []
@@ -137,8 +140,6 @@ export function useIntervalTrainer({
     defaultQuestionsCount: 10,
     defaultDurationMinutes: 5,
     defaultAdvanceMode: 'smart',
-    autoAdvanceFastDelayMs: 1600,
-    autoAdvanceSlowDelayMs: 3500,
     onBuildSessionRecord
   })
 
@@ -237,18 +238,20 @@ export function useIntervalTrainer({
   )
 
   const startSession = useCallback(
-    (overrideConfigOrIntervals?: unknown, overrideRoots?: unknown): void => {
+    (configOrIntervals?: IntervalStartArg, overrideRoots?: number[]): void => {
       let intervalsToUse = activeIntervalsBufferRef.current
       let rootsToUse = rootRangeNotesBufferRef.current
       let coreOptions: CoreStartSessionOptions | undefined = undefined
 
-      if (Array.isArray(overrideConfigOrIntervals) && overrideConfigOrIntervals.length > 0) {
-        intervalsToUse = overrideConfigOrIntervals as number[]
-        if (Array.isArray(overrideRoots) && overrideRoots.length > 0) {
-          rootsToUse = overrideRoots as number[]
+      if (Array.isArray(configOrIntervals)) {
+        if (configOrIntervals.length > 0) {
+          intervalsToUse = configOrIntervals
         }
-      } else if (overrideConfigOrIntervals && typeof overrideConfigOrIntervals === 'object') {
-        const opts = overrideConfigOrIntervals as IntervalSessionOptions
+        if (Array.isArray(overrideRoots) && overrideRoots.length > 0) {
+          rootsToUse = overrideRoots
+        }
+      } else if (configOrIntervals && typeof configOrIntervals === 'object') {
+        const opts = configOrIntervals as IntervalSessionOptions
         if (Array.isArray(opts.intervals) && opts.intervals.length > 0) {
           intervalsToUse = opts.intervals
         }
@@ -274,6 +277,13 @@ export function useIntervalTrainer({
       })
     },
     [core, setActiveIntervals, setRootRangeNotes, setDirectionMode, triggerNextInterval]
+  )
+
+  const startWithIntervalPool = useCallback(
+    (intervals: number[], roots?: number[]): void => {
+      startSession(intervals, roots)
+    },
+    [startSession]
   )
 
   const advanceToNextInterval = useCallback((): void => {
@@ -325,7 +335,7 @@ export function useIntervalTrainer({
         const result = evaluateIntervalAnswer(stim, playedPair, responseTimeMs)
 
         const answerRecord: DbAnswerRecord = {
-          id: `ans_int_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          id: `ans_int_${crypto.randomUUID()}`,
           sessionId: core.sessionId,
           questionIndex: core.currentQuestionIndex,
           expectedNote: stim.targetNote,
@@ -371,8 +381,6 @@ export function useIntervalTrainer({
   }, [sessionHistory, startSession])
 
   return {
-    saveError: core.saveError,
-    clearSaveError: core.clearSaveError,
     presets: INTERVAL_PRESETS,
     selectedPresetId,
     setSelectedPresetId,
@@ -402,7 +410,10 @@ export function useIntervalTrainer({
     firstNotePlayed,
     lastResult: core.lastResult,
     sessionHistory: core.sessionHistory,
+    saveError: core.saveError,
+    clearSaveError: core.clearSaveError,
     startSession,
+    startWithIntervalPool,
     stopSession,
     advanceToNextInterval,
     repeatCurrentInterval,

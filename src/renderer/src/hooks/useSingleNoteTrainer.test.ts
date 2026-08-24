@@ -204,7 +204,7 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       expect(result.current.currentQuestionIndex).toBe(1)
 
       act(() => {
-        vi.advanceTimersByTime(1400)
+        vi.advanceTimersByTime(1600)
       })
 
       expect(result.current.currentQuestionIndex).toBe(2)
