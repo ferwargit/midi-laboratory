@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { useDatabaseStore } from './useDatabaseStore'
 import { useAiStore } from './useAiStore'
+import { DatabaseEngine } from '../domain/database/databaseEngine'
 import {
   DbSessionRecord,
   DbAiReportRecord,
@@ -11,6 +12,8 @@ import {
 
 describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Cascada', () => {
   beforeEach(async () => {
+    vi.restoreAllMocks()
+    useDatabaseStore.setState({ isInitialized: false, engine: null })
     await useDatabaseStore.getState().initialize()
     await useDatabaseStore.getState().clearDatabase()
   })
@@ -24,6 +27,25 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(state.answers).toEqual([])
     expect(state.aiReports).toEqual([])
     expect(state.aiConsultations).toEqual([])
+  })
+
+  it('si initialize se llama cuando isInitialized es true, debe retornar inmediatamente', async () => {
+    const initSpy = vi.spyOn(DatabaseEngine.prototype, 'initialize')
+    await useDatabaseStore.getState().initialize()
+    expect(initSpy).not.toHaveBeenCalled()
+  })
+
+  it('debe capturar errores en initialize si DatabaseEngine falla', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(DatabaseEngine.prototype, 'initialize').mockRejectedValueOnce(
+      new Error('IndexedDB blocked / permission denied')
+    )
+
+    useDatabaseStore.setState({ isInitialized: false, engine: null })
+    await useDatabaseStore.getState().initialize()
+
+    expect(consoleSpy).toHaveBeenCalledWith('Error al inicializar IndexedDB:', expect.any(Error))
+    consoleSpy.mockRestore()
   })
 
   it('debe guardar y recargar sesiones en el estado reactivo con duración calculada', async () => {
@@ -49,7 +71,6 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(state.sessions[0].id).toBe('session_db_test')
   })
 
-  // NUEVO TEST DE BORRADO INDIVIDUAL REACTIVO EN STORE
   it('deleteSession debe eliminar una sesión y actualizar el estado reactivo y resumen', async () => {
     const session: DbSessionRecord = {
       id: 'session_to_delete',
@@ -84,7 +105,6 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(useDatabaseStore.getState().sessions.length).toBe(1)
     expect(useDatabaseStore.getState().answers.length).toBe(1)
 
-    // Eliminación individual
     await useDatabaseStore.getState().deleteSession('session_to_delete')
 
     expect(useDatabaseStore.getState().sessions.length).toBe(0)
@@ -92,7 +112,6 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(useDatabaseStore.getState().summary.totalSessions).toBe(0)
   })
 
-  // NUEVO TEST DE BORRADO POR LOTE REACTIVO EN STORE
   it('deleteSessions debe eliminar múltiples sesiones en lote y actualizar el estado', async () => {
     const s1: DbSessionRecord = {
       id: 's_batch_1',
@@ -123,7 +142,6 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     await useDatabaseStore.getState().saveSession(s2, [])
     expect(useDatabaseStore.getState().sessions.length).toBe(2)
 
-    // Eliminación por lote
     await useDatabaseStore.getState().deleteSessions(['s_batch_1', 's_batch_2'])
 
     expect(useDatabaseStore.getState().sessions.length).toBe(0)
@@ -183,7 +201,90 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(state.aiConsultations[0].associatedMetricsSnapshot?.normalizedAccuracy).toBe(84)
   })
 
-  it('clearDatabase debe vaciar las tablas y purgar la memoria de IA en cascada (incluyendo aiConsultations)', async () => {
+  it('exportBackupJson e importBackupJson deben exportar y restaurar el backup JSON con éxito', async () => {
+    const mockSession: DbSessionRecord = {
+      id: 'session_backup_1',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'flute',
+      presetName: 'Nivel 1',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1200,
+      durationSeconds: 30
+    }
+
+    const mockAnswer: DbAnswerRecord = {
+      id: 'ans_backup_1',
+      sessionId: 'session_backup_1',
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 60,
+      isCorrect: true,
+      semitoneDistance: 0,
+      responseTimeMs: 1200,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: new Date().toISOString()
+    }
+
+    await useDatabaseStore.getState().saveSession(mockSession, [mockAnswer])
+
+    // Exportar
+    const jsonString = await useDatabaseStore.getState().exportBackupJson()
+    expect(typeof jsonString).toBe('string')
+    expect(jsonString).toContain('session_backup_1')
+
+    // Limpiar
+    await useDatabaseStore.getState().clearDatabase()
+    expect(useDatabaseStore.getState().sessions.length).toBe(0)
+
+    // Importar
+    const result = await useDatabaseStore.getState().importBackupJson(jsonString, 'replace')
+    expect(result.success).toBe(true)
+    expect(result.sessionsImported).toBe(1)
+    expect(result.answersImported).toBe(1)
+    expect(useDatabaseStore.getState().sessions.length).toBe(1)
+  })
+
+  it('importBackupJson debe capturar y devolver error cuando el contenido no es un JSON válido', async () => {
+    const result = await useDatabaseStore.getState().importBackupJson('{ json_invalido_corrupto ')
+    expect(result.success).toBe(false)
+    expect(result.error).toBeDefined()
+    expect(result.sessionsImported).toBe(0)
+  })
+
+  it('exportBackupJson e importBackupJson deben lanzar error si el motor de DB es null', async () => {
+    useDatabaseStore.setState({ engine: null })
+
+    await expect(useDatabaseStore.getState().exportBackupJson()).rejects.toThrow(
+      'Base de datos no inicializada.'
+    )
+    await expect(useDatabaseStore.getState().importBackupJson('{}')).rejects.toThrow(
+      'Base de datos no inicializada.'
+    )
+  })
+
+  it('los métodos CRUD deben retornar limpiamente sin fallar si engine es null', async () => {
+    useDatabaseStore.setState({ engine: null })
+
+    await expect(useDatabaseStore.getState().reloadAllData()).resolves.toBeUndefined()
+    await expect(
+      useDatabaseStore.getState().saveSession({} as DbSessionRecord, [])
+    ).resolves.toBeUndefined()
+    await expect(useDatabaseStore.getState().deleteSession('id')).resolves.toBeUndefined()
+    await expect(useDatabaseStore.getState().deleteSessions(['id'])).resolves.toBeUndefined()
+    await expect(
+      useDatabaseStore.getState().saveAiReport({} as DbAiReportRecord)
+    ).resolves.toBeUndefined()
+    await expect(
+      useDatabaseStore.getState().saveAiConsultation({} as DbAiConsultationRecord)
+    ).resolves.toBeUndefined()
+    await expect(useDatabaseStore.getState().clearDatabase()).resolves.toBeUndefined()
+  })
+
+  it('clearDatabase debe vaciar las tablas y purgar la memoria de IA en cascada', async () => {
     const mockSession: DbSessionRecord = {
       id: 'session_temp',
       createdAt: new Date().toISOString(),
@@ -211,7 +312,6 @@ describe('useDatabaseStore - Store de Persistencia IndexedDB y Limpieza en Casca
     expect(useDatabaseStore.getState().summary.totalSessions).toBe(1)
     expect(useDatabaseStore.getState().aiConsultations.length).toBe(1)
 
-    // Limpieza completa
     await useDatabaseStore.getState().clearDatabase()
 
     expect(useDatabaseStore.getState().summary.totalSessions).toBe(0)
