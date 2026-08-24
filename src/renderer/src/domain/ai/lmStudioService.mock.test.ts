@@ -246,4 +246,32 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
 
     delete (window as unknown as { customAPI?: unknown }).customAPI
   })
+
+  it('askCustomConsultation debe comunicarse vía Electron IPC customAPI transmitiendo la baseUrl configurada', async () => {
+    const checkModelsSpy = vi.fn().mockResolvedValue('qwen-ipc-model')
+    const chatLmStudioSpy = vi.fn().mockResolvedValue({
+      success: true,
+      model: 'qwen-ipc-model',
+      content: 'Respuesta del tutor vía IPC.'
+    })
+
+    window.customAPI = {
+      checkLmStudioModels: checkModelsSpy,
+      chatLmStudio: chatLmStudioSpy
+    }
+
+    const service = new LmStudioService('http://127.0.0.1:1234')
+    const result = await service.askCustomConsultation('Consulta IPC', mockMetrics)
+
+    expect(result.modelName).toBe('qwen-ipc-model')
+    expect(result.content).toBe('Respuesta del tutor vía IPC.')
+    expect(checkModelsSpy).toHaveBeenCalledWith('http://127.0.0.1:1234')
+    expect(chatLmStudioSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: 'http://127.0.0.1:1234'
+      })
+    )
+
+    delete (window as unknown as { customAPI?: unknown }).customAPI
+  })
 })

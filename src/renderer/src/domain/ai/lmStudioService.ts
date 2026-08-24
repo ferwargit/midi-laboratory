@@ -38,7 +38,7 @@ export class LmStudioService {
     if (!this.circuitBreaker.canExecute()) return null
 
     if (typeof window !== 'undefined' && window.customAPI?.checkLmStudioModels) {
-      return await window.customAPI.checkLmStudioModels()
+      return await window.customAPI.checkLmStudioModels(this.config.baseUrl)
     }
 
     try {
@@ -63,6 +63,52 @@ export class LmStudioService {
     return modelId !== null
   }
 
+  /**
+   * Método centralizado (DRY): ejecuta la llamada a LM Studio vía IPC o fallback a fetch
+   */
+  private async sendChat(
+    messages: ChatMessage[],
+    temperature: number,
+    model: string
+  ): Promise<{ content: string; modelName: string }> {
+    if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
+      const result = await window.customAPI.chatLmStudio({
+        model,
+        messages,
+        temperature,
+        timeoutMs: this.config.chatTimeoutMs,
+        baseUrl: this.config.baseUrl
+      })
+      if (!result.success || !result.content) {
+        throw new Error(result.error || 'Respuesta vacía de IPC')
+      }
+      return {
+        content: result.content,
+        modelName: result.model || model
+      }
+    }
+
+    const res = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature
+      })
+    })
+
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`)
+    const data = await res.json()
+    const message = data.choices?.[0]?.message
+    const content = message?.content || message?.reasoning_content || ''
+
+    return {
+      content,
+      modelName: data.model || model
+    }
+  }
+
   async analyzeAndPrescribe(metrics: AnalyticsMetrics): Promise<AiAnalysisResponse> {
     const fallbackOp = (): AiAnalysisResponse => generateAlgorithmicFallback(metrics)
 
@@ -77,40 +123,13 @@ export class LmStudioService {
         { role: 'user', content: buildUserPrompt(metrics) }
       ]
 
-      let rawContent = ''
-      let returnedModel = loadedModelId
+      const { content, modelName } = await this.sendChat(
+        messages,
+        this.config.defaultTemperature,
+        loadedModelId
+      )
 
-      if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
-        const result = await window.customAPI.chatLmStudio({
-          model: loadedModelId,
-          messages,
-          temperature: this.config.defaultTemperature,
-          timeoutMs: this.config.chatTimeoutMs
-        })
-        if (!result.success || !result.content) {
-          throw new Error(result.error || 'Respuesta vacía de IPC')
-        }
-        rawContent = result.content
-        returnedModel = result.model || loadedModelId
-      } else {
-        const res = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: loadedModelId,
-            messages,
-            temperature: this.config.defaultTemperature
-          })
-        })
-
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`)
-        const data = await res.json()
-        const message = data.choices[0]?.message
-        rawContent = message?.content || message?.reasoning_content || ''
-        returnedModel = data.model || loadedModelId
-      }
-
-      const validatedResponse = validateAndParseAiResponse(rawContent, returnedModel)
+      const validatedResponse = validateAndParseAiResponse(content, modelName)
       if (!validatedResponse) {
         throw new Error('Payload inválido devuelto por el LLM')
       }
@@ -145,42 +164,11 @@ export class LmStudioService {
         conceptId
       )
 
-      let rawContent = ''
-      let returnedModel = loadedModelId
-
-      if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
-        const result = await window.customAPI.chatLmStudio({
-          model: loadedModelId,
-          messages,
-          temperature: 0.5,
-          timeoutMs: this.config.chatTimeoutMs
-        })
-        if (!result.success || !result.content) {
-          throw new Error(result.error || 'Respuesta vacía de IPC')
-        }
-        rawContent = result.content
-        returnedModel = result.model || loadedModelId
-      } else {
-        const res = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: loadedModelId,
-            messages,
-            temperature: 0.5
-          })
-        })
-
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`)
-        const data = await res.json()
-        const message = data.choices[0]?.message
-        rawContent = message?.content || message?.reasoning_content || ''
-        returnedModel = data.model || loadedModelId
-      }
+      const { content, modelName } = await this.sendChat(messages, 0.5, loadedModelId)
 
       return {
-        content: rawContent.trim(),
-        modelName: returnedModel
+        content: content.trim(),
+        modelName
       }
     }, fallbackOp)
   }
@@ -205,42 +193,11 @@ export class LmStudioService {
         { role: 'user', content: buildMultiSessionComparisonPrompt(selectedSessions, metrics) }
       ]
 
-      let rawContent = ''
-      let returnedModel = loadedModelId
-
-      if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
-        const result = await window.customAPI.chatLmStudio({
-          model: loadedModelId,
-          messages,
-          temperature: 0.4,
-          timeoutMs: this.config.chatTimeoutMs
-        })
-        if (!result.success || !result.content) {
-          throw new Error(result.error || 'Respuesta vacía de IPC')
-        }
-        rawContent = result.content
-        returnedModel = result.model || loadedModelId
-      } else {
-        const res = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: loadedModelId,
-            messages,
-            temperature: 0.4
-          })
-        })
-
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`)
-        const data = await res.json()
-        const message = data.choices[0]?.message
-        rawContent = message?.content || message?.reasoning_content || ''
-        returnedModel = data.model || loadedModelId
-      }
+      const { content, modelName } = await this.sendChat(messages, 0.4, loadedModelId)
 
       return {
-        content: rawContent.trim(),
-        modelName: returnedModel
+        content: content.trim(),
+        modelName
       }
     }, fallbackOp)
   }

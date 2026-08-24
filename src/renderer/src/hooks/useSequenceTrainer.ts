@@ -23,6 +23,8 @@ export interface SequenceSessionOptions extends CoreStartSessionOptions {
 }
 
 export interface UseSequenceTrainerReturn {
+  saveError: string | null
+  clearSaveError: () => void
   presets: SequencePreset[]
   selectedPresetId: string
   setSelectedPresetId: (id: string) => void
@@ -318,6 +320,8 @@ export function useSequenceTrainer({
   }, [sessionHistory, startSession])
 
   return {
+    saveError: core.saveError,
+    clearSaveError: core.clearSaveError,
     presets: SEQUENCE_PRESETS,
     selectedPresetId,
     setSelectedPresetId,

@@ -151,7 +151,7 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
     expect(onPlayStimulus).toHaveBeenCalledTimes(2)
   })
 
-  it('trainWeakNotesOnly debe aislar notas falladas y re-lanzar la sesión', () => {
+  it('trainWeakNotesOnly debe aislar notas falladas y re-lanzar la sesión', async () => {
     const onPlayStimulus = vi.fn()
     const { result } = renderHook(() =>
       useSingleNoteTrainer({
@@ -167,7 +167,7 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
     act(() => {
       result.current.handleUserNotePlayed(70)
     })
-    act(() => {
+    await act(async () => {
       result.current.stopSession()
     })
 
@@ -213,7 +213,7 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       vi.useRealTimers()
     })
 
-    it('stopSession cancela el timer de auto-advance pendiente: no dispara una pregunta extra', () => {
+    it('stopSession cancela el timer de auto-advance pendiente: no dispara una pregunta extra', async () => {
       vi.useFakeTimers()
       const onPlayStimulus = vi.fn()
       const onInstrumentChanged = vi.fn()
@@ -232,7 +232,7 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
         result.current.handleUserNotePlayed(expectedNote)
       })
 
-      act(() => {
+      await act(async () => {
         result.current.stopSession()
       })
 
@@ -248,7 +248,7 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       vi.useRealTimers()
     })
 
-    it('una sesión por tiempo finaliza sola al llegar a 0 y guarda una única vez', () => {
+    it('una sesión por tiempo finaliza sola al llegar a 0 y guarda una única vez', async () => {
       vi.useFakeTimers()
       const onPlayStimulus = vi.fn()
       const onInstrumentChanged = vi.fn()
@@ -268,7 +268,7 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
 
       expect(result.current.timeRemainingSeconds).toBe(60)
 
-      act(() => {
+      await act(async () => {
         vi.advanceTimersByTime(60000)
       })
 
@@ -346,7 +346,7 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
         result.current.handleUserNotePlayed(expected, 'midi_hardware')
       })
 
-      act(() => {
+      await act(async () => {
         result.current.stopSession()
       })
 
@@ -385,7 +385,6 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       expect(onPlayTonalContext).toHaveBeenCalledWith('cadence', 62)
       expect(onPlayStimulus).toHaveBeenCalledTimes(0)
 
-      // Se avanza el pre-roll completo (2.84s + margen)
       act(() => {
         vi.advanceTimersByTime(3500)
       })

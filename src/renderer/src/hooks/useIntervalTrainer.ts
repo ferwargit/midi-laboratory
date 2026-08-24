@@ -27,6 +27,8 @@ export interface IntervalSessionOptions extends CoreStartSessionOptions {
 }
 
 export interface UseIntervalTrainerReturn {
+  saveError: string | null
+  clearSaveError: () => void
   presets: IntervalPreset[]
   selectedPresetId: string
   setSelectedPresetId: (id: string) => void
@@ -369,6 +371,8 @@ export function useIntervalTrainer({
   }, [sessionHistory, startSession])
 
   return {
+    saveError: core.saveError,
+    clearSaveError: core.clearSaveError,
     presets: INTERVAL_PRESETS,
     selectedPresetId,
     setSelectedPresetId,

@@ -16,6 +16,7 @@ import { SequencesView } from './components/views/SequencesView'
 import { AnalyticsView } from './components/views/AnalyticsView'
 import { ConfirmModal } from './components/ui/ConfirmModal'
 import { AiExercisePrescription } from './domain/ai/types'
+import { DbSaveAlert } from './components/trainer/DbSaveAlert'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
 type AppMode = 'single_note' | 'intervals' | 'sequences' | 'analytics'
@@ -276,6 +277,15 @@ export default function App(): React.ReactElement {
 
   const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
 
+  const activeDbSaveError =
+    singleNoteTrainer.saveError || intervalTrainer.saveError || sequenceTrainer.saveError
+
+  const handleDismissDbSaveError = (): void => {
+    singleNoteTrainer.clearSaveError()
+    intervalTrainer.clearSaveError()
+    sequenceTrainer.clearSaveError()
+  }
+
   return (
     <div className="min-h-screen flex flex-col justify-between p-4 md:p-6 max-w-[1540px] w-full mx-auto space-y-3 font-sans">
       {/* 1. MASTER TOPBAR */}
@@ -295,6 +305,7 @@ export default function App(): React.ReactElement {
       />
 
       <MidiDisconnectAlert isDisconnected={midi.isDeviceDisconnected} />
+      <DbSaveAlert error={activeDbSaveError} onDismiss={handleDismissDbSaveError} />
 
       {/* 2. MAIN STAGE */}
       <main className="flex-1 flex flex-col justify-start w-full">

@@ -13,8 +13,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      // sandbox: false es intencional. Con sandbox: true, window.customAPI
+      preload: join(__dirname, '../preload/index.js'), // sandbox: false es intencional. Con sandbox: true, window.customAPI
       // (expuesto vía contextBridge) deja de estar disponible en el renderer,
       // forzando el fallback a fetch() directo en lmStudioService, que a su vez
       // choca con el Content-Security-Policy de index.html. Para una app de
@@ -45,12 +44,13 @@ function createWindow(): void {
 }
 
 // HANDLERS IPC ROBUSTOS CON ABORTCONTROLLER Y TIMEOUT
-ipcMain.handle('lm-studio:check-models', async () => {
+ipcMain.handle('lm-studio:check-models', async (_, baseUrl?: string) => {
+  const host = baseUrl || LM_STUDIO_DEFAULT_HOST
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 2500) // Timeout rápido de 2.5s para health check
+  const timer = setTimeout(() => controller.abort(), 2500)
 
   try {
-    const res = await fetch(`${LM_STUDIO_DEFAULT_HOST}/v1/models`, {
+    const res = await fetch(`${host}/v1/models`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal
@@ -78,14 +78,16 @@ ipcMain.handle(
       messages: unknown[]
       temperature?: number
       timeoutMs?: number
+      baseUrl?: string
     }
   ) => {
+    const host = payload.baseUrl || LM_STUDIO_DEFAULT_HOST
     const timeoutMs = payload.timeoutMs || 900000 // 15 minutos por defecto para deep reasoning en GPU
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
-      const response = await fetch(`${LM_STUDIO_DEFAULT_HOST}/v1/chat/completions`, {
+      const response = await fetch(`${host}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

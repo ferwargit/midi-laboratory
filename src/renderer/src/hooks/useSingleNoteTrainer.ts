@@ -28,6 +28,8 @@ export interface SingleNoteSessionOptions extends CoreStartSessionOptions {
 }
 
 export interface UseSingleNoteTrainerReturn {
+  saveError: string | null
+  clearSaveError: () => void
   activeNotes: number[]
   setActiveNotes: (notes: number[]) => void
   toggleNote: (note: number) => void
@@ -399,6 +401,8 @@ export function useSingleNoteTrainer({
   }, [performances, startSession])
 
   return {
+    saveError: core.saveError,
+    clearSaveError: core.clearSaveError,
     activeNotes,
     setActiveNotes,
     toggleNote,

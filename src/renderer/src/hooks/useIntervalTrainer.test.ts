@@ -118,7 +118,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
     expect(onPlayInterval).toHaveBeenCalledTimes(2)
   })
 
-  it('trainWeakIntervalsOnly debe aislar intervalos con fallo', () => {
+  it('trainWeakIntervalsOnly debe aislar intervalos con fallo', async () => {
     const onPlayInterval = vi.fn()
     const { result } = renderHook(() =>
       useIntervalTrainer({
@@ -136,7 +136,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
     act(() => {
       result.current.handleUserNotePlayed(61)
     })
-    act(() => {
+    await act(async () => {
       result.current.stopSession()
     })
 
@@ -203,7 +203,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
       vi.useRealTimers()
     })
 
-    it('stopSession cancela el timer de auto-advance pendiente: no dispara un intervalo extra', () => {
+    it('stopSession cancela el timer de auto-advance pendiente: no dispara un intervalo extra', async () => {
       vi.useFakeTimers()
       const onPlayInterval = vi.fn()
       const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
@@ -218,7 +218,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
         result.current.handleUserNotePlayed(64)
       })
 
-      act(() => {
+      await act(async () => {
         result.current.stopSession()
       })
 
@@ -233,7 +233,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
       vi.useRealTimers()
     })
 
-    it('una sesión de intervalos por tiempo finaliza sola al llegar a 0', () => {
+    it('una sesión de intervalos por tiempo finaliza sola al llegar a 0', async () => {
       vi.useFakeTimers()
       const onPlayInterval = vi.fn()
       const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
@@ -249,7 +249,7 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
 
       expect(result.current.timeRemainingSeconds).toBe(60)
 
-      act(() => {
+      await act(async () => {
         vi.advanceTimersByTime(60000)
       })
 
@@ -314,17 +314,15 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
         result.current.startSession([4], [60])
       })
 
-      // Paso 1: fijar la primera nota en un act independiente
       act(() => {
         result.current.handleUserNotePlayed(60, 'midi_hardware')
       })
 
-      // Paso 2: evaluar la segunda nota en su propio act
       act(() => {
         result.current.handleUserNotePlayed(64, 'midi_hardware')
       })
 
-      act(() => {
+      await act(async () => {
         result.current.stopSession()
       })
 

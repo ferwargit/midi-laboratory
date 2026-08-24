@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { AdvanceMode, SessionLimitType } from '../domain/exercise/types'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
+import { DEFAULT_APP_CONFIG } from '../domain/ai/appConfig'
 
 export interface TrainerCoreOptions<TResult> {
   defaultLimitType?: SessionLimitType
@@ -53,6 +54,8 @@ export interface UseTrainerCoreReturn<TResult> {
   setSessionHistory: (history: TResult[]) => void
   answersBuffer: DbAnswerRecord[]
   questionToken: string | null
+  saveError: string | null
+  clearSaveError: () => void
   generateQuestionToken: (prefix?: string) => string
   startCoreSession: (
     options?: CoreStartSessionOptions,
@@ -79,8 +82,8 @@ export function useTrainerCore<TResult>({
   defaultQuestionsCount = 10,
   defaultDurationMinutes = 5,
   defaultAdvanceMode = 'smart',
-  autoAdvanceFastDelayMs = 1500,
-  autoAdvanceSlowDelayMs = 3500,
+  autoAdvanceFastDelayMs = DEFAULT_APP_CONFIG.midi.autoAdvanceFastDelayMs,
+  autoAdvanceSlowDelayMs = DEFAULT_APP_CONFIG.midi.autoAdvanceSlowDelayMs,
   onBuildSessionRecord,
   checkIsMasteryCompleted
 }: TrainerCoreOptions<TResult>): UseTrainerCoreReturn<TResult> {
@@ -102,6 +105,7 @@ export function useTrainerCore<TResult>({
   const [currentQuestionIndex, setCurrentQuestionIndexState] = useState<number>(0)
   const [lastResult, setLastResultState] = useState<TResult | null>(null)
   const [sessionHistory, setSessionHistoryState] = useState<TResult[]>([])
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const saveSessionToDb = useDatabaseStore((state) => state.saveSession)
 
@@ -118,8 +122,6 @@ export function useTrainerCore<TResult>({
   const advanceModeRef = useRef<AdvanceMode>(defaultAdvanceMode)
 
   const isSessionActiveRef = useRef<boolean>(false)
-  const isSessionFinishedRef = useRef<boolean>(false)
-  const isWaitingManualAdvanceRef = useRef<boolean>(false)
   const currentQuestionIndexRef = useRef<number>(0)
 
   const answersBufferRef = useRef<DbAnswerRecord[]>([])
@@ -168,6 +170,10 @@ export function useTrainerCore<TResult>({
     setSessionHistoryState(hist)
   }, [])
 
+  const clearSaveError = useCallback((): void => {
+    setSaveError(null)
+  }, [])
+
   const cleanupTimers = useCallback((): void => {
     if (autoAdvanceTimerRef.current) {
       clearTimeout(autoAdvanceTimerRef.current)
@@ -208,10 +214,8 @@ export function useTrainerCore<TResult>({
     isSessionActiveRef.current = false
     setIsSessionActiveState(false)
 
-    isSessionFinishedRef.current = true
     setIsSessionFinishedState(true)
 
-    isWaitingManualAdvanceRef.current = false
     setIsWaitingManualAdvanceState(false)
     setIsWaitingAnswer(false)
 
@@ -235,8 +239,13 @@ export function useTrainerCore<TResult>({
 
     try {
       await saveSessionToDb(sessionRecord, allAnswers)
+      setSaveError(null)
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
       console.error('[useTrainerCore] Error saving session to database:', err)
+      setSaveError(
+        `No se pudo guardar la sesión en la base de datos local (${errMsg}). Verifique el espacio disponible.`
+      )
     } finally {
       finalizingSessionsRef.current.delete(currentSessionId)
       sessionIdRef.current = ''
@@ -249,6 +258,7 @@ export function useTrainerCore<TResult>({
       onTriggerFirstStimulus?: () => void
     ): { sessionId: string; limitType: SessionLimitType; durationMinutes: number } => {
       cleanupTimers()
+      setSaveError(null)
 
       let limitType = sessionLimitTypeRef.current
       let questionsCount = sessionQuestionsCountRef.current
@@ -287,10 +297,7 @@ export function useTrainerCore<TResult>({
       currentQuestionIndexRef.current = 1
       setCurrentQuestionIndexState(1)
 
-      isSessionFinishedRef.current = false
       setIsSessionFinishedState(false)
-
-      isWaitingManualAdvanceRef.current = false
       setIsWaitingManualAdvanceState(false)
 
       isSessionActiveRef.current = true
@@ -395,7 +402,6 @@ export function useTrainerCore<TResult>({
       const shouldWaitManual = mode === 'manual' || (mode === 'smart' && !isCorrectForSmartAdvance)
 
       if (shouldWaitManual) {
-        isWaitingManualAdvanceRef.current = true
         setIsWaitingManualAdvanceState(true)
       } else {
         const delay = mode === 'auto_slow' ? autoAdvanceSlowDelayMs : autoAdvanceFastDelayMs
@@ -419,7 +425,6 @@ export function useTrainerCore<TResult>({
       sessionIdRef.current = ''
       isAdvancingRef.current = false
       isWaitingAnswerRef.current = false
-      isWaitingManualAdvanceRef.current = false
 
       setIsSessionActiveState(false)
       setIsSessionFinishedState(false)
@@ -434,7 +439,7 @@ export function useTrainerCore<TResult>({
     sessionIdRef.current = ''
     isAdvancingRef.current = false
     isWaitingAnswerRef.current = false
-    isWaitingManualAdvanceRef.current = false
+    setSaveError(null)
 
     setIsSessionActiveState(false)
     setIsSessionFinishedState(false)
@@ -473,6 +478,8 @@ export function useTrainerCore<TResult>({
     get questionToken() {
       return questionTokenRef.current
     },
+    saveError,
+    clearSaveError,
     generateQuestionToken,
     startCoreSession,
     advanceToNextQuestion,

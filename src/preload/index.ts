@@ -2,12 +2,14 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 const customAPI = {
-  checkLmStudioModels: (): Promise<string | null> => ipcRenderer.invoke('lm-studio:check-models'),
+  checkLmStudioModels: (baseUrl?: string): Promise<string | null> =>
+    ipcRenderer.invoke('lm-studio:check-models', baseUrl),
   chatLmStudio: (payload: {
     model: string
     messages: unknown[]
     temperature?: number
     timeoutMs?: number
+    baseUrl?: string
   }): Promise<{
     success: boolean
     content?: string

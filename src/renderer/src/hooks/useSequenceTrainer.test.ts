@@ -92,7 +92,7 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
     expect(onPlaySequence).toHaveBeenCalledTimes(2)
   })
 
-  it('trainWeakMotifsOnly debe aislar notas falladas en las frases', () => {
+  it('trainWeakMotifsOnly debe aislar notas falladas en las frases', async () => {
     const onPlaySequence = vi.fn()
     const { result } = renderHook(() =>
       useSequenceTrainer({
@@ -113,7 +113,7 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
     act(() => {
       result.current.handleUserNotePlayed(74)
     })
-    act(() => {
+    await act(async () => {
       result.current.stopSession()
     })
 
@@ -149,7 +149,6 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
     expect(result.current.advanceMode).toBe('manual')
     expect(onPlaySequence).toHaveBeenCalledTimes(1)
 
-    // Tocamos las 4 notas generadas
     const currentSeq = result.current.currentSequence
     currentSeq.forEach((note) => {
       act(() => {
@@ -192,7 +191,7 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
       vi.useRealTimers()
     })
 
-    it('stopSession cancela el timer de auto-advance pendiente: no dispara una secuencia extra', () => {
+    it('stopSession cancela el timer de auto-advance pendiente: no dispara una secuencia extra', async () => {
       vi.useFakeTimers()
       const onPlaySequence = vi.fn()
       const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence }))
@@ -209,7 +208,7 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
         })
       })
 
-      act(() => {
+      await act(async () => {
         result.current.stopSession()
       })
 
@@ -224,7 +223,7 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
       vi.useRealTimers()
     })
 
-    it('una sesión de secuencias por tiempo finaliza sola al llegar a 0', () => {
+    it('una sesión de secuencias por tiempo finaliza sola al llegar a 0', async () => {
       vi.useFakeTimers()
       const onPlaySequence = vi.fn()
       const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence }))
@@ -240,7 +239,7 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
 
       expect(result.current.timeRemainingSeconds).toBe(60)
 
-      act(() => {
+      await act(async () => {
         vi.advanceTimersByTime(60000)
       })
 

@@ -141,7 +141,7 @@ describe('useTrainerCore - Kernel Unificado del Ciclo de Vida de Sesión', () =>
     })
 
     const onTriggerNext = vi.fn()
-    act(() => {
+    await act(async () => {
       result.current.advanceToNextQuestion(onTriggerNext)
     })
 
@@ -193,13 +193,11 @@ describe('useTrainerCore - Kernel Unificado del Ciclo de Vida de Sesión', () =>
 
     expect(onAdvance).not.toHaveBeenCalled()
 
-    // A los 2000ms aún no debe haber avanzado
     act(() => {
       vi.advanceTimersByTime(2000)
     })
     expect(onAdvance).not.toHaveBeenCalled()
 
-    // A los 3600ms debe haberse ejecutado
     act(() => {
       vi.advanceTimersByTime(1600)
     })
@@ -285,7 +283,7 @@ describe('useTrainerCore - Kernel Unificado del Ciclo de Vida de Sesión', () =>
       )
     })
 
-    act(() => {
+    await act(async () => {
       vi.advanceTimersByTime(60000)
     })
 
@@ -295,5 +293,71 @@ describe('useTrainerCore - Kernel Unificado del Ciclo de Vida de Sesión', () =>
 
     saveSpy.mockRestore()
     vi.useRealTimers()
+  })
+
+  it('registra saveError si saveSession de IndexedDB falla al finalizar la sesión', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const saveSpy = vi
+      .spyOn(useDatabaseStore.getState(), 'saveSession')
+      .mockRejectedValueOnce(new Error('QuotaExceededError: Disco lleno'))
+
+    const onBuildSessionRecord = vi.fn().mockReturnValue({
+      id: 'sess_quota_err',
+      createdAt: new Date().toISOString(),
+      strategyId: 'test',
+      instrumentId: 'piano',
+      presetName: 'Test',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 10
+    })
+
+    const { result } = renderHook(() =>
+      useTrainerCore({
+        onBuildSessionRecord
+      })
+    )
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken()
+    })
+
+    act(() => {
+      result.current.recordAnswer(
+        { correct: true },
+        {
+          id: 'a1',
+          sessionId: result.current.sessionId,
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 900,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: new Date().toISOString()
+        },
+        true,
+        vi.fn()
+      )
+    })
+
+    await act(async () => {
+      await result.current.finalizeAndSaveSession()
+    })
+
+    expect(result.current.saveError).toContain('QuotaExceededError')
+
+    act(() => {
+      result.current.clearSaveError()
+    })
+    expect(result.current.saveError).toBeNull()
+
+    saveSpy.mockRestore()
+    consoleSpy.mockRestore()
   })
 })
