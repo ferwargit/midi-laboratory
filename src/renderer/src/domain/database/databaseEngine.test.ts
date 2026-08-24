@@ -18,10 +18,32 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
 
   it('debe inicializarse con la versión canónica y resumen en 0', async () => {
     expect(engine.getVersion()).toBe(DB_VERSION)
+    expect(DB_VERSION).toBe(5)
     const summary = await engine.getSummary()
     expect(summary.totalSessions).toBe(0)
     expect(summary.totalExercises).toBe(0)
     expect(summary.totalDurationSeconds).toBe(0)
+  })
+
+  it('debe persistir targetMode canónico en los registros de sesión', async () => {
+    const s: DbSessionRecord = {
+      id: 'session_target_mode_test',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'violin',
+      presetName: 'Test Canónico',
+      totalQuestions: 5,
+      correctAnswers: 5,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 30,
+      targetMode: 'intervals'
+    }
+
+    await engine.saveSession(s, [])
+    const sessions = await engine.getAllSessions()
+    expect(sessions.length).toBe(1)
+    expect(sessions[0].targetMode).toBe('intervals')
   })
 
   it('debe calcular el promedio ponderado exacto por volumen de preguntas', async () => {

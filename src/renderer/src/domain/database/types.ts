@@ -1,5 +1,7 @@
 import { AiExercisePrescription } from '../ai/types'
 
+export type SessionTargetMode = 'single_note' | 'intervals' | 'sequences'
+
 export interface DbSessionRecord {
   id: string
   createdAt: string
@@ -11,6 +13,7 @@ export interface DbSessionRecord {
   accuracyPercentage: number
   avgResponseTimeMs: number
   durationSeconds: number
+  targetMode?: SessionTargetMode
 }
 
 export interface DbAnswerRecord {

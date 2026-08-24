@@ -152,6 +152,7 @@ function resolveNominalPoolSize(session: DbSessionRecord, empiricalUniqueCount: 
 }
 
 export function isSequenceSession(s: DbSessionRecord): boolean {
+  if (s.targetMode) return s.targetMode === 'sequences'
   const name = (s.presetName || '').toLowerCase()
   return (
     s.strategyId.includes('sequences') ||
@@ -161,6 +162,7 @@ export function isSequenceSession(s: DbSessionRecord): boolean {
 }
 
 export function isIntervalSession(s: DbSessionRecord): boolean {
+  if (s.targetMode) return s.targetMode === 'intervals'
   const name = (s.presetName || '').toLowerCase()
   return (
     s.strategyId.includes('intervals') ||
@@ -170,6 +172,7 @@ export function isIntervalSession(s: DbSessionRecord): boolean {
 }
 
 export function isSingleNoteSession(s: DbSessionRecord): boolean {
+  if (s.targetMode) return s.targetMode === 'single_note'
   if (isSequenceSession(s) || isIntervalSession(s)) return false
   const name = (s.presetName || '').toLowerCase()
   return (
@@ -348,8 +351,13 @@ export function reconstructSessionConfig(
   const sessionAnswers = allAnswers.filter((a) => a.sessionId === session.id)
 
   let targetMode: 'single_note' | 'intervals' | 'sequences' = 'single_note'
-  if (isIntervalSession(session)) targetMode = 'intervals'
-  else if (isSequenceSession(session)) targetMode = 'sequences'
+  if (session.targetMode) {
+    targetMode = session.targetMode
+  } else if (isIntervalSession(session)) {
+    targetMode = 'intervals'
+  } else if (isSequenceSession(session)) {
+    targetMode = 'sequences'
+  }
 
   let recommendedNotes: number[] = [60, 62, 64]
   let recommendedIntervals: number[] | undefined = undefined

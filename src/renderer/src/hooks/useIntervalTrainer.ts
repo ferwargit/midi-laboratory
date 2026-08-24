@@ -123,7 +123,8 @@ export function useIntervalTrainer({
         correctAnswers: correctCount,
         accuracyPercentage: accPercent,
         avgResponseTimeMs: avgTime,
-        durationSeconds: totalSeconds
+        durationSeconds: totalSeconds,
+        targetMode: 'intervals' // 👈 CANÓNICO
       }
     },
     []

@@ -136,7 +136,8 @@ export function useSingleNoteTrainer({
         correctAnswers: calculatedStats.correctAnswers,
         accuracyPercentage: calculatedStats.accuracyPercentage,
         avgResponseTimeMs: calculatedStats.avgResponseTimeMs,
-        durationSeconds: totalSeconds
+        durationSeconds: totalSeconds,
+        targetMode: 'single_note' // 👈 CANÓNICO
       }
     },
     []

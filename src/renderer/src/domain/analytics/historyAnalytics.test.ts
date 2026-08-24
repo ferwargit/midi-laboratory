@@ -5,7 +5,10 @@ import {
   filterSessionsAdvanced,
   computeLongitudinalComparisons,
   reconstructSessionConfig,
-  calculateSessionCPI
+  calculateSessionCPI,
+  isIntervalSession,
+  isSingleNoteSession,
+  isSequenceSession
 } from './historyAnalytics'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
@@ -604,5 +607,25 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(prescription.recommendedNotes).toContain(69)
     expect(prescription.recommendedNotes).toContain(71)
     expect(prescription.questionsCount).toBe(5)
+  })
+
+  it('debe clasificar inequívocamente sesiones con targetMode independientemente de su instrumento o título', () => {
+    const customIntervalSession: DbSessionRecord = {
+      id: 's_custom_int',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'violin', // Timbre violín
+      presetName: 'Ejercicio Prescrito por IA', // Sin palabra "intervalo"
+      totalQuestions: 10,
+      correctAnswers: 8,
+      accuracyPercentage: 80,
+      avgResponseTimeMs: 1400,
+      durationSeconds: 60,
+      targetMode: 'intervals' // 👈 CANÓNICO
+    }
+
+    expect(isIntervalSession(customIntervalSession)).toBe(true)
+    expect(isSingleNoteSession(customIntervalSession)).toBe(false)
+    expect(isSequenceSession(customIntervalSession)).toBe(false)
   })
 })

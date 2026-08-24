@@ -138,4 +138,13 @@ describe('recordValidator - Validación Pura de Integridad de Registros', () => 
       false
     )
   })
+
+  it('isValidSessionRecord debe validar targetMode canónico si está presente', () => {
+    expect(isValidSessionRecord({ ...validSession, targetMode: 'single_note' })).toBe(true)
+    expect(isValidSessionRecord({ ...validSession, targetMode: 'intervals' })).toBe(true)
+    expect(isValidSessionRecord({ ...validSession, targetMode: 'sequences' })).toBe(true)
+    expect(
+      isValidSessionRecord({ ...validSession, targetMode: 'invalido' as unknown as 'single_note' })
+    ).toBe(false)
+  })
 })

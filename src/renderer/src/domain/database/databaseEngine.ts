@@ -13,7 +13,7 @@ import {
 } from './recordValidator'
 
 export const DB_NAME = 'MusicalEarTrainerDB'
-export const DB_VERSION = 4
+export const DB_VERSION = 5
 export const SESSIONS_STORE = 'sessions'
 export const ANSWERS_STORE = 'exercise_answers'
 export const AI_REPORTS_STORE = 'ai_diagnostics'
@@ -26,11 +26,19 @@ export class DatabaseEngine {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION)
 
-      request.onupgradeneeded = (): void => {
+      request.onupgradeneeded = (event): void => {
         const db = request.result
+        const transaction = (event.target as IDBOpenDBRequest).transaction!
 
+        let sessionsStore: IDBObjectStore
         if (!db.objectStoreNames.contains(SESSIONS_STORE)) {
-          db.createObjectStore(SESSIONS_STORE, { keyPath: 'id' })
+          sessionsStore = db.createObjectStore(SESSIONS_STORE, { keyPath: 'id' })
+        } else {
+          sessionsStore = transaction.objectStore(SESSIONS_STORE)
+        }
+
+        if (!sessionsStore.indexNames.contains('targetMode')) {
+          sessionsStore.createIndex('targetMode', 'targetMode', { unique: false })
         }
 
         if (!db.objectStoreNames.contains(ANSWERS_STORE)) {

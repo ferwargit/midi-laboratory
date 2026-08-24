@@ -1,4 +1,12 @@
-import { DbAnswerRecord, DbSessionRecord, DbAiReportRecord, DbAiConsultationRecord } from './types'
+import {
+  DbAnswerRecord,
+  DbSessionRecord,
+  DbAiReportRecord,
+  DbAiConsultationRecord,
+  SessionTargetMode
+} from './types'
+
+const VALID_SESSION_TARGET_MODES: SessionTargetMode[] = ['single_note', 'intervals', 'sequences']
 
 export function isValidSessionRecord(session: unknown): session is DbSessionRecord {
   if (!session || typeof session !== 'object') return false
@@ -30,6 +38,15 @@ export function isValidSessionRecord(session: unknown): session is DbSessionReco
     return false
   if (typeof s.avgResponseTimeMs !== 'number' || s.avgResponseTimeMs < 0) return false
   if (typeof s.durationSeconds !== 'number' || s.durationSeconds < 0) return false
+
+  if (s.targetMode !== undefined) {
+    if (
+      typeof s.targetMode !== 'string' ||
+      !VALID_SESSION_TARGET_MODES.includes(s.targetMode as SessionTargetMode)
+    ) {
+      return false
+    }
+  }
 
   return true
 }
@@ -68,7 +85,6 @@ export function isValidAnswerRecord(answer: unknown): answer is DbAnswerRecord {
   if (typeof a.velocity !== 'number' || a.velocity < 0 || a.velocity > 127) return false
   if (typeof a.createdAt !== 'string' || Number.isNaN(Date.parse(a.createdAt))) return false
 
-  // Validación de fuente de entrada si está presente
   if (a.inputSource !== undefined) {
     if (a.inputSource !== 'midi_hardware' && a.inputSource !== 'virtual_ui') {
       return false

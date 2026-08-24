@@ -116,7 +116,8 @@ export function useSequenceTrainer({
         correctAnswers: exactCount,
         accuracyPercentage: avgScore,
         avgResponseTimeMs: avgTime,
-        durationSeconds: totalSeconds
+        durationSeconds: totalSeconds,
+        targetMode: 'sequences' // 👈 CANÓNICO
       }
     },
     []
