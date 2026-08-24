@@ -12,16 +12,26 @@ import { validateAndParseAiResponse } from './schemaValidator'
 import { CircuitBreaker } from './circuitBreaker'
 import { AiAnalysisResponse } from './types'
 import { DbAiConsultationRecord, DbAiReportRecord } from '../database/types'
-
-const LM_STUDIO_DEFAULT_URL = 'http://127.0.0.1:1234'
+import { DEFAULT_APP_CONFIG, LmStudioConfig } from './appConfig'
 
 export class LmStudioService {
-  private baseUrl: string
+  private config: LmStudioConfig
   private circuitBreaker: CircuitBreaker
 
-  constructor(baseUrl = LM_STUDIO_DEFAULT_URL, circuitBreaker = new CircuitBreaker()) {
-    this.baseUrl = baseUrl
+  constructor(
+    configOrBaseUrl: string | Partial<LmStudioConfig> = DEFAULT_APP_CONFIG.lmStudio,
+    circuitBreaker = new CircuitBreaker()
+  ) {
+    if (typeof configOrBaseUrl === 'string') {
+      this.config = { ...DEFAULT_APP_CONFIG.lmStudio, baseUrl: configOrBaseUrl }
+    } else {
+      this.config = { ...DEFAULT_APP_CONFIG.lmStudio, ...configOrBaseUrl }
+    }
     this.circuitBreaker = circuitBreaker
+  }
+
+  getBaseUrl(): string {
+    return this.config.baseUrl
   }
 
   async getLoadedModelId(): Promise<string | null> {
@@ -33,9 +43,9 @@ export class LmStudioService {
 
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 2000)
+      const timeout = setTimeout(() => controller.abort(), this.config.checkModelTimeoutMs)
 
-      const res = await fetch(`${this.baseUrl}/v1/models`, {
+      const res = await fetch(`${this.config.baseUrl}/v1/models`, {
         signal: controller.signal
       })
       clearTimeout(timeout)
@@ -73,7 +83,9 @@ export class LmStudioService {
       if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
         const result = await window.customAPI.chatLmStudio({
           model: loadedModelId,
-          messages
+          messages,
+          temperature: this.config.defaultTemperature,
+          timeoutMs: this.config.chatTimeoutMs
         })
         if (!result.success || !result.content) {
           throw new Error(result.error || 'Respuesta vacía de IPC')
@@ -81,13 +93,13 @@ export class LmStudioService {
         rawContent = result.content
         returnedModel = result.model || loadedModelId
       } else {
-        const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        const res = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: loadedModelId,
             messages,
-            temperature: 0.3
+            temperature: this.config.defaultTemperature
           })
         })
 
@@ -125,7 +137,6 @@ export class LmStudioService {
         throw new Error('No hay modelo cargado en LM Studio')
       }
 
-      // SECUENCIA MULTI-TURN CON HISTORIAL CONVERSACIONAL Y PRESCRIPCIONES
       const messages: ChatMessage[] = buildConversationalMessages(
         userQuery,
         metrics,
@@ -140,7 +151,9 @@ export class LmStudioService {
       if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
         const result = await window.customAPI.chatLmStudio({
           model: loadedModelId,
-          messages
+          messages,
+          temperature: 0.5,
+          timeoutMs: this.config.chatTimeoutMs
         })
         if (!result.success || !result.content) {
           throw new Error(result.error || 'Respuesta vacía de IPC')
@@ -148,7 +161,7 @@ export class LmStudioService {
         rawContent = result.content
         returnedModel = result.model || loadedModelId
       } else {
-        const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        const res = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -198,7 +211,9 @@ export class LmStudioService {
       if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
         const result = await window.customAPI.chatLmStudio({
           model: loadedModelId,
-          messages
+          messages,
+          temperature: 0.4,
+          timeoutMs: this.config.chatTimeoutMs
         })
         if (!result.success || !result.content) {
           throw new Error(result.error || 'Respuesta vacía de IPC')
@@ -206,7 +221,7 @@ export class LmStudioService {
         rawContent = result.content
         returnedModel = result.model || loadedModelId
       } else {
-        const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        const res = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
