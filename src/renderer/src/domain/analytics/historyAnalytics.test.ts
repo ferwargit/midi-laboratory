@@ -628,4 +628,129 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(isSingleNoteSession(customIntervalSession)).toBe(false)
     expect(isSequenceSession(customIntervalSession)).toBe(false)
   })
+
+  it('filterSessionsAdvanced cubre subfiltros de series de preguntas (5, 10, 20) y duraciones cronometradas (5m, 10m)', () => {
+    const sQ5: DbSessionRecord = {
+      id: 's_q5',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Nivel 1 • Bloque 5 preguntas',
+      totalQuestions: 5,
+      correctAnswers: 5,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 20
+    }
+
+    const sQ20: DbSessionRecord = {
+      id: 's_q20',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Nivel 1 • Bloque 20 preguntas',
+      totalQuestions: 20,
+      correctAnswers: 18,
+      accuracyPercentage: 90,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 60
+    }
+
+    const sT5: DbSessionRecord = {
+      id: 's_t5',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Nivel 1 • Cronometrado 5m',
+      totalQuestions: 40,
+      correctAnswers: 35,
+      accuracyPercentage: 88,
+      avgResponseTimeMs: 1200,
+      durationSeconds: 300
+    }
+
+    const sT10: DbSessionRecord = {
+      id: 's_t10',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Nivel 1 • Cronometrado 10m',
+      totalQuestions: 80,
+      correctAnswers: 75,
+      accuracyPercentage: 94,
+      avgResponseTimeMs: 1100,
+      durationSeconds: 600
+    }
+
+    const list = [sQ5, sQ20, sT5, sT10]
+
+    expect(
+      filterSessionsAdvanced(list, { mode: 'all', format: 'questions_5' }).map((s) => s.id)
+    ).toEqual(['s_q5'])
+    expect(
+      filterSessionsAdvanced(list, { mode: 'all', format: 'questions_20' }).map((s) => s.id)
+    ).toEqual(['s_q20'])
+    expect(
+      filterSessionsAdvanced(list, { mode: 'all', format: 'time_5' }).map((s) => s.id)
+    ).toEqual(['s_t5'])
+    expect(
+      filterSessionsAdvanced(list, { mode: 'all', format: 'time_10' }).map((s) => s.id)
+    ).toEqual(['s_t10'])
+  })
+
+  it('reconstructSessionConfig reconstruye niveles Nivel 2, Nivel 4 y Pentatónica fielmente', () => {
+    const sNivel2: DbSessionRecord = {
+      id: 's_l2',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'violin',
+      presetName: 'Nivel 2 (C a G) • Bloque 10 preguntas',
+      totalQuestions: 10,
+      correctAnswers: 9,
+      accuracyPercentage: 90,
+      avgResponseTimeMs: 1100,
+      durationSeconds: 45,
+      targetMode: 'single_note'
+    }
+
+    const sNivel4: DbSessionRecord = {
+      id: 's_l4',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'clarinet',
+      presetName: 'Nivel 4 (Cromático C4-C5) • Cronometrado 3m',
+      totalQuestions: 20,
+      correctAnswers: 15,
+      accuracyPercentage: 75,
+      avgResponseTimeMs: 1600,
+      durationSeconds: 180,
+      targetMode: 'single_note'
+    }
+
+    const sPentatonic: DbSessionRecord = {
+      id: 's_penta',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'acoustic_bass',
+      presetName: 'Pentatónica C Mayor • Bloque 10 preguntas',
+      totalQuestions: 10,
+      correctAnswers: 8,
+      accuracyPercentage: 80,
+      avgResponseTimeMs: 1300,
+      durationSeconds: 40,
+      targetMode: 'single_note'
+    }
+
+    const pL2 = reconstructSessionConfig(sNivel2, [])
+    expect(pL2.recommendedNotes).toEqual([60, 62, 64, 65, 67])
+    expect(pL2.instrumentId).toBe('violin')
+
+    const pL4 = reconstructSessionConfig(sNivel4, [])
+    expect(pL4.recommendedNotes.length).toBe(13)
+    expect(pL4.instrumentId).toBe('clarinet')
+
+    const pPenta = reconstructSessionConfig(sPentatonic, [])
+    expect(pPenta.recommendedNotes).toEqual([60, 62, 64, 67, 69, 72])
+    expect(pPenta.instrumentId).toBe('acoustic_bass')
+  })
 })

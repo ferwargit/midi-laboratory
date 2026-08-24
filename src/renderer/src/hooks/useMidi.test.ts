@@ -71,6 +71,20 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
     expect(result.current.status).toContain('no disponible')
   })
 
+  it('debe manejar rechazo de promesa en requestMIDIAccess', async () => {
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockRejectedValue(new Error('Permiso denegado por el sistema'))
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.status).toContain('Error MIDI: Permiso denegado')
+  })
+
   it('debe auto-detectar y seleccionar el Roland UM-ONE mk2 cuando requestMIDIAccess resuelve', async () => {
     const { access, mockOutput } = createMockMidiAccess()
     ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
@@ -121,11 +135,8 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
       result.current.sendAllNotesOff(1)
     })
 
-    // CC 120: All Sound Off
     expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
-    // CC 123: All Notes Off
     expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 123, 0])
-    // CC 64: Sustain Off
     expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 64, 0])
   })
 
@@ -148,5 +159,131 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
     expect(result.current.pressedNotes).toEqual([])
     expect(result.current.activeStimulusNotes).toEqual([])
     expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
+  })
+
+  it('debe reenviar mensajes por Software THRU si está habilitado y hay salida seleccionada', async () => {
+    const { access, mockInput, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi({ enableSoftwareThru: true }))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const rawData = new Uint8Array([0x90, 64, 100])
+    act(() => {
+      mockInput.onmidimessage?.({ data: rawData })
+    })
+
+    expect(mockOutput.send).toHaveBeenCalledWith(rawData)
+    expect(result.current.pressedNotes).toContain(64)
+  })
+
+  it('watchdog de notas colgadas debe liberar notas no liberadas tras 6000ms', async () => {
+    vi.useFakeTimers()
+    const { access, mockInput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    act(() => {
+      mockInput.onmidimessage?.({ data: new Uint8Array([0x90, 60, 90]) })
+    })
+    expect(result.current.pressedNotes).toContain(60)
+
+    // Avanzamos 6001ms sin Note Off
+    act(() => {
+      vi.advanceTimersByTime(6001)
+    })
+    expect(result.current.pressedNotes).not.toContain(60)
+
+    vi.useRealTimers()
+  })
+
+  it('sendNote cancela temporizador previo si se envía la misma nota en ráfaga rápida', async () => {
+    vi.useFakeTimers()
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    act(() => {
+      result.current.sendNote(60, 500)
+    })
+    expect(result.current.activeStimulusNotes).toContain(60)
+
+    // A los 200ms se vuelve a disparar la misma nota (reinicio del timer de Note Off)
+    act(() => {
+      vi.advanceTimersByTime(200)
+      result.current.sendNote(60, 500)
+    })
+
+    // A los 400ms todavía sigue activa
+    act(() => {
+      vi.advanceTimersByTime(400)
+    })
+    expect(result.current.activeStimulusNotes).toContain(60)
+
+    // A los 501ms posteriores expira
+    act(() => {
+      vi.advanceTimersByTime(105)
+    })
+    expect(result.current.activeStimulusNotes).not.toContain(60)
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 60, 0])
+
+    vi.useRealTimers()
+  })
+
+  it('detecta desconexión física de hardware y dispara onDeviceDisconnected', async () => {
+    const { access } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const onDeviceDisconnected = vi.fn()
+    const { result } = renderHook(() => useMidi({ onDeviceDisconnected }))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.isDeviceDisconnected).toBe(false)
+
+    // Simulamos que el cable UM-ONE se desenchufó (inputs vacíos)
+    access.inputs.clear()
+    act(() => {
+      access.onstatechange?.()
+    })
+
+    expect(result.current.isDeviceDisconnected).toBe(true)
+    expect(result.current.status).toContain('desconectado')
+    expect(onDeviceDisconnected).toHaveBeenCalledTimes(1)
+  })
+
+  it('addLog formatea adecuadamente los mensajes con timestamp y recorta historial a 35 items', () => {
+    const { result } = renderHook(() => useMidi())
+
+    act(() => {
+      for (let i = 0; i < 40; i++) {
+        result.current.addLog({ type: 'IN', message: `Evento ${i}` })
+      }
+    })
+
+    expect(result.current.logs.length).toBe(35)
+    expect(result.current.logs[result.current.logs.length - 1].message).toBe('Evento 39')
   })
 })

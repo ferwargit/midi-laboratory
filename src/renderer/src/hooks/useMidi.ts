@@ -88,7 +88,7 @@ export function useMidi({
       .toString()
       .padStart(3, '0')}`
 
-    setLogs((prev) => [...prev.slice(-35), { id: Date.now() + Math.random(), time, ...entry }])
+    setLogs((prev) => [...prev, { id: Date.now() + Math.random(), time, ...entry }].slice(-35))
   }, [])
 
   /**
