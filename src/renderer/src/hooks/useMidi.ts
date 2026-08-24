@@ -123,8 +123,11 @@ export function useMidi({
         // CC 64: Sustain Pedal Off (Evitar resonancia colgada)
         outputPort.send([ccStatus, 64, 0])
 
-        // Note Off explícito de respaldo para canales estándar
-        for (let note = 36; note <= 84; note++) {
+        // Note Off explícito de respaldo. Rango 21-108 (A0-C8): coincide con el rango
+        // completo de piano estándar y con las notas que schemaValidator.ts acepta
+        // para prescripciones de IA, evitando notas colgadas fuera del rango 36-84
+        // de los instrumentos "óptimos" del catálogo.
+        for (let note = 21; note <= 108; note++) {
           outputPort.send([0x80 | chByte, note, 0])
         }
       } catch (err) {

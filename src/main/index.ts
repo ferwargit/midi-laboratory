@@ -14,6 +14,13 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      // sandbox: false es intencional. Con sandbox: true, window.customAPI
+      // (expuesto vía contextBridge) deja de estar disponible en el renderer,
+      // forzando el fallback a fetch() directo en lmStudioService, que a su vez
+      // choca con el Content-Security-Policy de index.html. Para una app de
+      // uso 100% personal y local, el costo funcional de sandbox no compensa
+      // la ganancia de seguridad. contextIsolation: true ya aísla el contexto
+      // del renderer del de Node, que es la mitigación relevante acá.
       sandbox: false,
       contextIsolation: true
     }
@@ -24,7 +31,9 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (details.url.startsWith('https:') || details.url.startsWith('http:')) {
+      shell.openExternal(details.url)
+    }
     return { action: 'deny' }
   })
 

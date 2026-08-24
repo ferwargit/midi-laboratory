@@ -4,9 +4,13 @@
     <meta charset="UTF-8" />
     <title>Electron</title>
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <!-- connect-src incluye el host local de LM Studio (ver DEFAULT_APP_CONFIG.lmStudio.baseUrl
+         en src/renderer/src/domain/ai/appConfig.ts). El canal principal hacia LM Studio es IPC
+         (window.customAPI, no pasa por CSP), pero lmStudioService.ts tiene un fallback a fetch()
+         directo que sin este connect-src queda bloqueado en silencio. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:1234"
     />
   </head>
 
