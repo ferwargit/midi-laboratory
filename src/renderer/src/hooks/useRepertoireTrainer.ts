@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { ScoreDataModel, ScorePlaybackEvent, HandSelection } from '../domain/music/scoreTypes'
 import {
   RepertoireExerciseResult,
@@ -11,6 +11,7 @@ import {
 import { AdvanceMode, SessionLimitType } from '../domain/exercise/types'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useTrainerCore, CoreStartSessionOptions } from './useTrainerCore'
+import { midiNoteToName } from '../domain/music/noteUtils'
 
 export type ChainingDirection = 'forward' | 'backward'
 export type ChainingStepGranularity = '1_event' | '2_events' | '1_measure'
@@ -30,7 +31,7 @@ export interface RepertoireSessionOptions extends CoreStartSessionOptions {
 
 export interface UseRepertoireTrainerReturn {
   currentScore: ScoreDataModel | null
-  setCurrentScore: (score: ScoreDataModel) => void
+  setCurrentScore: (score: ScoreDataModel | null) => void
   selectedHand: HandSelection
   setSelectedHand: (hand: HandSelection) => void
   startMeasure: number
@@ -77,7 +78,7 @@ export interface UseRepertoireTrainerReturn {
 }
 
 interface RepertoireTrainerProps {
-  onPlaySlice: (events: ScorePlaybackEvent[], bpm: number) => void
+  onPlaySlice: (events: ScorePlaybackEvent[], bpm: number, beatsPerMeasure?: number) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
 }
 
@@ -106,13 +107,18 @@ export function useRepertoireTrainer({
   onPlaySlice,
   onTelemetryLog
 }: RepertoireTrainerProps): UseRepertoireTrainerReturn {
-  const [currentScore, setCurrentScore] = useState<ScoreDataModel | null>(null)
+  const [currentScore, setCurrentScoreState] = useState<ScoreDataModel | null>(null)
+  const currentScoreRef = useRef<ScoreDataModel | null>(null)
+
   const [selectedHand, setSelectedHandState] = useState<HandSelection>('RH')
   const [startMeasure, setStartMeasureState] = useState<number>(1)
   const [endMeasure, setEndMeasureState] = useState<number>(4)
   const [chainingDirection, setChainingDirectionState] = useState<ChainingDirection>('forward')
   const [streakTarget, setStreakTargetState] = useState<number>(3)
-  const [currentStreak, setCurrentStreak] = useState<number>(0)
+  const [currentStreak, setCurrentStreakState] = useState<number>(0)
+
+  const currentStreakRef = useRef<number>(0)
+  const streakTargetRef = useRef<number>(3)
 
   const [rhythmMode, setRhythmModeState] = useState<RhythmEvaluationMode>('free_rubato')
   const [rhythmTolerancePercent, setRhythmTolerancePercentState] = useState<number>(20)
@@ -123,13 +129,33 @@ export function useRepertoireTrainer({
   const activeSliceLengthBufferRef = useRef<number>(1)
   const playedNotesBufferRef = useRef<RawPlayedMidiNote[]>([])
 
-  const currentScoreRef = useRef<ScoreDataModel | null>(null)
   const selectedHandRef = useRef<HandSelection>('RH')
   const startMeasureRef = useRef<number>(1)
   const endMeasureRef = useRef<number>(4)
   const chainingDirectionRef = useRef<ChainingDirection>('forward')
-  const streakTargetRef = useRef<number>(3)
   const studyBpmRef = useRef<number>(86)
+
+  const setCurrentScore = useCallback((score: ScoreDataModel | null): void => {
+    currentScoreRef.current = score
+    setCurrentScoreState(score)
+  }, [])
+
+  const setStreak = useCallback((val: number): void => {
+    currentStreakRef.current = val
+    setCurrentStreakState(val)
+  }, [])
+
+  const getActiveSlice = useCallback((): ScorePlaybackEvent[] => {
+    const score = currentScoreRef.current || currentScore
+    return computeSliceEvents(
+      score,
+      selectedHandRef.current,
+      startMeasureRef.current,
+      endMeasureRef.current,
+      chainingDirectionRef.current,
+      activeSliceLengthBufferRef.current
+    )
+  }, [currentScore])
 
   const activeEventsSlice = useMemo(() => {
     return computeSliceEvents(
@@ -141,12 +167,6 @@ export function useRepertoireTrainer({
       activeSliceLength
     )
   }, [currentScore, selectedHand, startMeasure, endMeasure, chainingDirection, activeSliceLength])
-
-  const activeEventsSliceRef = useRef<ScorePlaybackEvent[]>([])
-
-  useEffect(() => {
-    activeEventsSliceRef.current = activeEventsSlice
-  }, [activeEventsSlice])
 
   const onBuildSessionRecord = useCallback(
     ({
@@ -199,6 +219,7 @@ export function useRepertoireTrainer({
     defaultQuestionsCount: 20,
     defaultDurationMinutes: 10,
     defaultAdvanceMode: 'smart',
+    autoAdvanceFastDelayMs: 900,
     onBuildSessionRecord
   })
 
@@ -251,35 +272,24 @@ export function useRepertoireTrainer({
 
   const triggerPlayCurrentSlice = useCallback(
     (sliceOverride?: ScorePlaybackEvent[]): void => {
-      const slice =
-        sliceOverride ||
-        activeEventsSliceRef.current ||
-        computeSliceEvents(
-          currentScoreRef.current,
-          selectedHandRef.current,
-          startMeasureRef.current,
-          endMeasureRef.current,
-          chainingDirectionRef.current,
-          activeSliceLengthBufferRef.current
-        )
-
+      const slice = sliceOverride || getActiveSlice()
       if (slice.length === 0) return
 
-      activeEventsSliceRef.current = slice
       core.generateQuestionToken('token_rep')
       playedNotesBufferRef.current = []
 
       core.setLastResult(null)
       core.setIsWaitingAnswer(true)
 
-      onPlaySlice(slice, studyBpmRef.current)
+      const beats = currentScoreRef.current?.timeSignature.beats || 2
+      onPlaySlice(slice, studyBpmRef.current, beats)
     },
-    [core, onPlaySlice]
+    [core, getActiveSlice, onPlaySlice]
   )
 
   const startSession = useCallback(
     (options?: RepertoireSessionOptions): void => {
-      let scoreToUse = currentScoreRef.current
+      let scoreToUse = options?.score || currentScoreRef.current || currentScore
       let handToUse = selectedHandRef.current
       let startM = startMeasureRef.current
       let endM = endMeasureRef.current
@@ -288,7 +298,7 @@ export function useRepertoireTrainer({
       if (options?.score) {
         scoreToUse = options.score
         currentScoreRef.current = options.score
-        setCurrentScore(options.score) // 👈 Sincronización de estado de React
+        setCurrentScoreState(options.score)
         if (options.score.baseBpm) {
           setStudyBpm(options.score.baseBpm)
         }
@@ -320,12 +330,10 @@ export function useRepertoireTrainer({
       if (options?.autoSpeedRamp !== undefined) setAutoSpeedRamp(options.autoSpeedRamp)
 
       setActiveSliceLength(1)
-      setCurrentStreak(0)
+      setStreak(0)
       playedNotesBufferRef.current = []
 
-      // Cálculo síncrono inmediato para que activeEventsSliceRef esté disponible al instante
       const initialSlice = computeSliceEvents(scoreToUse, handToUse, startM, endM, dirToUse, 1)
-      activeEventsSliceRef.current = initialSlice
 
       core.startCoreSession(options, () => {
         triggerPlayCurrentSlice(initialSlice)
@@ -333,6 +341,7 @@ export function useRepertoireTrainer({
     },
     [
       core,
+      currentScore,
       setSelectedHand,
       setStartMeasure,
       setEndMeasure,
@@ -343,6 +352,7 @@ export function useRepertoireTrainer({
       setStudyBpm,
       setAutoSpeedRamp,
       setActiveSliceLength,
+      setStreak,
       triggerPlayCurrentSlice
     ]
   )
@@ -361,9 +371,9 @@ export function useRepertoireTrainer({
   const resetToConfig = useCallback((): void => {
     playedNotesBufferRef.current = []
     setActiveSliceLength(1)
-    setCurrentStreak(0)
+    setStreak(0)
     core.resetCoreToConfig()
-  }, [core, setActiveSliceLength])
+  }, [core, setActiveSliceLength, setStreak])
 
   const repeatCurrentSlice = useCallback((): void => {
     triggerPlayCurrentSlice()
@@ -375,8 +385,18 @@ export function useRepertoireTrainer({
       velocity = 90,
       source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'
     ): void => {
-      const slice = activeEventsSliceRef.current
-      if (!core.isSessionActive || slice.length === 0 || !core.questionToken) return
+      const slice = getActiveSlice()
+      const noteName = midiNoteToName(noteNumber)
+
+      // 🔍 LOG DIAGNÓSTICO EN VIVO
+      if (onTelemetryLog) {
+        onTelemetryLog(
+          'EVAL',
+          `🎹 Pulsada: ${noteName} (${noteNumber}) | Sesión: ${core.isSessionActive ? 'Activa' : 'Inactiva'}`
+        )
+      }
+
+      if (!core.isSessionActive || slice.length === 0) return
 
       const now = Date.now()
       playedNotesBufferRef.current.push({
@@ -385,13 +405,10 @@ export function useRepertoireTrainer({
         timestampMs: now
       })
 
-      if (onTelemetryLog) {
-        onTelemetryLog('EVAL', `Nota recibida -> ${noteNumber}`)
-      }
-
       const totalExpectedMidiNotesCount = slice.reduce((acc, e) => acc + e.midiNotes.length, 0)
+      const currentBufferCount = playedNotesBufferRef.current.length
 
-      if (playedNotesBufferRef.current.length >= totalExpectedMidiNotesCount) {
+      if (currentBufferCount >= totalExpectedMidiNotesCount) {
         const evalConfig: RepertoireEvaluationConfig = {
           ...DEFAULT_REPERTOIRE_CONFIG,
           rhythmMode,
@@ -417,25 +434,24 @@ export function useRepertoireTrainer({
           inputSource: source
         }
 
-        if (onTelemetryLog) {
-          onTelemetryLog('EVAL', result.feedbackMessage)
-        }
-
+        // Lógica de Streak y Expansión
         if (result.isCompleteSuccess) {
-          const nextStreak = currentStreak + 1
+          const nextStreak = currentStreakRef.current + 1
+          if (onTelemetryLog) {
+            onTelemetryLog(
+              'EVAL',
+              `✅ ¡Acierto! ${result.feedbackMessage} (Streak: ${nextStreak}/${streakTargetRef.current} ⭐)`
+            )
+          }
+
           if (nextStreak >= streakTargetRef.current) {
-            setCurrentStreak(0)
+            setStreak(0)
             const nextLen = activeSliceLengthBufferRef.current + 1
             setActiveSliceLength(nextLen)
-            // Actualizar ref inmediatamente para la siguiente ronda
-            activeEventsSliceRef.current = computeSliceEvents(
-              currentScoreRef.current,
-              selectedHandRef.current,
-              startMeasureRef.current,
-              endMeasureRef.current,
-              chainingDirectionRef.current,
-              nextLen
-            )
+
+            if (onTelemetryLog) {
+              onTelemetryLog('AI', `🎉 Meta alcanzada -> Expandiendo frase a ${nextLen} nota(s)`)
+            }
 
             if (autoSpeedRamp) {
               const nextBpm = Math.min(
@@ -445,10 +461,13 @@ export function useRepertoireTrainer({
               setStudyBpm(nextBpm)
             }
           } else {
-            setCurrentStreak(nextStreak)
+            setStreak(nextStreak)
           }
         } else {
-          setCurrentStreak(0)
+          setStreak(0)
+          if (onTelemetryLog) {
+            onTelemetryLog('EVAL', `❌ Fallo: ${result.feedbackMessage} (Streak reiniciado a 0)`)
+          }
         }
 
         core.recordAnswer(result, answerRecord, result.isCompleteSuccess, () => {
@@ -458,12 +477,13 @@ export function useRepertoireTrainer({
     },
     [
       core,
-      currentStreak,
+      getActiveSlice,
       rhythmMode,
       rhythmTolerancePercent,
       autoSpeedRamp,
       setActiveSliceLength,
       setStudyBpm,
+      setStreak,
       onTelemetryLog,
       advanceToNextStep
     ]

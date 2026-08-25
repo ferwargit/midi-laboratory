@@ -3,6 +3,7 @@ export interface ScheduledNoteEvent {
   durationMs: number
   delayMs: number
   velocity?: number
+  channel?: number // 1: Piano/Melodía, 10: Metrónomo/Percusión
 }
 
 export class StimulusScheduler {
@@ -10,7 +11,7 @@ export class StimulusScheduler {
 
   scheduleSequence(
     events: ScheduledNoteEvent[],
-    playNoteFn: (note: number, durationMs: number, velocity?: number) => void,
+    playNoteFn: (note: number, durationMs: number, velocity?: number, channel?: number) => void,
     onComplete?: () => void
   ): void {
     this.cancelAll()
@@ -20,7 +21,7 @@ export class StimulusScheduler {
     events.forEach((evt) => {
       const timer = setTimeout(() => {
         this.activeTimers.delete(timer)
-        playNoteFn(evt.note, evt.durationMs, evt.velocity ?? 90)
+        playNoteFn(evt.note, evt.durationMs, evt.velocity ?? 90, evt.channel ?? 1)
       }, evt.delayMs)
 
       this.activeTimers.add(timer)

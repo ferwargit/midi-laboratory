@@ -14,24 +14,24 @@ describe('stimulusScheduler - Programación y Cancelación Atómica de Estímulo
     vi.useRealTimers()
   })
 
-  it('debe programar y reproducir eventos con sus retrasos y duraciones exactas', () => {
+  it('debe programar y reproducir eventos con sus retrasos, duraciones y canales exactos', () => {
     const playNoteFn = vi.fn()
     const events: ScheduledNoteEvent[] = [
-      { note: 60, durationMs: 400, delayMs: 0, velocity: 85 },
-      { note: 64, durationMs: 400, delayMs: 500, velocity: 90 }
+      { note: 60, durationMs: 400, delayMs: 0, velocity: 85, channel: 1 },
+      { note: 76, durationMs: 120, delayMs: 500, velocity: 105, channel: 10 }
     ]
 
     scheduler.scheduleSequence(events, playNoteFn)
     expect(scheduler.hasPending()).toBe(true)
 
-    // Evento 1 a los 0ms
+    // Evento 1 a los 0ms en Canal 1 (Piano)
     vi.advanceTimersByTime(10)
-    expect(playNoteFn).toHaveBeenCalledWith(60, 400, 85)
+    expect(playNoteFn).toHaveBeenCalledWith(60, 400, 85, 1)
     expect(playNoteFn).toHaveBeenCalledTimes(1)
 
-    // Evento 2 a los 500ms
+    // Evento 2 a los 500ms en Canal 10 (Metrónomo Pre-Roll)
     vi.advanceTimersByTime(500)
-    expect(playNoteFn).toHaveBeenCalledWith(64, 400, 90)
+    expect(playNoteFn).toHaveBeenCalledWith(76, 120, 105, 10)
     expect(playNoteFn).toHaveBeenCalledTimes(2)
   })
 

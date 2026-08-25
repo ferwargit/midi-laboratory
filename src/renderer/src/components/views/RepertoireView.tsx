@@ -28,8 +28,6 @@ export function RepertoireView({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const activeNotesInSlice = trainer.activeEventsSlice.flatMap((e) => e.midiNotes)
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -93,7 +91,7 @@ export function RepertoireView({
             variant="secondary"
             disabled={trainer.isSessionActive}
             onClick={() => fileInputRef.current?.click()}
-            className="font-mono text-xs"
+            className="font-mono text-xs cursor-pointer"
           >
             📁 Cambiar Partitura
           </Button>
@@ -111,7 +109,7 @@ export function RepertoireView({
               size="md"
               disabled={!trainer.currentScore}
               onClick={(): void => trainer.startSession()}
-              className="px-5 py-2 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)] font-mono"
+              className="px-5 py-2 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)] font-mono cursor-pointer"
             >
               ▶ COMENZAR SESIÓN
             </Button>
@@ -121,7 +119,7 @@ export function RepertoireView({
                 variant="primary"
                 size="sm"
                 onClick={trainer.repeatCurrentSlice}
-                className="font-mono"
+                className="font-mono cursor-pointer"
               >
                 🔊 Repetir (R)
               </Button>
@@ -129,7 +127,7 @@ export function RepertoireView({
                 variant="danger"
                 size="sm"
                 onClick={trainer.stopSession}
-                className="font-mono"
+                className="font-mono cursor-pointer"
               >
                 ⏹ Detener y Guardar
               </Button>
@@ -158,13 +156,13 @@ export function RepertoireView({
         />
       )}
 
-      {/* 3. PIANO HERO */}
+      {/* 3. PIANO HERO (Sin spoilers en azul) */}
       <div className="space-y-1.5">
         <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1">
           <span>
             {trainer.isSessionActive
               ? `🎹 ENTRADA ROLAND FP-8 (${trainer.selectedHand === 'RH' ? 'MANO DERECHA' : trainer.selectedHand === 'LH' ? 'MANO IZQUIERDA' : 'AMBAS MANOS'}):`
-              : `NOTAS DEL FRAGMENTO A ESTUDIAR (${activeNotesInSlice.length} TONOS ACTIVOS):`}
+              : 'TECLADO DE PRÁCTICA AUDIOMOTORA (TOCA EN TU ROLAND FP-8 O CLIC VIRTUAL):'}
           </span>
 
           <div className="flex items-center gap-1 bg-zinc-950/90 p-1 rounded-xl border border-zinc-800/80 text-[10px] select-none">
@@ -192,7 +190,7 @@ export function RepertoireView({
 
         <PianoKeyboard
           keys={pianoKeys}
-          activeNotes={activeNotesInSlice}
+          activeNotes={[]} // 👈 Vacío para no revelar la nota en azul
           pressedNotes={pressedNotes}
           stimulusNotes={stimulusNotes}
           isInteractiveTraining={trainer.isSessionActive}
@@ -201,12 +199,11 @@ export function RepertoireView({
         />
       </div>
 
-      {/* 4. DECK DE CONFIGURACIÓN DEL REPERTORIO */}
+      {/* 4. DECK DE CONFIGURACIÓN */}
       {!trainer.isSessionActive && (
         <Card className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-4 space-y-4 rounded-2xl font-mono text-xs">
-          {/* FILA 1: SELECCIÓN DE MANO Y RANGO DE COMPASES */}
+          {/* FILA 1: MANO, RANGO Y ENCADENAMIENTO */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Mano / Voz */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Mano / Pentagrama a Estudiar:
@@ -235,7 +232,6 @@ export function RepertoireView({
               </div>
             </div>
 
-            {/* Rango de Compases */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Rango de Compases (Deliberate Practice):
@@ -267,7 +263,6 @@ export function RepertoireView({
               </div>
             </div>
 
-            {/* Dirección de Encadenamiento */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Estrategia de Encadenamiento:
@@ -298,7 +293,6 @@ export function RepertoireView({
 
           {/* FILA 2: RITMO, TOLERANCIA, BPM Y STREAKS */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-zinc-800/80">
-            {/* Modo Rítmico */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Modo Rítmico:
@@ -316,7 +310,6 @@ export function RepertoireView({
               </select>
             </div>
 
-            {/* Tolerancia Rítmica */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs uppercase text-zinc-400 font-bold">
@@ -338,7 +331,6 @@ export function RepertoireView({
               />
             </div>
 
-            {/* Tempo de Estudio y Rampa */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs uppercase text-zinc-400 font-bold">
@@ -368,7 +360,6 @@ export function RepertoireView({
               </div>
             </div>
 
-            {/* Streak Target */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Streak de Retención:

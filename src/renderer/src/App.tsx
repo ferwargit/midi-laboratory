@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react'
+import React, { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { generateMidiRange, midiNoteToName } from './domain/music/noteUtils'
 import { VisualCueMode } from './domain/exercise/visualAudioSync'
 import { TonalContextMode, getTonalContextSteps } from './domain/music/tonalContext'
@@ -185,35 +185,62 @@ export default function App(): React.ReactElement {
     }
   })
 
-  // 4. Modalidad 4: Repertorio Audiomotor (MusicXML)
+  // 4. Modalidad 4: Repertorio Audiomotor (MusicXML) con Pre-Roll en Canal 10
   const repertoireTrainer = useRepertoireTrainer({
-    onPlaySlice: (events, bpm) => {
-      let currentOffsetMs = 0
+    onPlaySlice: (events, bpm, beatsPerMeasure = 2) => {
       const scheduledEvents: ScheduledNoteEvent[] = []
+      const beatDurationMs = Math.round(60000 / bpm)
+      const preRollDurationMs = beatsPerMeasure * beatDurationMs
+
+      // A. PRE-ROLL DE METRÓNOMO EN CANAL 10 (2 clics exactos para compás 2/4)
+      for (let beat = 0; beat < beatsPerMeasure; beat++) {
+        const isFirstBeat = beat === 0
+        scheduledEvents.push({
+          note: isFirstBeat ? 76 : 77, // 76: Woodblock Agudo, 77: Woodblock Grave
+          durationMs: 120,
+          delayMs: beat * beatDurationMs,
+          velocity: isFirstBeat ? 115 : 90,
+          channel: 10
+        })
+      }
+
+      midi.addLog({
+        type: 'OUT',
+        message: `⏱️ Metrónomo: ${beatsPerMeasure} tiempos en Canal 10 (${bpm} BPM)`
+      })
+
+      // B. REPRODUCCIÓN DE LA FRASE DE PIANO EN CANAL 1 TRAS LA CUENTA PREVIA
+      let currentOffsetMs = preRollDurationMs
 
       events.forEach((evt) => {
+        const noteBeats = evt.durationBeats || 0.5
+        const baseMs = Math.round(noteBeats * beatDurationMs)
+        const durationMs = Math.max(360, baseMs)
+
         evt.midiNotes.forEach((note) => {
           scheduledEvents.push({
             note,
-            durationMs: evt.durationMs,
+            durationMs,
             delayMs: currentOffsetMs,
-            velocity: 90
+            velocity: 100,
+            channel: 1
           })
         })
-        currentOffsetMs += evt.durationMs
+        currentOffsetMs += durationMs
       })
 
-      stimulusScheduler.scheduleSequence(scheduledEvents, (note, dur, vel) => {
-        midi.sendNote(note, dur, vel)
+      // C. PROGRAMACIÓN EN EL SCHEDULER ATÓMICO
+      stimulusScheduler.scheduleSequence(scheduledEvents, (note, dur, vel, ch) => {
+        midi.sendNote(note, dur, vel, ch)
       })
 
-      const names = events
+      const noteNames = events
         .flatMap((e) => e.midiNotes)
         .map((n) => midiNoteToName(n))
-        .join(' - ')
+        .join(', ')
       midi.addLog({
         type: 'OUT',
-        message: `🎼 Repertorio (${events.length} eventos a ${bpm} BPM) -> ${names}`
+        message: `🎼 Frase (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
       })
     },
     onTelemetryLog: (type, message) => {
@@ -236,7 +263,22 @@ export default function App(): React.ReactElement {
     }
   }, [setCurrentScore, setStartMeasure, setEndMeasure, setStudyBpm])
 
-  // Desestructuración de propiedades exactas para el listener de teclado (ESLint react-hooks)
+  // Router MIDI SÍNCRONO usando useLayoutEffect: garantiza atención inmediata sin violar las reglas de render
+  useLayoutEffect(() => {
+    handleNoteRef.current = (note, vel, source) => {
+      if (appMode === 'single_note') {
+        singleNoteTrainer.handleUserNotePlayed(note, source)
+      } else if (appMode === 'intervals') {
+        intervalTrainer.handleUserNotePlayed(note, source)
+      } else if (appMode === 'sequences') {
+        sequenceTrainer.handleUserNotePlayed(note, source)
+      } else if (appMode === 'repertoire') {
+        repertoireTrainer.handleUserNotePlayed(note, vel ?? 90, source)
+      }
+    }
+  })
+
+  // Atajos de Teclado (Space y R)
   const {
     isWaitingManualAdvance: singleNoteWaiting,
     isSessionActive: singleNoteActive,
@@ -324,55 +366,6 @@ export default function App(): React.ReactElement {
     repertoireActive,
     repertoireAdvance,
     repertoireRepeat
-  ])
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      if (isResetModalOpen) return
-
-      const target = e.target as HTMLElement | null
-      const isTyping =
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-
-      if (isTyping) return
-
-      if (e.code === 'Space') {
-        e.preventDefault()
-        if (appMode === 'single_note' && singleNoteTrainer.isWaitingManualAdvance) {
-          singleNoteTrainer.advanceToNextQuestion()
-        } else if (appMode === 'intervals' && intervalTrainer.isWaitingManualAdvance) {
-          intervalTrainer.advanceToNextInterval()
-        } else if (appMode === 'sequences' && sequenceTrainer.isWaitingManualAdvance) {
-          sequenceTrainer.advanceToNextSequence()
-        } else if (appMode === 'repertoire' && repertoireTrainer.isWaitingManualAdvance) {
-          repertoireTrainer.advanceToNextStep()
-        }
-      } else if (e.key === 'r' || e.key === 'R') {
-        if (appMode === 'single_note' && singleNoteTrainer.isSessionActive) {
-          singleNoteTrainer.repeatCurrentNote()
-        } else if (appMode === 'intervals' && intervalTrainer.isSessionActive) {
-          intervalTrainer.repeatCurrentInterval()
-        } else if (appMode === 'sequences' && sequenceTrainer.isSessionActive) {
-          sequenceTrainer.repeatCurrentSequence()
-        } else if (appMode === 'repertoire' && repertoireTrainer.isSessionActive) {
-          repertoireTrainer.repeatCurrentSlice()
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return (): void => window.removeEventListener('keydown', handleKeyDown)
-  }, [
-    appMode,
-    isResetModalOpen,
-    singleNoteTrainer,
-    intervalTrainer,
-    sequenceTrainer,
-    repertoireTrainer
   ])
 
   const handleVirtualKeyPress = useCallback(
