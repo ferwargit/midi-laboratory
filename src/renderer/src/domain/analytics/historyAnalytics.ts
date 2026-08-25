@@ -351,7 +351,7 @@ export function reconstructSessionConfig(
   const sessionAnswers = allAnswers.filter((a) => a.sessionId === session.id)
 
   let targetMode: 'single_note' | 'intervals' | 'sequences' = 'single_note'
-  if (session.targetMode) {
+  if (session.targetMode && session.targetMode !== 'repertoire') {
     targetMode = session.targetMode
   } else if (isIntervalSession(session)) {
     targetMode = 'intervals'

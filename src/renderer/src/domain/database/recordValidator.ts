@@ -6,7 +6,12 @@ import {
   SessionTargetMode
 } from './types'
 
-const VALID_SESSION_TARGET_MODES: SessionTargetMode[] = ['single_note', 'intervals', 'sequences']
+const VALID_SESSION_TARGET_MODES: SessionTargetMode[] = [
+  'single_note',
+  'intervals',
+  'sequences',
+  'repertoire'
+]
 
 export function isValidSessionRecord(session: unknown): session is DbSessionRecord {
   if (!session || typeof session !== 'object') return false

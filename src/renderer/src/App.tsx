@@ -2,30 +2,70 @@ import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { generateMidiRange, midiNoteToName } from './domain/music/noteUtils'
 import { VisualCueMode } from './domain/exercise/visualAudioSync'
 import { TonalContextMode, getTonalContextSteps } from './domain/music/tonalContext'
+import { parseMusicXml } from './domain/music/scoreParser'
+import { stimulusScheduler, ScheduledNoteEvent } from './services/audio/stimulusScheduler'
 import { useMidi } from './hooks/useMidi'
 import { useSingleNoteTrainer } from './hooks/useSingleNoteTrainer'
 import { useIntervalTrainer } from './hooks/useIntervalTrainer'
 import { useSequenceTrainer } from './hooks/useSequenceTrainer'
+import { useRepertoireTrainer } from './hooks/useRepertoireTrainer'
 import { useDatabaseStore } from './stores/useDatabaseStore'
 import { StudioTopBar } from './components/trainer/StudioTopBar'
 import { StudioBottomDock } from './components/trainer/StudioBottomDock'
 import { MidiDisconnectAlert } from './components/trainer/MidiDisconnectAlert'
+import { DbSaveAlert } from './components/trainer/DbSaveAlert'
 import { SingleNoteView } from './components/views/SingleNoteView'
 import { IntervalsView } from './components/views/IntervalsView'
 import { SequencesView } from './components/views/SequencesView'
+import { RepertoireView } from './components/views/RepertoireView'
 import { AnalyticsView } from './components/views/AnalyticsView'
 import { ConfirmModal } from './components/ui/ConfirmModal'
 import { AiExercisePrescription } from './domain/ai/types'
-import { DbSaveAlert } from './components/trainer/DbSaveAlert'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
-type AppMode = 'single_note' | 'intervals' | 'sequences' | 'analytics'
+type AppMode = 'single_note' | 'intervals' | 'sequences' | 'repertoire' | 'analytics'
+
+const DEFAULT_PARTITURA_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="4.0">
+  <work><work-title>Partitura 1</work-title></work>
+  <credit page="1"><credit-type>title</credit-type><credit-words default-x="600" default-y="1600" font-size="22">Partitura 1</credit-words></credit>
+  <credit page="1"><credit-type>composer</credit-type><credit-words default-x="1100" default-y="1500" justify="right">Félix Dumont</credit-words></credit>
+  <credit page="1"><credit-type>subtitle</credit-type><credit-words default-x="600" default-y="1550" font-size="14">Canto de los cazadores tiroleses</credit-words></credit>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>4</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <staves>2</staves>
+        <clef number="1"><sign>G</sign><line>2</line></clef>
+        <clef number="2"><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>
+      <direction placement="above"><sound tempo="86"/></direction>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <backup><duration>8</duration></backup>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+    </measure>
+  </part>
+</score-partwise>`
 
 export default function App(): React.ReactElement {
   const [appMode, setAppMode] = useState<AppMode>('single_note')
   const [visualCueMode, setVisualCueMode] = useState<VisualCueMode>('blind')
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false)
-  const handleNoteRef = useRef<(note: number) => void>(() => {})
+  const handleNoteRef = useRef<
+    (note: number, velocity?: number, source?: 'midi_hardware' | 'virtual_ui') => void
+  >(() => {})
 
   const initializeDb = useDatabaseStore((state) => state.initialize)
   const clearDb = useDatabaseStore((state) => state.clearDatabase)
@@ -35,29 +75,37 @@ export default function App(): React.ReactElement {
   }, [initializeDb])
 
   const midi = useMidi({
-    onNoteOn: (note) => handleNoteRef.current(note),
+    onNoteOn: (note, vel) => handleNoteRef.current(note, vel, 'midi_hardware'),
     enableSoftwareThru: true
   })
 
-  // Reproductor MIDI de Cadencias y Contexto Tonal Dinámico
   const playTonalContextMidi = useCallback(
     (mode: TonalContextMode, rootNote: number): void => {
       const steps = getTonalContextSteps(mode, rootNote)
       if (steps.length === 0) return
 
-      let accumulatedDelay = 0
       midi.addLog({
         type: 'OUT',
         message: `🎼 Pre-Roll Tonal activado: ${mode.toUpperCase()} (Raíz: ${midiNoteToName(rootNote)})`
       })
 
+      const scheduledEvents: ScheduledNoteEvent[] = []
+      let accumulatedDelay = 0
+
       steps.forEach((step) => {
-        setTimeout(() => {
-          step.notes.forEach((note) => {
-            midi.sendNote(note, step.durationMs, 85)
+        step.notes.forEach((note) => {
+          scheduledEvents.push({
+            note,
+            durationMs: step.durationMs,
+            delayMs: accumulatedDelay,
+            velocity: 85
           })
-        }, accumulatedDelay)
+        })
         accumulatedDelay += step.delayAfterMs
+      })
+
+      stimulusScheduler.scheduleSequence(scheduledEvents, (note, dur, vel) => {
+        midi.sendNote(note, dur, vel)
       })
     },
     [midi]
@@ -97,21 +145,18 @@ export default function App(): React.ReactElement {
   // 2. Modalidad 2: Intervalos (2 Notas)
   const intervalTrainer = useIntervalTrainer({
     onPlayInterval: (root, target) => {
-      midi.sendNote(root, 500)
-      const rootName = midiNoteToName(root)
-      const targetName = midiNoteToName(target)
+      stimulusScheduler.scheduleSequence(
+        [
+          { note: root, durationMs: 500, delayMs: 0 },
+          { note: target, durationMs: 600, delayMs: 550 }
+        ],
+        (note, dur) => midi.sendNote(note, dur)
+      )
+
       midi.addLog({
         type: 'OUT',
-        message: `📏 Intervalo Nota 1 -> ${rootName} (${root})`
+        message: `📏 Intervalo -> ${midiNoteToName(root)} a ${midiNoteToName(target)}`
       })
-
-      setTimeout(() => {
-        midi.sendNote(target, 600)
-        midi.addLog({
-          type: 'OUT',
-          message: `📏 Intervalo Nota 2 -> ${targetName} (${target})`
-        })
-      }, 550)
     },
     onTelemetryLog: (type, message) => {
       midi.addLog({ type, message })
@@ -121,16 +166,18 @@ export default function App(): React.ReactElement {
   // 3. Modalidad 3: Secuencias (3 a 6 Notas)
   const sequenceTrainer = useSequenceTrainer({
     onPlaySequence: (notes) => {
+      const scheduled: ScheduledNoteEvent[] = notes.map((note, idx) => ({
+        note,
+        durationMs: 450,
+        delayMs: idx * 500
+      }))
+
+      stimulusScheduler.scheduleSequence(scheduled, (note, dur) => midi.sendNote(note, dur))
+
       const names = notes.map((n) => midiNoteToName(n)).join(' - ')
       midi.addLog({
         type: 'OUT',
         message: `🎼 Secuencia (${notes.length} notas) -> ${names}`
-      })
-
-      notes.forEach((note, idx) => {
-        setTimeout(() => {
-          midi.sendNote(note, 450)
-        }, idx * 500)
       })
     },
     onTelemetryLog: (type, message) => {
@@ -138,23 +185,90 @@ export default function App(): React.ReactElement {
     }
   })
 
-  useEffect(() => {
-    if (appMode === 'single_note') {
-      handleNoteRef.current = singleNoteTrainer.handleUserNotePlayed
-    } else if (appMode === 'intervals') {
-      handleNoteRef.current = intervalTrainer.handleUserNotePlayed
-    } else {
-      handleNoteRef.current = sequenceTrainer.handleUserNotePlayed
+  // 4. Modalidad 4: Repertorio Audiomotor (MusicXML)
+  const repertoireTrainer = useRepertoireTrainer({
+    onPlaySlice: (events, bpm) => {
+      let currentOffsetMs = 0
+      const scheduledEvents: ScheduledNoteEvent[] = []
+
+      events.forEach((evt) => {
+        evt.midiNotes.forEach((note) => {
+          scheduledEvents.push({
+            note,
+            durationMs: evt.durationMs,
+            delayMs: currentOffsetMs,
+            velocity: 90
+          })
+        })
+        currentOffsetMs += evt.durationMs
+      })
+
+      stimulusScheduler.scheduleSequence(scheduledEvents, (note, dur, vel) => {
+        midi.sendNote(note, dur, vel)
+      })
+
+      const names = events
+        .flatMap((e) => e.midiNotes)
+        .map((n) => midiNoteToName(n))
+        .join(' - ')
+      midi.addLog({
+        type: 'OUT',
+        message: `🎼 Repertorio (${events.length} eventos a ${bpm} BPM) -> ${names}`
+      })
+    },
+    onTelemetryLog: (type, message) => {
+      midi.addLog({ type, message })
     }
-  }, [
-    appMode,
-    singleNoteTrainer.handleUserNotePlayed,
-    intervalTrainer.handleUserNotePlayed,
-    sequenceTrainer.handleUserNotePlayed
-  ])
+  })
+
+  // Cargar partitura por defecto al montar
+  const { setCurrentScore, setStartMeasure, setEndMeasure, setStudyBpm } = repertoireTrainer
+
+  useEffect(() => {
+    try {
+      const defaultScore = parseMusicXml(DEFAULT_PARTITURA_XML)
+      setCurrentScore(defaultScore)
+      setStartMeasure(1)
+      setEndMeasure(1)
+      setStudyBpm(defaultScore.baseBpm)
+    } catch {
+      // No-op
+    }
+  }, [setCurrentScore, setStartMeasure, setEndMeasure, setStudyBpm])
+
+  // Desestructuración de propiedades exactas para el listener de teclado (ESLint react-hooks)
+  const {
+    isWaitingManualAdvance: singleNoteWaiting,
+    isSessionActive: singleNoteActive,
+    advanceToNextQuestion: singleNoteAdvance,
+    repeatCurrentNote: singleNoteRepeat
+  } = singleNoteTrainer
+
+  const {
+    isWaitingManualAdvance: intervalWaiting,
+    isSessionActive: intervalActive,
+    advanceToNextInterval: intervalAdvance,
+    repeatCurrentInterval: intervalRepeat
+  } = intervalTrainer
+
+  const {
+    isWaitingManualAdvance: sequenceWaiting,
+    isSessionActive: sequenceActive,
+    advanceToNextSequence: sequenceAdvance,
+    repeatCurrentSequence: sequenceRepeat
+  } = sequenceTrainer
+
+  const {
+    isWaitingManualAdvance: repertoireWaiting,
+    isSessionActive: repertoireActive,
+    advanceToNextStep: repertoireAdvance,
+    repeatCurrentSlice: repertoireRepeat
+  } = repertoireTrainer
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
+      if (isResetModalOpen) return
+
       const target = e.target as HTMLElement | null
       const isTyping =
         target &&
@@ -163,9 +277,68 @@ export default function App(): React.ReactElement {
           target.tagName === 'SELECT' ||
           target.isContentEditable)
 
-      if (isTyping) {
-        return
+      if (isTyping) return
+
+      if (e.code === 'Space') {
+        e.preventDefault()
+        if (appMode === 'single_note' && singleNoteWaiting) {
+          singleNoteAdvance()
+        } else if (appMode === 'intervals' && intervalWaiting) {
+          intervalAdvance()
+        } else if (appMode === 'sequences' && sequenceWaiting) {
+          sequenceAdvance()
+        } else if (appMode === 'repertoire' && repertoireWaiting) {
+          repertoireAdvance()
+        }
+      } else if (e.key === 'r' || e.key === 'R') {
+        if (appMode === 'single_note' && singleNoteActive) {
+          singleNoteRepeat()
+        } else if (appMode === 'intervals' && intervalActive) {
+          intervalRepeat()
+        } else if (appMode === 'sequences' && sequenceActive) {
+          sequenceRepeat()
+        } else if (appMode === 'repertoire' && repertoireActive) {
+          repertoireRepeat()
+        }
       }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return (): void => window.removeEventListener('keydown', handleKeyDown)
+  }, [
+    appMode,
+    isResetModalOpen,
+    singleNoteWaiting,
+    singleNoteActive,
+    singleNoteAdvance,
+    singleNoteRepeat,
+    intervalWaiting,
+    intervalActive,
+    intervalAdvance,
+    intervalRepeat,
+    sequenceWaiting,
+    sequenceActive,
+    sequenceAdvance,
+    sequenceRepeat,
+    repertoireWaiting,
+    repertoireActive,
+    repertoireAdvance,
+    repertoireRepeat
+  ])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (isResetModalOpen) return
+
+      const target = e.target as HTMLElement | null
+      const isTyping =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+
+      if (isTyping) return
 
       if (e.code === 'Space') {
         e.preventDefault()
@@ -175,6 +348,8 @@ export default function App(): React.ReactElement {
           intervalTrainer.advanceToNextInterval()
         } else if (appMode === 'sequences' && sequenceTrainer.isWaitingManualAdvance) {
           sequenceTrainer.advanceToNextSequence()
+        } else if (appMode === 'repertoire' && repertoireTrainer.isWaitingManualAdvance) {
+          repertoireTrainer.advanceToNextStep()
         }
       } else if (e.key === 'r' || e.key === 'R') {
         if (appMode === 'single_note' && singleNoteTrainer.isSessionActive) {
@@ -183,13 +358,22 @@ export default function App(): React.ReactElement {
           intervalTrainer.repeatCurrentInterval()
         } else if (appMode === 'sequences' && sequenceTrainer.isSessionActive) {
           sequenceTrainer.repeatCurrentSequence()
+        } else if (appMode === 'repertoire' && repertoireTrainer.isSessionActive) {
+          repertoireTrainer.repeatCurrentSlice()
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return (): void => window.removeEventListener('keydown', handleKeyDown)
-  }, [appMode, singleNoteTrainer, intervalTrainer, sequenceTrainer])
+  }, [
+    appMode,
+    isResetModalOpen,
+    singleNoteTrainer,
+    intervalTrainer,
+    sequenceTrainer,
+    repertoireTrainer
+  ])
 
   const handleVirtualKeyPress = useCallback(
     (noteNumber: number): void => {
@@ -205,11 +389,13 @@ export default function App(): React.ReactElement {
         singleNoteTrainer.handleUserNotePlayed(noteNumber, 'virtual_ui')
       } else if (appMode === 'intervals') {
         intervalTrainer.handleUserNotePlayed(noteNumber, 'virtual_ui')
-      } else {
+      } else if (appMode === 'sequences') {
         sequenceTrainer.handleUserNotePlayed(noteNumber, 'virtual_ui')
+      } else if (appMode === 'repertoire') {
+        repertoireTrainer.handleUserNotePlayed(noteNumber, 90, 'virtual_ui')
       }
     },
-    [midi, appMode, singleNoteTrainer, intervalTrainer, sequenceTrainer]
+    [midi, appMode, singleNoteTrainer, intervalTrainer, sequenceTrainer, repertoireTrainer]
   )
 
   const handleLoadPrescription = (p: AiExercisePrescription): void => {
@@ -261,6 +447,7 @@ export default function App(): React.ReactElement {
   }
 
   const handleSelectMode = (newMode: AppMode): void => {
+    stimulusScheduler.cancelAll()
     midi.sendAllNotesOff()
     setAppMode(newMode)
   }
@@ -268,7 +455,21 @@ export default function App(): React.ReactElement {
   const isAnySessionActive =
     singleNoteTrainer.isSessionActive ||
     intervalTrainer.isSessionActive ||
-    sequenceTrainer.isSessionActive
+    sequenceTrainer.isSessionActive ||
+    repertoireTrainer.isSessionActive
+
+  const activeDbSaveError =
+    singleNoteTrainer.saveError ||
+    intervalTrainer.saveError ||
+    sequenceTrainer.saveError ||
+    repertoireTrainer.saveError
+
+  const handleDismissDbSaveError = (): void => {
+    singleNoteTrainer.clearSaveError()
+    intervalTrainer.clearSaveError()
+    sequenceTrainer.clearSaveError()
+    repertoireTrainer.clearSaveError()
+  }
 
   const handleConfirmReset = async (): Promise<void> => {
     await clearDb()
@@ -276,15 +477,6 @@ export default function App(): React.ReactElement {
   }
 
   const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
-
-  const activeDbSaveError =
-    singleNoteTrainer.saveError || intervalTrainer.saveError || sequenceTrainer.saveError
-
-  const handleDismissDbSaveError = (): void => {
-    singleNoteTrainer.clearSaveError()
-    intervalTrainer.clearSaveError()
-    sequenceTrainer.clearSaveError()
-  }
 
   return (
     <div className="min-h-screen flex flex-col justify-between p-4 md:p-6 max-w-[1540px] w-full mx-auto space-y-3 font-sans">
@@ -332,6 +524,16 @@ export default function App(): React.ReactElement {
         {appMode === 'sequences' && (
           <SequencesView
             trainer={sequenceTrainer}
+            pianoKeys={PIANO_KEYS}
+            pressedNotes={midi.pressedNotes}
+            stimulusNotes={liveStimulusNotes}
+            onVirtualKeyPress={handleVirtualKeyPress}
+          />
+        )}
+
+        {appMode === 'repertoire' && (
+          <RepertoireView
+            trainer={repertoireTrainer}
             pianoKeys={PIANO_KEYS}
             pressedNotes={midi.pressedNotes}
             stimulusNotes={liveStimulusNotes}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { VisualCueMode } from '../../domain/exercise/visualAudioSync'
 
-type AppMode = 'single_note' | 'intervals' | 'sequences' | 'analytics'
+type AppMode = 'single_note' | 'intervals' | 'sequences' | 'repertoire' | 'analytics'
 
 interface StudioTopBarProps {
   appMode: AppMode
@@ -72,6 +72,7 @@ export function StudioTopBar({
           { id: 'single_note', label: 'Notas', code: '01' },
           { id: 'intervals', label: 'Intervalos', code: '02' },
           { id: 'sequences', label: 'Secuencias', code: '03' },
+          { id: 'repertoire', label: 'Repertorio', code: '04' },
           { id: 'analytics', label: 'Diagnóstico IA', code: 'AI' }
         ].map((tab) => {
           const active = appMode === tab.id

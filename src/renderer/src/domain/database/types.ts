@@ -1,6 +1,6 @@
 import { AiExercisePrescription } from '../ai/types'
 
-export type SessionTargetMode = 'single_note' | 'intervals' | 'sequences'
+export type SessionTargetMode = 'single_note' | 'intervals' | 'sequences' | 'repertoire'
 
 export interface DbSessionRecord {
   id: string
