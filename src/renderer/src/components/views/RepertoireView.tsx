@@ -59,6 +59,7 @@ export function RepertoireView({
         score={trainer.currentScore}
         history={trainer.sessionHistory}
         studyBpm={trainer.studyBpm}
+        rhythmMode={trainer.rhythmMode}
         onRepeatSession={(): void => trainer.startSession()}
         onResetToConfig={trainer.resetToConfig}
       />
@@ -156,7 +157,7 @@ export function RepertoireView({
         />
       )}
 
-      {/* 3. PIANO HERO (Sin spoilers en azul) */}
+      {/* 3. PIANO HERO */}
       <div className="space-y-1.5">
         <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1">
           <span>
@@ -190,7 +191,7 @@ export function RepertoireView({
 
         <PianoKeyboard
           keys={pianoKeys}
-          activeNotes={[]} // 👈 Vacío para no revelar la nota en azul
+          activeNotes={[]}
           pressedNotes={pressedNotes}
           stimulusNotes={stimulusNotes}
           isInteractiveTraining={trainer.isSessionActive}
@@ -291,8 +292,9 @@ export function RepertoireView({
             </div>
           </div>
 
-          {/* FILA 2: RITMO, TOLERANCIA, BPM Y STREAKS */}
+          {/* FILA 2: RITMO, CONTROL PARAMÉTRICO, BPM Y STREAKS */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-zinc-800/80">
+            {/* Modo Rítmico */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Modo Rítmico:
@@ -302,35 +304,65 @@ export function RepertoireView({
                 onChange={(e): void =>
                   trainer.setRhythmMode(e.target.value as RhythmEvaluationMode)
                 }
-                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-500"
+                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-500 font-semibold"
               >
-                <option value="free_rubato">1: 🕊️ Rubato Libre (Solo Altura)</option>
-                <option value="relative_proportional">2: 🎶 Proporcional (IOI)</option>
-                <option value="strict_metronome">3: ⏱️ Metrónomo Estricto</option>
+                <option value="free_rubato">1: 🟢 Isócrono (Notas Iguales)</option>
+                <option value="relative_proportional">2: 🟡 Proporcional (IOI)</option>
+                <option value="strict_metronome">3: 🔴 Metrónomo Estricto</option>
               </select>
             </div>
 
+            {/* Control Dinámico: Duración Isócrona (Modo 1) o Tolerancia Rítmica (Modos 2 y 3) */}
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs uppercase text-zinc-400 font-bold">
-                  Tolerancia Rítmica:
-                </label>
-                <span className="text-purple-400 font-bold">
-                  ±{trainer.rhythmTolerancePercent}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min={5}
-                max={50}
-                step={5}
-                disabled={trainer.rhythmMode === 'free_rubato'}
-                value={trainer.rhythmTolerancePercent}
-                onChange={(e): void => trainer.setRhythmTolerancePercent(Number(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer disabled:opacity-30"
-              />
+              {trainer.rhythmMode === 'free_rubato' ? (
+                <>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs uppercase text-zinc-400 font-bold">
+                      Duración Isócrona:
+                    </label>
+                    <span className="text-emerald-400 font-bold">
+                      {trainer.isochronousNoteDurationMs} ms
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={300}
+                    max={1000}
+                    step={50}
+                    value={trainer.isochronousNoteDurationMs}
+                    onChange={(e): void =>
+                      trainer.setIsochronousNoteDurationMs(Number(e.target.value))
+                    }
+                    className="w-full accent-emerald-500 cursor-pointer"
+                    title="Controla los milisegundos que dura cada nota al sonar homogénea"
+                  />
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs uppercase text-zinc-400 font-bold">
+                      Tolerancia Rítmica:
+                    </label>
+                    <span className="text-purple-400 font-bold">
+                      ±{trainer.rhythmTolerancePercent}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={5}
+                    max={50}
+                    step={5}
+                    value={trainer.rhythmTolerancePercent}
+                    onChange={(e): void =>
+                      trainer.setRhythmTolerancePercent(Number(e.target.value))
+                    }
+                    className="w-full accent-purple-500 cursor-pointer"
+                  />
+                </>
+              )}
             </div>
 
+            {/* Tempo de Estudio y Rampa */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs uppercase text-zinc-400 font-bold">
@@ -360,6 +392,7 @@ export function RepertoireView({
               </div>
             </div>
 
+            {/* Streak Target */}
             <div>
               <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
                 Streak de Retención:
@@ -411,9 +444,13 @@ export function RepertoireView({
 
           <div className="bg-zinc-950/80 p-2.5 rounded-xl border border-zinc-800/80">
             <span className="text-[10px] uppercase tracking-wider text-zinc-500 block font-bold">
-              Tempo
+              {trainer.rhythmMode === 'free_rubato' ? 'Duración Isócrona' : 'Tempo'}
             </span>
-            <strong className="text-sm text-emerald-400">{trainer.studyBpm} BPM</strong>
+            <strong className="text-sm text-emerald-400">
+              {trainer.rhythmMode === 'free_rubato'
+                ? `${trainer.isochronousNoteDurationMs} ms`
+                : `${trainer.studyBpm} BPM`}
+            </strong>
           </div>
         </div>
       )}

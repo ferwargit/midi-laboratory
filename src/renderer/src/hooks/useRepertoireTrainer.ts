@@ -25,6 +25,7 @@ export interface RepertoireSessionOptions extends CoreStartSessionOptions {
   streakTarget?: number
   rhythmMode?: RhythmEvaluationMode
   rhythmTolerancePercent?: number
+  isochronousNoteDurationMs?: number
   studyBpm?: number
   autoSpeedRamp?: boolean
 }
@@ -49,6 +50,8 @@ export interface UseRepertoireTrainerReturn {
   setRhythmMode: (mode: RhythmEvaluationMode) => void
   rhythmTolerancePercent: number
   setRhythmTolerancePercent: (tol: number) => void
+  isochronousNoteDurationMs: number
+  setIsochronousNoteDurationMs: (ms: number) => void
   studyBpm: number
   setStudyBpm: (bpm: number) => void
   autoSpeedRamp: boolean
@@ -78,7 +81,13 @@ export interface UseRepertoireTrainerReturn {
 }
 
 interface RepertoireTrainerProps {
-  onPlaySlice: (events: ScorePlaybackEvent[], bpm: number, beatsPerMeasure?: number) => void
+  onPlaySlice: (
+    events: ScorePlaybackEvent[],
+    bpm: number,
+    beatsPerMeasure?: number,
+    isochronousMs?: number,
+    rhythmMode?: RhythmEvaluationMode
+  ) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
 }
 
@@ -121,7 +130,11 @@ export function useRepertoireTrainer({
   const streakTargetRef = useRef<number>(3)
 
   const [rhythmMode, setRhythmModeState] = useState<RhythmEvaluationMode>('free_rubato')
+  const rhythmModeRef = useRef<RhythmEvaluationMode>('free_rubato')
   const [rhythmTolerancePercent, setRhythmTolerancePercentState] = useState<number>(20)
+  const [isochronousNoteDurationMs, setIsochronousNoteDurationMsState] = useState<number>(500)
+  const isochronousNoteDurationMsRef = useRef<number>(500)
+
   const [studyBpm, setStudyBpmState] = useState<number>(86)
   const [autoSpeedRamp, setAutoSpeedRampState] = useState<boolean>(false)
 
@@ -249,11 +262,17 @@ export function useRepertoireTrainer({
   }, [])
 
   const setRhythmMode = useCallback((mode: RhythmEvaluationMode): void => {
+    rhythmModeRef.current = mode
     setRhythmModeState(mode)
   }, [])
 
   const setRhythmTolerancePercent = useCallback((tol: number): void => {
     setRhythmTolerancePercentState(tol)
+  }, [])
+
+  const setIsochronousNoteDurationMs = useCallback((ms: number): void => {
+    isochronousNoteDurationMsRef.current = ms
+    setIsochronousNoteDurationMsState(ms)
   }, [])
 
   const setStudyBpm = useCallback((bpm: number): void => {
@@ -282,7 +301,13 @@ export function useRepertoireTrainer({
       core.setIsWaitingAnswer(true)
 
       const beats = currentScoreRef.current?.timeSignature.beats || 2
-      onPlaySlice(slice, studyBpmRef.current, beats)
+      onPlaySlice(
+        slice,
+        studyBpmRef.current,
+        beats,
+        isochronousNoteDurationMsRef.current,
+        rhythmModeRef.current
+      )
     },
     [core, getActiveSlice, onPlaySlice]
   )
@@ -324,6 +349,8 @@ export function useRepertoireTrainer({
       }
       if (options?.rhythmMode) setRhythmMode(options.rhythmMode)
       if (options?.rhythmTolerancePercent) setRhythmTolerancePercent(options.rhythmTolerancePercent)
+      if (options?.isochronousNoteDurationMs)
+        setIsochronousNoteDurationMs(options.isochronousNoteDurationMs)
       if (options?.studyBpm) {
         setStudyBpm(options.studyBpm)
       }
@@ -349,6 +376,7 @@ export function useRepertoireTrainer({
       setStreakTarget,
       setRhythmMode,
       setRhythmTolerancePercent,
+      setIsochronousNoteDurationMs,
       setStudyBpm,
       setAutoSpeedRamp,
       setActiveSliceLength,
@@ -388,7 +416,6 @@ export function useRepertoireTrainer({
       const slice = getActiveSlice()
       const noteName = midiNoteToName(noteNumber)
 
-      // 🔍 LOG DIAGNÓSTICO EN VIVO
       if (onTelemetryLog) {
         onTelemetryLog(
           'EVAL',
@@ -434,7 +461,6 @@ export function useRepertoireTrainer({
           inputSource: source
         }
 
-        // Lógica de Streak y Expansión
         if (result.isCompleteSuccess) {
           const nextStreak = currentStreakRef.current + 1
           if (onTelemetryLog) {
@@ -509,6 +535,8 @@ export function useRepertoireTrainer({
     setRhythmMode,
     rhythmTolerancePercent,
     setRhythmTolerancePercent,
+    isochronousNoteDurationMs,
+    setIsochronousNoteDurationMs,
     studyBpm,
     setStudyBpm,
     autoSpeedRamp,

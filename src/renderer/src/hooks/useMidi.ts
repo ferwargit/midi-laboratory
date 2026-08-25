@@ -302,13 +302,21 @@ export function useMidi({
 
       const chByte = (channel - 1) & 0x0f
 
+      // Si esta misma nota ya estaba sonando, enviamos Note Off inmediato para evitar solapamiento
       if (stimulusTimersRef.current.has(noteNumber)) {
         clearTimeout(stimulusTimersRef.current.get(noteNumber)!)
+        try {
+          outputPort.send([0x80 | chByte, noteNumber, 0])
+        } catch {
+          // No-op
+        }
       }
 
+      // Note ON
       outputPort.send([0x90 | chByte, noteNumber, velocity])
       setActiveStimulusNotes((prev) => (prev.includes(noteNumber) ? prev : [...prev, noteNumber]))
 
+      // Note OFF programado
       const timer = setTimeout(() => {
         try {
           outputPort.send([0x80 | chByte, noteNumber, 0])

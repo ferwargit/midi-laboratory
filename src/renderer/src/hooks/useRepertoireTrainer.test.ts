@@ -97,6 +97,35 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
     expect(result.current.startMeasure).toBe(1)
     expect(result.current.streakTarget).toBe(3)
     expect(result.current.currentStreak).toBe(0)
+    expect(result.current.isochronousNoteDurationMs).toBe(500)
+  })
+
+  it('debe configurar y propagar la duración isócrona parametrizada a la reproducción del estímulo', () => {
+    const onPlaySlice = vi.fn()
+    const { result } = renderHook(() =>
+      useRepertoireTrainer({
+        onPlaySlice
+      })
+    )
+
+    act(() => {
+      result.current.setIsochronousNoteDurationMs(650)
+    })
+    expect(result.current.isochronousNoteDurationMs).toBe(650)
+
+    act(() => {
+      result.current.startSession({
+        score: MOCK_SCORE_DATA,
+        hand: 'RH',
+        startMeasure: 1,
+        endMeasure: 1,
+        rhythmMode: 'free_rubato',
+        isochronousNoteDurationMs: 700
+      })
+    })
+
+    expect(result.current.isochronousNoteDurationMs).toBe(700)
+    expect(onPlaySlice).toHaveBeenCalledWith(expect.any(Array), 86, 2, 700, 'free_rubato')
   })
 
   it('al iniciar sesión con Forward Chaining debe emitir la primera nota (Evento 1)', () => {
@@ -138,16 +167,14 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
         hand: 'RH',
         startMeasure: 1,
         endMeasure: 1,
-        chainingDirection: 'backward', // 👈 Hacia atrás
+        chainingDirection: 'backward',
         streakTarget: 1,
         rhythmMode: 'free_rubato'
       })
     })
 
-    // Debe comenzar con la última nota del compás 1 (A4 = 69)
     expect(result.current.activeEventsSlice[0].midiNotes).toEqual([69])
 
-    // Tocamos A4 -> Cumple streak y expande anteponiendo la nota previa (G4 + A4)
     act(() => {
       result.current.handleUserNotePlayed(69)
     })
@@ -175,14 +202,12 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
       })
     })
 
-    // Intento 1 correcto
     act(() => {
       result.current.handleUserNotePlayed(67, 90, 'midi_hardware')
     })
     expect(result.current.currentStreak).toBe(1)
     expect(result.current.activeSliceLength).toBe(1)
 
-    // Intento 2 correcto -> Cumple el streak target (2) y expande a 2 notas
     act(() => {
       result.current.handleUserNotePlayed(67, 90, 'midi_hardware')
     })
@@ -210,13 +235,11 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
       })
     })
 
-    // Acierto 1
     act(() => {
       result.current.handleUserNotePlayed(67)
     })
     expect(result.current.currentStreak).toBe(1)
 
-    // Fallo (toca F4 en vez de G4)
     act(() => {
       result.current.handleUserNotePlayed(65)
     })
@@ -244,23 +267,20 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
       })
     })
 
-    // Dominar nota 1 (longitud 1 -> 2)
     act(() => {
       result.current.handleUserNotePlayed(67)
     })
-    // Dominar nota 1+2 (longitud 2 -> 3)
     act(() => {
       result.current.handleUserNotePlayed(67)
       result.current.handleUserNotePlayed(67)
     })
-    // Dominar nota 1+2+3 (longitud 3 = total del compás -> activa Rampa de Velocidad)
     act(() => {
       result.current.handleUserNotePlayed(67)
       result.current.handleUserNotePlayed(67)
       result.current.handleUserNotePlayed(69)
     })
 
-    expect(result.current.studyBpm).toBe(65) // 60 BPM + 5 BPM
+    expect(result.current.studyBpm).toBe(65)
   })
 
   it('al seleccionar Mano Izquierda (LH) debe filtrar únicamente las notas del pentagrama 2', () => {

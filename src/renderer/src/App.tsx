@@ -185,20 +185,31 @@ export default function App(): React.ReactElement {
     }
   })
 
-  // 4. Modalidad 4: Repertorio Audiomotor (MusicXML) con Pre-Roll en Canal 10
+  // 4. Modalidad 4: Repertorio Audiomotor con Soporte Isócrono Parametrizable
   const repertoireTrainer = useRepertoireTrainer({
-    onPlaySlice: (events, bpm, beatsPerMeasure = 2) => {
+    onPlaySlice: (
+      events,
+      bpm,
+      beatsPerMeasure = 2,
+      isochronousMs = 500,
+      rhythmMode = 'free_rubato'
+    ) => {
       const scheduledEvents: ScheduledNoteEvent[] = []
-      const beatDurationMs = Math.round(60000 / bpm)
-      const preRollDurationMs = beatsPerMeasure * beatDurationMs
+      const isIsochronous = rhythmMode === 'free_rubato'
 
-      // A. PRE-ROLL DE METRÓNOMO EN CANAL 10 (2 clics exactos para compás 2/4)
+      // Duración del paso métrico:
+      // En modo Isócrono: duración homogénea parametrizada (ej: 500ms).
+      // En otros modos: duración real según el BPM activo.
+      const stepUnitMs = isIsochronous ? isochronousMs : Math.round(60000 / bpm)
+      const preRollDurationMs = beatsPerMeasure * stepUnitMs
+
+      // A. PRE-ROLL DE METRÓNOMO EN CANAL 10
       for (let beat = 0; beat < beatsPerMeasure; beat++) {
         const isFirstBeat = beat === 0
         scheduledEvents.push({
           note: isFirstBeat ? 76 : 77, // 76: Woodblock Agudo, 77: Woodblock Grave
           durationMs: 120,
-          delayMs: beat * beatDurationMs,
+          delayMs: beat * stepUnitMs,
           velocity: isFirstBeat ? 115 : 90,
           channel: 10
         })
@@ -206,27 +217,32 @@ export default function App(): React.ReactElement {
 
       midi.addLog({
         type: 'OUT',
-        message: `⏱️ Metrónomo: ${beatsPerMeasure} tiempos en Canal 10 (${bpm} BPM)`
+        message: isIsochronous
+          ? `⏱️ Metrónomo Isócrono: ${beatsPerMeasure} tiempos a ${isochronousMs}ms (Canal 10)`
+          : `⏱️ Metrónomo: ${beatsPerMeasure} tiempos a ${bpm} BPM (Canal 10)`
       })
 
-      // B. REPRODUCCIÓN DE LA FRASE DE PIANO EN CANAL 1 TRAS LA CUENTA PREVIA
+      // B. REPRODUCCIÓN DE NOTAS (Homogéneas en Modo 1 / Reales en Modos 2 y 3)
       let currentOffsetMs = preRollDurationMs
 
       events.forEach((evt) => {
-        const noteBeats = evt.durationBeats || 0.5
-        const baseMs = Math.round(noteBeats * beatDurationMs)
-        const durationMs = Math.max(360, baseMs)
+        const noteIntervalMs = isIsochronous
+          ? isochronousMs
+          : Math.round((evt.durationBeats || 0.5) * stepUnitMs)
+
+        // 88% de sonido para despegue claro del apagador
+        const soundingDurationMs = Math.max(80, Math.round(noteIntervalMs * 0.88))
 
         evt.midiNotes.forEach((note) => {
           scheduledEvents.push({
             note,
-            durationMs,
+            durationMs: soundingDurationMs,
             delayMs: currentOffsetMs,
             velocity: 100,
-            channel: 1
+            channel: 1 // Piano Acústico
           })
         })
-        currentOffsetMs += durationMs
+        currentOffsetMs += noteIntervalMs
       })
 
       // C. PROGRAMACIÓN EN EL SCHEDULER ATÓMICO
@@ -240,7 +256,9 @@ export default function App(): React.ReactElement {
         .join(', ')
       midi.addLog({
         type: 'OUT',
-        message: `🎼 Frase (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
+        message: isIsochronous
+          ? `🎼 Frase Isócrona (${events.length} notas a ${isochronousMs}ms/nota) -> ${noteNames}`
+          : `🎼 Frase (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
       })
     },
     onTelemetryLog: (type, message) => {

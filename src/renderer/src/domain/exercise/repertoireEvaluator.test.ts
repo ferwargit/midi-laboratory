@@ -89,7 +89,7 @@ describe('repertoireEvaluator - Motor de Evaluación Bimodal de Repertorio', () 
     it('en modo free_rubato debe calificar 100% de éxito si las notas son correctas independientemente del tiempo', () => {
       const rawNotes: RawPlayedMidiNote[] = [
         { noteNumber: 67, velocity: 90, timestampMs: 1000 },
-        { noteNumber: 67, velocity: 90, timestampMs: 2500 }, // Tocada con mucha lentitud
+        { noteNumber: 67, velocity: 90, timestampMs: 2500 },
         { noteNumber: 69, velocity: 90, timestampMs: 4000 }
       ]
 
@@ -101,7 +101,7 @@ describe('repertoireEvaluator - Motor de Evaluación Bimodal de Repertorio', () 
       expect(result.isCompleteSuccess).toBe(true)
       expect(result.pitchAccuracyPercent).toBe(100)
       expect(result.rhythmAccuracyPercent).toBe(100)
-      expect(result.feedbackMessage).toContain('¡Frase perfecta!')
+      expect(result.feedbackMessage).toContain('¡Afinación perfecta!')
     })
 
     it('debe detectar notas incorrectas y reportar las notas esperadas vs tocadas', () => {

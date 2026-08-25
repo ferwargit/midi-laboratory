@@ -208,7 +208,13 @@ export function evaluateRepertoireAttempt(
 
   let feedbackMessage = ''
   if (isCompleteSuccess) {
-    feedbackMessage = '🎉 ¡Frase perfecta! Afinación y ritmo dominados.'
+    if (config.rhythmMode === 'free_rubato') {
+      feedbackMessage = '🎉 ¡Afinación perfecta! Notas dominadas (Rubato libre).'
+    } else if (config.rhythmMode === 'relative_proportional') {
+      feedbackMessage = '🎉 ¡Frase perfecta! Afinación y proporciones rítmicas (IOI) dominadas.'
+    } else {
+      feedbackMessage = '🎉 ¡Frase perfecta! Afinación y métrica de metrónomo dominadas.'
+    }
   } else if (pitchAccuracyPercent === 100 && rhythmAccuracyPercent < 100) {
     feedbackMessage = `🎯 Afinación exacta (100%), pero ajustá el ritmo (${rhythmAccuracyPercent}% precisión rítmica).`
   } else if (pitchAccuracyPercent >= 70) {

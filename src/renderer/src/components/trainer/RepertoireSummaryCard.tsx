@@ -1,13 +1,17 @@
 import React from 'react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
-import { RepertoireExerciseResult } from '../../domain/exercise/repertoireEvaluator'
+import {
+  RepertoireExerciseResult,
+  RhythmEvaluationMode
+} from '../../domain/exercise/repertoireEvaluator'
 import { ScoreDataModel } from '../../domain/music/scoreTypes'
 
 interface RepertoireSummaryCardProps {
   score: ScoreDataModel | null
   history: RepertoireExerciseResult[]
   studyBpm: number
+  rhythmMode: RhythmEvaluationMode
   onRepeatSession: () => void
   onResetToConfig: () => void
 }
@@ -16,6 +20,7 @@ export function RepertoireSummaryCard({
   score,
   history,
   studyBpm,
+  rhythmMode,
   onRepeatSession,
   onResetToConfig
 }: RepertoireSummaryCardProps): React.ReactElement {
@@ -27,6 +32,13 @@ export function RepertoireSummaryCard({
     total > 0 ? Math.round(history.reduce((acc, h) => acc + h.rhythmAccuracyPercent, 0) / total) : 0
   const avgScore =
     total > 0 ? Math.round(history.reduce((acc, h) => acc + h.overallScorePercent, 0) / total) : 0
+
+  const modeLabel =
+    rhythmMode === 'free_rubato'
+      ? 'Solo Afinación / Rubato Libre'
+      : rhythmMode === 'relative_proportional'
+        ? 'Afinación + Proporciones Rítmicas'
+        : 'Afinación + Metrónomo Estricto'
 
   return (
     <Card className="border-purple-500/40 bg-zinc-900/90 backdrop-blur-2xl space-y-4 shadow-2xl">
@@ -42,10 +54,18 @@ export function RepertoireSummaryCard({
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="primary" onClick={onRepeatSession} className="font-mono text-xs">
+          <Button
+            variant="primary"
+            onClick={onRepeatSession}
+            className="font-mono text-xs cursor-pointer"
+          >
             🔄 Repetir Fragmento
           </Button>
-          <Button variant="secondary" onClick={onResetToConfig} className="font-mono text-xs">
+          <Button
+            variant="secondary"
+            onClick={onResetToConfig}
+            className="font-mono text-xs cursor-pointer"
+          >
             ⚙️ Ajustar Configuración
           </Button>
         </div>
@@ -75,20 +95,24 @@ export function RepertoireSummaryCard({
           <span className="text-zinc-500 block text-[10px] uppercase">Afinación / Ritmo</span>
           <strong className="text-sm text-zinc-200">
             <span className="text-emerald-400">{avgPitch}%</span> /{' '}
-            <span className="text-sky-400">{avgRhythm}%</span>
+            {rhythmMode === 'free_rubato' ? (
+              <span className="text-zinc-500 font-normal">Libre</span>
+            ) : (
+              <span className="text-sky-400">{avgRhythm}%</span>
+            )}
           </strong>
         </div>
         <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-          <span className="text-zinc-500 block text-[10px] uppercase">Tempo Alcanzado</span>
+          <span className="text-zinc-500 block text-[10px] uppercase">Tempo</span>
           <strong className="text-base text-purple-300">{studyBpm} BPM</strong>
         </div>
       </div>
 
-      {/* RESUMEN DE FRASES PERFECTAS */}
+      {/* RESUMEN CONDICIONAL SEGÚN EL MODO RÍTMICO */}
       <div className="p-3.5 bg-zinc-950/80 rounded-xl border border-zinc-800/80 flex items-center justify-between text-xs font-mono">
         <div className="flex items-center gap-2">
           <span>🌟</span>
-          <span>Frases 100% Perfectas (Afinación y Ritmo):</span>
+          <span>Frases 100% Perfectas ({modeLabel}):</span>
         </div>
         <span className="text-emerald-400 font-bold text-sm">
           {perfect} de {total} intentos ({total > 0 ? Math.round((perfect / total) * 100) : 0}%)
