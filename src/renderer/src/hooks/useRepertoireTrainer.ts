@@ -11,6 +11,7 @@ import {
 import { AdvanceMode, SessionLimitType } from '../domain/exercise/types'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useTrainerCore, CoreStartSessionOptions } from './useTrainerCore'
+import { stimulusScheduler } from '../services/audio/stimulusScheduler'
 import { midiNoteToName } from '../domain/music/noteUtils'
 
 export type ChainingDirection = 'forward' | 'backward'
@@ -25,7 +26,8 @@ export interface RepertoireSessionOptions extends CoreStartSessionOptions {
   streakTarget?: number
   rhythmMode?: RhythmEvaluationMode
   rhythmTolerancePercent?: number
-  isochronousNoteDurationMs?: number
+  includeResolutionNote?: boolean
+  continuousMetronome?: boolean
   studyBpm?: number
   autoSpeedRamp?: boolean
 }
@@ -50,8 +52,10 @@ export interface UseRepertoireTrainerReturn {
   setRhythmMode: (mode: RhythmEvaluationMode) => void
   rhythmTolerancePercent: number
   setRhythmTolerancePercent: (tol: number) => void
-  isochronousNoteDurationMs: number
-  setIsochronousNoteDurationMs: (ms: number) => void
+  includeResolutionNote: boolean
+  setIncludeResolutionNote: (inc: boolean) => void
+  continuousMetronome: boolean
+  setContinuousMetronome: (cont: boolean) => void
   studyBpm: number
   setStudyBpm: (bpm: number) => void
   autoSpeedRamp: boolean
@@ -85,8 +89,8 @@ interface RepertoireTrainerProps {
     events: ScorePlaybackEvent[],
     bpm: number,
     beatsPerMeasure?: number,
-    isochronousMs?: number,
-    rhythmMode?: RhythmEvaluationMode
+    rhythmMode?: RhythmEvaluationMode,
+    isContinuousMetro?: boolean
   ) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
 }
@@ -97,7 +101,8 @@ function computeSliceEvents(
   startM: number,
   endM: number,
   direction: ChainingDirection,
-  sliceLen: number
+  sliceLen: number,
+  includeResolution = true
 ): ScorePlaybackEvent[] {
   if (!score) return []
   const filtered = score.events.filter((e) => {
@@ -107,6 +112,20 @@ function computeSliceEvents(
     const isPlayable = !e.isRest && e.midiNotes.length > 0
     return withinMeasure && matchesHand && isPlayable
   })
+
+  if (includeResolution && endM < score.totalMeasures) {
+    const resolutionEvent = score.events.find((e) => {
+      const isNextMeasure = e.measureNumber === endM + 1
+      const isDownbeat = e.beatPosition <= 1.5
+      const matchesHand =
+        hand === 'both' || (hand === 'RH' && e.hand === 'RH') || (hand === 'LH' && e.hand === 'LH')
+      const isPlayable = !e.isRest && e.midiNotes.length > 0
+      return isNextMeasure && isDownbeat && matchesHand && isPlayable
+    })
+    if (resolutionEvent && !filtered.some((e) => e.id === resolutionEvent.id)) {
+      filtered.push(resolutionEvent)
+    }
+  }
 
   const len = Math.min(sliceLen, filtered.length)
   return direction === 'forward' ? filtered.slice(0, len) : filtered.slice(filtered.length - len)
@@ -132,10 +151,15 @@ export function useRepertoireTrainer({
   const [rhythmMode, setRhythmModeState] = useState<RhythmEvaluationMode>('free_rubato')
   const rhythmModeRef = useRef<RhythmEvaluationMode>('free_rubato')
   const [rhythmTolerancePercent, setRhythmTolerancePercentState] = useState<number>(20)
-  const [isochronousNoteDurationMs, setIsochronousNoteDurationMsState] = useState<number>(500)
-  const isochronousNoteDurationMsRef = useRef<number>(500)
+
+  const [includeResolutionNote, setIncludeResolutionNoteState] = useState<boolean>(true)
+  const includeResolutionNoteRef = useRef<boolean>(true)
+
+  const [continuousMetronome, setContinuousMetronomeState] = useState<boolean>(false)
+  const continuousMetronomeRef = useRef<boolean>(false)
 
   const [studyBpm, setStudyBpmState] = useState<number>(86)
+  const studyBpmRef = useRef<number>(86)
   const [autoSpeedRamp, setAutoSpeedRampState] = useState<boolean>(false)
 
   const [activeSliceLength, setActiveSliceLengthState] = useState<number>(1)
@@ -146,7 +170,6 @@ export function useRepertoireTrainer({
   const startMeasureRef = useRef<number>(1)
   const endMeasureRef = useRef<number>(4)
   const chainingDirectionRef = useRef<ChainingDirection>('forward')
-  const studyBpmRef = useRef<number>(86)
 
   const setCurrentScore = useCallback((score: ScoreDataModel | null): void => {
     currentScoreRef.current = score
@@ -158,6 +181,16 @@ export function useRepertoireTrainer({
     setCurrentStreakState(val)
   }, [])
 
+  const setIncludeResolutionNote = useCallback((inc: boolean): void => {
+    includeResolutionNoteRef.current = inc
+    setIncludeResolutionNoteState(inc)
+  }, [])
+
+  const setContinuousMetronome = useCallback((cont: boolean): void => {
+    continuousMetronomeRef.current = cont
+    setContinuousMetronomeState(cont)
+  }, [])
+
   const getActiveSlice = useCallback((): ScorePlaybackEvent[] => {
     const score = currentScoreRef.current || currentScore
     return computeSliceEvents(
@@ -166,7 +199,8 @@ export function useRepertoireTrainer({
       startMeasureRef.current,
       endMeasureRef.current,
       chainingDirectionRef.current,
-      activeSliceLengthBufferRef.current
+      activeSliceLengthBufferRef.current,
+      includeResolutionNoteRef.current
     )
   }, [currentScore])
 
@@ -177,9 +211,18 @@ export function useRepertoireTrainer({
       startMeasure,
       endMeasure,
       chainingDirection,
-      activeSliceLength
+      activeSliceLength,
+      includeResolutionNote
     )
-  }, [currentScore, selectedHand, startMeasure, endMeasure, chainingDirection, activeSliceLength])
+  }, [
+    currentScore,
+    selectedHand,
+    startMeasure,
+    endMeasure,
+    chainingDirection,
+    activeSliceLength,
+    includeResolutionNote
+  ])
 
   const onBuildSessionRecord = useCallback(
     ({
@@ -229,7 +272,7 @@ export function useRepertoireTrainer({
 
   const core = useTrainerCore<RepertoireExerciseResult>({
     defaultLimitType: 'questions',
-    defaultQuestionsCount: 20,
+    defaultQuestionsCount: 25,
     defaultDurationMinutes: 10,
     defaultAdvanceMode: 'smart',
     autoAdvanceFastDelayMs: 900,
@@ -270,11 +313,6 @@ export function useRepertoireTrainer({
     setRhythmTolerancePercentState(tol)
   }, [])
 
-  const setIsochronousNoteDurationMs = useCallback((ms: number): void => {
-    isochronousNoteDurationMsRef.current = ms
-    setIsochronousNoteDurationMsState(ms)
-  }, [])
-
   const setStudyBpm = useCallback((bpm: number): void => {
     studyBpmRef.current = bpm
     setStudyBpmState(bpm)
@@ -305,8 +343,8 @@ export function useRepertoireTrainer({
         slice,
         studyBpmRef.current,
         beats,
-        isochronousNoteDurationMsRef.current,
-        rhythmModeRef.current
+        rhythmModeRef.current,
+        continuousMetronomeRef.current
       )
     },
     [core, getActiveSlice, onPlaySlice]
@@ -319,6 +357,7 @@ export function useRepertoireTrainer({
       let startM = startMeasureRef.current
       let endM = endMeasureRef.current
       let dirToUse = chainingDirectionRef.current
+      let incRes = includeResolutionNoteRef.current
 
       if (options?.score) {
         scoreToUse = options.score
@@ -349,8 +388,13 @@ export function useRepertoireTrainer({
       }
       if (options?.rhythmMode) setRhythmMode(options.rhythmMode)
       if (options?.rhythmTolerancePercent) setRhythmTolerancePercent(options.rhythmTolerancePercent)
-      if (options?.isochronousNoteDurationMs)
-        setIsochronousNoteDurationMs(options.isochronousNoteDurationMs)
+      if (options?.includeResolutionNote !== undefined) {
+        incRes = options.includeResolutionNote
+        setIncludeResolutionNote(options.includeResolutionNote)
+      }
+      if (options?.continuousMetronome !== undefined) {
+        setContinuousMetronome(options.continuousMetronome)
+      }
       if (options?.studyBpm) {
         setStudyBpm(options.studyBpm)
       }
@@ -360,7 +404,15 @@ export function useRepertoireTrainer({
       setStreak(0)
       playedNotesBufferRef.current = []
 
-      const initialSlice = computeSliceEvents(scoreToUse, handToUse, startM, endM, dirToUse, 1)
+      const initialSlice = computeSliceEvents(
+        scoreToUse,
+        handToUse,
+        startM,
+        endM,
+        dirToUse,
+        1,
+        incRes
+      )
 
       core.startCoreSession(options, () => {
         triggerPlayCurrentSlice(initialSlice)
@@ -376,7 +428,8 @@ export function useRepertoireTrainer({
       setStreakTarget,
       setRhythmMode,
       setRhythmTolerancePercent,
-      setIsochronousNoteDurationMs,
+      setIncludeResolutionNote,
+      setContinuousMetronome,
       setStudyBpm,
       setAutoSpeedRamp,
       setActiveSliceLength,
@@ -393,6 +446,7 @@ export function useRepertoireTrainer({
 
   const stopSession = useCallback((): void => {
     playedNotesBufferRef.current = []
+    stimulusScheduler.stopContinuousMetronome()
     core.stopCoreSession()
   }, [core])
 
@@ -400,6 +454,7 @@ export function useRepertoireTrainer({
     playedNotesBufferRef.current = []
     setActiveSliceLength(1)
     setStreak(0)
+    stimulusScheduler.stopContinuousMetronome()
     core.resetCoreToConfig()
   }, [core, setActiveSliceLength, setStreak])
 
@@ -463,6 +518,18 @@ export function useRepertoireTrainer({
 
         if (result.isCompleteSuccess) {
           const nextStreak = currentStreakRef.current + 1
+
+          const fullScope = computeSliceEvents(
+            currentScoreRef.current,
+            selectedHandRef.current,
+            startMeasureRef.current,
+            endMeasureRef.current,
+            chainingDirectionRef.current,
+            999,
+            includeResolutionNoteRef.current
+          )
+          const totalScopeLength = fullScope.length
+
           if (onTelemetryLog) {
             onTelemetryLog(
               'EVAL',
@@ -472,11 +539,28 @@ export function useRepertoireTrainer({
 
           if (nextStreak >= streakTargetRef.current) {
             setStreak(0)
-            const nextLen = activeSliceLengthBufferRef.current + 1
+            const currentLen = activeSliceLengthBufferRef.current
+
+            if (currentLen >= totalScopeLength) {
+              if (onTelemetryLog) {
+                onTelemetryLog(
+                  'AI',
+                  `🏆 ¡Fragmento de Repertorio 100% Dominado! (${totalScopeLength} notas completadas)`
+                )
+              }
+              stimulusScheduler.stopContinuousMetronome()
+              void core.finalizeAndSaveSession()
+              return
+            }
+
+            const nextLen = currentLen + 1
             setActiveSliceLength(nextLen)
 
             if (onTelemetryLog) {
-              onTelemetryLog('AI', `🎉 Meta alcanzada -> Expandiendo frase a ${nextLen} nota(s)`)
+              onTelemetryLog(
+                'AI',
+                `🎉 Meta alcanzada -> Expandiendo frase a ${nextLen} de ${totalScopeLength} notas`
+              )
             }
 
             if (autoSpeedRamp) {
@@ -535,8 +619,10 @@ export function useRepertoireTrainer({
     setRhythmMode,
     rhythmTolerancePercent,
     setRhythmTolerancePercent,
-    isochronousNoteDurationMs,
-    setIsochronousNoteDurationMs,
+    includeResolutionNote,
+    setIncludeResolutionNote,
+    continuousMetronome,
+    setContinuousMetronome,
     studyBpm,
     setStudyBpm,
     autoSpeedRamp,

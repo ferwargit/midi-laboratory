@@ -25,6 +25,7 @@ import { AiExercisePrescription } from './domain/ai/types'
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
 type AppMode = 'single_note' | 'intervals' | 'sequences' | 'repertoire' | 'analytics'
 
+// Partitura completa de 8 compases de Félix Dumont exportada de MuseScore 4
 const DEFAULT_PARTITURA_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
 <score-partwise version="4.0">
@@ -33,6 +34,7 @@ const DEFAULT_PARTITURA_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <credit page="1"><credit-type>composer</credit-type><credit-words default-x="1100" default-y="1500" justify="right">Félix Dumont</credit-words></credit>
   <credit page="1"><credit-type>subtitle</credit-type><credit-words default-x="600" default-y="1550" font-size="14">Canto de los cazadores tiroleses</credit-words></credit>
   <part id="P1">
+    <!-- Compas 1 -->
     <measure number="1">
       <attributes>
         <divisions>4</divisions>
@@ -55,6 +57,102 @@ const DEFAULT_PARTITURA_XML = `<?xml version="1.0" encoding="UTF-8"?>
       <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
       <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
       <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+    </measure>
+    <!-- Compas 2 -->
+    <measure number="2">
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>
+      <backup><duration>8</duration></backup>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+    </measure>
+    <!-- Compas 3 -->
+    <measure number="3">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind><bass><bass-step>B</bass-step></bass></harmony>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <backup><duration>8</duration></backup>
+      <note><pitch><step>B</step><octave>2</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>D</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+    </measure>
+    <!-- Compas 4 -->
+    <measure number="4">
+      <harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <backup><duration>8</duration></backup>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+    </measure>
+    <!-- Compas 5 -->
+    <measure number="5">
+      <note><pitch><step>G</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>G</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>A</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>G</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>D</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <backup><duration>8</duration></backup>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+    </measure>
+    <!-- Compas 6 -->
+    <measure number="6">
+      <note><pitch><step>C</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>F</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>G</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>
+      <backup><duration>8</duration></backup>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+    </measure>
+    <!-- Compas 7 -->
+    <measure number="7">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind><bass><bass-step>B</bass-step></bass></harmony>
+      <note><pitch><step>F</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>F</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>D</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <note><pitch><step>D</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
+      <backup><duration>8</duration></backup>
+      <note><pitch><step>B</step><octave>2</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>D</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+    </measure>
+    <!-- Compas 8 -->
+    <measure number="8">
+      <harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>C</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><pitch><step>C</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <note><rest/><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
+      <backup><duration>8</duration></backup>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><chord/><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><chord/><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
+      <note><rest/><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
     </measure>
   </part>
 </score-partwise>`
@@ -185,52 +283,71 @@ export default function App(): React.ReactElement {
     }
   })
 
-  // 4. Modalidad 4: Repertorio Audiomotor con Soporte Isócrono Parametrizable
+  // 4. Modalidad 4: Repertorio Audiomotor con Tempo Unificado en BPM
   const repertoireTrainer = useRepertoireTrainer({
     onPlaySlice: (
       events,
       bpm,
       beatsPerMeasure = 2,
-      isochronousMs = 500,
-      rhythmMode = 'free_rubato'
+      rhythmMode = 'free_rubato',
+      isContinuousMetro = false
     ) => {
-      const scheduledEvents: ScheduledNoteEvent[] = []
       const isIsochronous = rhythmMode === 'free_rubato'
+      const beats = beatsPerMeasure || 2
 
-      // Duración del paso métrico:
-      // En modo Isócrono: duración homogénea parametrizada (ej: 500ms).
-      // En otros modos: duración real según el BPM activo.
-      const stepUnitMs = isIsochronous ? isochronousMs : Math.round(60000 / bpm)
-      const preRollDurationMs = beatsPerMeasure * stepUnitMs
+      // Un solo cálculo de milisegundos por tiempo según el BPM activo
+      const beatDurationMs = Math.round(60000 / bpm)
+      const preRollDurationMs = beats * beatDurationMs
 
-      // A. PRE-ROLL DE METRÓNOMO EN CANAL 10
-      for (let beat = 0; beat < beatsPerMeasure; beat++) {
-        const isFirstBeat = beat === 0
-        scheduledEvents.push({
-          note: isFirstBeat ? 76 : 77, // 76: Woodblock Agudo, 77: Woodblock Grave
-          durationMs: 120,
-          delayMs: beat * stepUnitMs,
-          velocity: isFirstBeat ? 115 : 90,
-          channel: 10
+      // A. CONTROL DE METRÓNOMO CONTINUO
+      if (isContinuousMetro) {
+        if (!stimulusScheduler.isContinuousMetronomeActive()) {
+          stimulusScheduler.startContinuousMetronome(
+            beatDurationMs,
+            beats,
+            (note, dur, vel, ch) => {
+              midi.sendNote(note, dur, vel, ch)
+            }
+          )
+          midi.addLog({
+            type: 'OUT',
+            message: `⏱️ Metrónomo Continuo activo en Canal 10 (${bpm} BPM)`
+          })
+        }
+      } else {
+        stimulusScheduler.stopContinuousMetronome()
+      }
+
+      const scheduledEvents: ScheduledNoteEvent[] = []
+
+      // B. CUENTA PREVIA DE 1 COMPÁS (2 CLICS)
+      if (!isContinuousMetro) {
+        for (let beat = 0; beat < beats; beat++) {
+          const isFirstBeat = beat === 0
+          scheduledEvents.push({
+            note: isFirstBeat ? 76 : 77,
+            durationMs: 120,
+            delayMs: beat * beatDurationMs,
+            velocity: isFirstBeat ? 115 : 90,
+            channel: 10
+          })
+        }
+        midi.addLog({
+          type: 'OUT',
+          message: `⏱️ Metrónomo: ${beats} tiempos a ${bpm} BPM (${beatDurationMs}ms/tiempo)`
         })
       }
 
-      midi.addLog({
-        type: 'OUT',
-        message: isIsochronous
-          ? `⏱️ Metrónomo Isócrono: ${beatsPerMeasure} tiempos a ${isochronousMs}ms (Canal 10)`
-          : `⏱️ Metrónomo: ${beatsPerMeasure} tiempos a ${bpm} BPM (Canal 10)`
-      })
-
-      // B. REPRODUCCIÓN DE NOTAS (Homogéneas en Modo 1 / Reales en Modos 2 y 3)
+      // C. NOTAS DE PIANO TRAS EL COMPÁS LIBRE DE CUENTA PREVIA
       let currentOffsetMs = preRollDurationMs
 
       events.forEach((evt) => {
+        // En Modo 1 Isócrono: cada nota dura 1 negra (beatDurationMs)
+        // En Modos 2 y 3: dura su valor métrico de partitura
         const noteIntervalMs = isIsochronous
-          ? isochronousMs
-          : Math.round((evt.durationBeats || 0.5) * stepUnitMs)
+          ? beatDurationMs
+          : Math.round((evt.durationBeats || 0.5) * beatDurationMs)
 
-        // 88% de sonido para despegue claro del apagador
         const soundingDurationMs = Math.max(80, Math.round(noteIntervalMs * 0.88))
 
         evt.midiNotes.forEach((note) => {
@@ -239,13 +356,13 @@ export default function App(): React.ReactElement {
             durationMs: soundingDurationMs,
             delayMs: currentOffsetMs,
             velocity: 100,
-            channel: 1 // Piano Acústico
+            channel: 1
           })
         })
         currentOffsetMs += noteIntervalMs
       })
 
-      // C. PROGRAMACIÓN EN EL SCHEDULER ATÓMICO
+      // D. PROGRAMACIÓN ATÓMICA
       stimulusScheduler.scheduleSequence(scheduledEvents, (note, dur, vel, ch) => {
         midi.sendNote(note, dur, vel, ch)
       })
@@ -257,7 +374,7 @@ export default function App(): React.ReactElement {
       midi.addLog({
         type: 'OUT',
         message: isIsochronous
-          ? `🎼 Frase Isócrona (${events.length} notas a ${isochronousMs}ms/nota) -> ${noteNames}`
+          ? `🎼 Frase Isócrona (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
           : `🎼 Frase (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
       })
     },
@@ -266,7 +383,7 @@ export default function App(): React.ReactElement {
     }
   })
 
-  // Cargar partitura por defecto al montar
+  // Cargar partitura completa de 8 compases al montar
   const { setCurrentScore, setStartMeasure, setEndMeasure, setStudyBpm } = repertoireTrainer
 
   useEffect(() => {
@@ -281,7 +398,7 @@ export default function App(): React.ReactElement {
     }
   }, [setCurrentScore, setStartMeasure, setEndMeasure, setStudyBpm])
 
-  // Router MIDI SÍNCRONO usando useLayoutEffect: garantiza atención inmediata sin violar las reglas de render
+  // Router MIDI Síncrono con useLayoutEffect
   useLayoutEffect(() => {
     handleNoteRef.current = (note, vel, source) => {
       if (appMode === 'single_note') {

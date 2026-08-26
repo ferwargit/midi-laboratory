@@ -28,6 +28,8 @@ export function RepertoireView({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  const msPerBeat = Math.round(60000 / trainer.studyBpm)
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -81,7 +83,8 @@ export function RepertoireView({
             <span className="text-[10px] text-zinc-400">
               {trainer.currentScore?.composer || 'Félix Dumont'} •{' '}
               {trainer.currentScore?.timeSignature.beats}/
-              {trainer.currentScore?.timeSignature.beatType} • {trainer.studyBpm} BPM
+              {trainer.currentScore?.timeSignature.beatType} • {trainer.studyBpm} BPM (~{msPerBeat}{' '}
+              ms/negra)
             </span>
           </div>
         </div>
@@ -234,9 +237,20 @@ export function RepertoireView({
             </div>
 
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
-                Rango de Compases (Deliberate Practice):
-              </label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-xs uppercase text-zinc-400 font-bold">
+                  Rango de Compases:
+                </label>
+                <label className="flex items-center gap-1 text-[10px] text-purple-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={trainer.includeResolutionNote}
+                    onChange={(e): void => trainer.setIncludeResolutionNote(e.target.checked)}
+                    className="rounded bg-zinc-950 border-zinc-700 text-purple-500"
+                  />
+                  <span>+1 Res. (C.+1)</span>
+                </label>
+              </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1">
                   <span className="text-zinc-500">Desde:</span>
@@ -246,7 +260,7 @@ export function RepertoireView({
                     max={trainer.endMeasure}
                     value={trainer.startMeasure}
                     onChange={(e): void => trainer.setStartMeasure(Number(e.target.value))}
-                    className="w-16 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-center text-zinc-100"
+                    className="w-14 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-center text-zinc-100"
                   />
                 </div>
                 <span className="text-zinc-500">➔</span>
@@ -258,7 +272,7 @@ export function RepertoireView({
                     max={trainer.currentScore?.totalMeasures || 8}
                     value={trainer.endMeasure}
                     onChange={(e): void => trainer.setEndMeasure(Number(e.target.value))}
-                    className="w-16 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-center text-zinc-100"
+                    className="w-14 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-center text-zinc-100"
                   />
                 </div>
               </div>
@@ -271,8 +285,8 @@ export function RepertoireView({
               <div className="flex gap-1">
                 {(
                   [
-                    ['forward', '➡️ Hacia Adelante (Forward)'],
-                    ['backward', '⬅️ Hacia Atrás (Backward)']
+                    ['forward', '➡️ Hacia Adelante'],
+                    ['backward', '⬅️ Hacia Atrás']
                   ] as [ChainingDirection, string][]
                 ).map(([dir, label]) => (
                   <button
@@ -292,7 +306,7 @@ export function RepertoireView({
             </div>
           </div>
 
-          {/* FILA 2: RITMO, CONTROL PARAMÉTRICO, BPM Y STREAKS */}
+          {/* FILA 2: RITMO, CONTROL MAESTRO DE TEMPO, METRÓNOMO Y STREAKS */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-zinc-800/80">
             {/* Modo Rítmico */}
             <div>
@@ -312,31 +326,17 @@ export function RepertoireView({
               </select>
             </div>
 
-            {/* Control Dinámico: Duración Isócrona (Modo 1) o Tolerancia Rítmica (Modos 2 y 3) */}
+            {/* Tolerancia Rítmica (Visible en Modos 2 y 3) o Explicación (Modo 1) */}
             <div>
               {trainer.rhythmMode === 'free_rubato' ? (
-                <>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs uppercase text-zinc-400 font-bold">
-                      Duración Isócrona:
-                    </label>
-                    <span className="text-emerald-400 font-bold">
-                      {trainer.isochronousNoteDurationMs} ms
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={300}
-                    max={1000}
-                    step={50}
-                    value={trainer.isochronousNoteDurationMs}
-                    onChange={(e): void =>
-                      trainer.setIsochronousNoteDurationMs(Number(e.target.value))
-                    }
-                    className="w-full accent-emerald-500 cursor-pointer"
-                    title="Controla los milisegundos que dura cada nota al sonar homogénea"
-                  />
-                </>
+                <div>
+                  <label className="text-xs uppercase text-zinc-400 font-bold block mb-1">
+                    Modo 1: Altura Pura
+                  </label>
+                  <span className="text-[11px] text-zinc-500 font-sans block leading-tight">
+                    Cada nota suena como 1 negra homogénea a este tempo.
+                  </span>
+                </div>
               ) : (
                 <>
                   <div className="flex justify-between items-center mb-1">
@@ -362,33 +362,34 @@ export function RepertoireView({
               )}
             </div>
 
-            {/* Tempo de Estudio y Rampa */}
+            {/* CONTROL MAESTRO DE TEMPO (BPM y ms unificados) */}
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs uppercase text-zinc-400 font-bold">
-                  Tempo Estudio (BPM):
+                <label className="text-xs uppercase text-zinc-400 font-bold">Tempo (BPM):</label>
+                <label className="flex items-center gap-1 text-[10px] text-amber-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={trainer.continuousMetronome}
+                    onChange={(e): void => trainer.setContinuousMetronome(e.target.checked)}
+                    className="rounded bg-zinc-950 border-zinc-700 text-amber-500"
+                  />
+                  <span>Metro. Continuo</span>
                 </label>
-                <span className="text-emerald-400 font-bold">{trainer.studyBpm} BPM</span>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="range"
-                  min={30}
-                  max={trainer.currentScore?.baseBpm || 120}
+                  min={40}
+                  max={140}
                   step={2}
                   value={trainer.studyBpm}
                   onChange={(e): void => trainer.setStudyBpm(Number(e.target.value))}
                   className="flex-1 accent-emerald-500 cursor-pointer"
                 />
-                <label className="flex items-center gap-1 text-[10px] text-zinc-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={trainer.autoSpeedRamp}
-                    onChange={(e): void => trainer.setAutoSpeedRamp(e.target.checked)}
-                    className="rounded bg-zinc-950 border-zinc-700 text-purple-500"
-                  />
-                  <span>Rampa +5</span>
-                </label>
+                <span className="text-emerald-400 font-bold text-xs shrink-0">
+                  {trainer.studyBpm}{' '}
+                  <span className="text-[10px] text-zinc-400 font-normal">({msPerBeat}ms)</span>
+                </span>
               </div>
             </div>
 
@@ -421,6 +422,11 @@ export function RepertoireView({
             </span>
             <strong className="text-sm text-zinc-200">
               C.{trainer.startMeasure} ➔ C.{trainer.endMeasure}
+              {trainer.includeResolutionNote && (
+                <span className="text-purple-400 text-[10px] block font-normal">
+                  +Res. C.{trainer.endMeasure + 1}
+                </span>
+              )}
             </strong>
           </div>
 
@@ -444,12 +450,11 @@ export function RepertoireView({
 
           <div className="bg-zinc-950/80 p-2.5 rounded-xl border border-zinc-800/80">
             <span className="text-[10px] uppercase tracking-wider text-zinc-500 block font-bold">
-              {trainer.rhythmMode === 'free_rubato' ? 'Duración Isócrona' : 'Tempo'}
+              {trainer.continuousMetronome ? 'Metrónomo Continuo' : 'Tempo'}
             </span>
             <strong className="text-sm text-emerald-400">
-              {trainer.rhythmMode === 'free_rubato'
-                ? `${trainer.isochronousNoteDurationMs} ms`
-                : `${trainer.studyBpm} BPM`}
+              {trainer.studyBpm} BPM{' '}
+              <span className="text-[10px] text-zinc-400 font-normal">({msPerBeat}ms)</span>
             </strong>
           </div>
         </div>

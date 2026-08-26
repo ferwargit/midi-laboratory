@@ -68,4 +68,22 @@ describe('stimulusScheduler - Programación y Cancelación Atómica de Estímulo
     vi.advanceTimersByTime(310)
     expect(onComplete).toHaveBeenCalledTimes(1)
   })
+
+  it('startContinuousMetronome debe emitir clics en loop y cancelAll debe apagarlo', () => {
+    const playNoteFn = vi.fn()
+
+    scheduler.startContinuousMetronome(500, 2, playNoteFn)
+    expect(scheduler.isContinuousMetronomeActive()).toBe(true)
+
+    // Clic 1 inicial
+    expect(playNoteFn).toHaveBeenCalledWith(76, 120, 115, 10)
+
+    // Clic 2 a los 500ms
+    vi.advanceTimersByTime(500)
+    expect(playNoteFn).toHaveBeenCalledWith(77, 120, 90, 10)
+
+    // Apagado
+    scheduler.stopContinuousMetronome()
+    expect(scheduler.isContinuousMetronomeActive()).toBe(false)
+  })
 })

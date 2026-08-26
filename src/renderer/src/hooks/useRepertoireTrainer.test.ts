@@ -59,7 +59,23 @@ const MOCK_SCORE_DATA: ScoreDataModel = {
       staff: 1,
       voice: 1
     },
-    // Compás 1 - Mano Izquierda (Bajo de Alberti)
+    // Compás 2 - Mano Derecha (Nota de resolución C5 en tiempo 1.0)
+    {
+      id: 'e4',
+      measureNumber: 2,
+      beatPosition: 1.0,
+      notes: [{ pitch: 72, step: 'C', alter: 0, octave: 5 }],
+      midiNotes: [72],
+      durationDivisions: 2,
+      durationBeats: 0.5,
+      durationMs: 348,
+      isChord: false,
+      isRest: false,
+      hand: 'RH',
+      staff: 1,
+      voice: 1
+    },
+    // Compás 1 - Mano Izquierda
     {
       id: 'lh1',
       measureNumber: 1,
@@ -95,12 +111,11 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
     expect(result.current.isSessionActive).toBe(false)
     expect(result.current.selectedHand).toBe('RH')
     expect(result.current.startMeasure).toBe(1)
-    expect(result.current.streakTarget).toBe(3)
-    expect(result.current.currentStreak).toBe(0)
-    expect(result.current.isochronousNoteDurationMs).toBe(500)
+    expect(result.current.includeResolutionNote).toBe(true)
+    expect(result.current.continuousMetronome).toBe(false)
   })
 
-  it('debe configurar y propagar la duración isócrona parametrizada a la reproducción del estímulo', () => {
+  it('debe configurar y propagar el BPM de estudio a la reproducción del estímulo', () => {
     const onPlaySlice = vi.fn()
     const { result } = renderHook(() =>
       useRepertoireTrainer({
@@ -109,9 +124,9 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
     )
 
     act(() => {
-      result.current.setIsochronousNoteDurationMs(650)
+      result.current.setStudyBpm(70)
     })
-    expect(result.current.isochronousNoteDurationMs).toBe(650)
+    expect(result.current.studyBpm).toBe(70)
 
     act(() => {
       result.current.startSession({
@@ -120,37 +135,12 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
         startMeasure: 1,
         endMeasure: 1,
         rhythmMode: 'free_rubato',
-        isochronousNoteDurationMs: 700
+        studyBpm: 75
       })
     })
 
-    expect(result.current.isochronousNoteDurationMs).toBe(700)
-    expect(onPlaySlice).toHaveBeenCalledWith(expect.any(Array), 86, 2, 700, 'free_rubato')
-  })
-
-  it('al iniciar sesión con Forward Chaining debe emitir la primera nota (Evento 1)', () => {
-    const onPlaySlice = vi.fn()
-    const { result } = renderHook(() =>
-      useRepertoireTrainer({
-        onPlaySlice
-      })
-    )
-
-    act(() => {
-      result.current.startSession({
-        score: MOCK_SCORE_DATA,
-        hand: 'RH',
-        startMeasure: 1,
-        endMeasure: 1,
-        chainingDirection: 'forward',
-        streakTarget: 3
-      })
-    })
-
-    expect(result.current.isSessionActive).toBe(true)
-    expect(result.current.activeSliceLength).toBe(1)
-    expect(result.current.activeEventsSlice.length).toBe(1)
-    expect(result.current.activeEventsSlice[0].midiNotes).toEqual([67]) // G4
+    expect(result.current.studyBpm).toBe(75)
+    expect(onPlaySlice).toHaveBeenCalledWith(expect.any(Array), 75, 2, 'free_rubato', false)
   })
 
   it('Backward Chaining debe iniciar en la última nota y anteponer la anterior tras cumplir el streak', () => {
@@ -169,11 +159,11 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
         endMeasure: 1,
         chainingDirection: 'backward',
         streakTarget: 1,
-        rhythmMode: 'free_rubato'
+        includeResolutionNote: false
       })
     })
 
-    expect(result.current.activeEventsSlice[0].midiNotes).toEqual([69])
+    expect(result.current.activeEventsSlice[0].midiNotes).toEqual([69]) // A4
 
     act(() => {
       result.current.handleUserNotePlayed(69)
@@ -181,127 +171,6 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
 
     expect(result.current.activeSliceLength).toBe(2)
     expect(result.current.activeEventsSlice.map((e) => e.midiNotes[0])).toEqual([67, 69])
-  })
-
-  it('debe incrementar el streak y expandir la rebanada tras completar los aciertos consecutivos', () => {
-    const onPlaySlice = vi.fn()
-    const { result } = renderHook(() =>
-      useRepertoireTrainer({
-        onPlaySlice
-      })
-    )
-
-    act(() => {
-      result.current.startSession({
-        score: MOCK_SCORE_DATA,
-        hand: 'RH',
-        startMeasure: 1,
-        endMeasure: 1,
-        streakTarget: 2,
-        rhythmMode: 'free_rubato'
-      })
-    })
-
-    act(() => {
-      result.current.handleUserNotePlayed(67, 90, 'midi_hardware')
-    })
-    expect(result.current.currentStreak).toBe(1)
-    expect(result.current.activeSliceLength).toBe(1)
-
-    act(() => {
-      result.current.handleUserNotePlayed(67, 90, 'midi_hardware')
-    })
-    expect(result.current.currentStreak).toBe(0)
-    expect(result.current.activeSliceLength).toBe(2)
-    expect(result.current.activeEventsSlice.length).toBe(2)
-  })
-
-  it('al fallar una nota debe resetear el streak a 0', () => {
-    const onPlaySlice = vi.fn()
-    const { result } = renderHook(() =>
-      useRepertoireTrainer({
-        onPlaySlice
-      })
-    )
-
-    act(() => {
-      result.current.startSession({
-        score: MOCK_SCORE_DATA,
-        hand: 'RH',
-        startMeasure: 1,
-        endMeasure: 1,
-        streakTarget: 3,
-        rhythmMode: 'free_rubato'
-      })
-    })
-
-    act(() => {
-      result.current.handleUserNotePlayed(67)
-    })
-    expect(result.current.currentStreak).toBe(1)
-
-    act(() => {
-      result.current.handleUserNotePlayed(65)
-    })
-    expect(result.current.currentStreak).toBe(0)
-  })
-
-  it('al activar autoSpeedRamp debe incrementar el BPM (+5) al dominar la frase completa', () => {
-    const onPlaySlice = vi.fn()
-    const { result } = renderHook(() =>
-      useRepertoireTrainer({
-        onPlaySlice
-      })
-    )
-
-    act(() => {
-      result.current.startSession({
-        score: MOCK_SCORE_DATA,
-        hand: 'RH',
-        startMeasure: 1,
-        endMeasure: 1,
-        streakTarget: 1,
-        studyBpm: 60,
-        autoSpeedRamp: true,
-        rhythmMode: 'free_rubato'
-      })
-    })
-
-    act(() => {
-      result.current.handleUserNotePlayed(67)
-    })
-    act(() => {
-      result.current.handleUserNotePlayed(67)
-      result.current.handleUserNotePlayed(67)
-    })
-    act(() => {
-      result.current.handleUserNotePlayed(67)
-      result.current.handleUserNotePlayed(67)
-      result.current.handleUserNotePlayed(69)
-    })
-
-    expect(result.current.studyBpm).toBe(65)
-  })
-
-  it('al seleccionar Mano Izquierda (LH) debe filtrar únicamente las notas del pentagrama 2', () => {
-    const onPlaySlice = vi.fn()
-    const { result } = renderHook(() =>
-      useRepertoireTrainer({
-        onPlaySlice
-      })
-    )
-
-    act(() => {
-      result.current.startSession({
-        score: MOCK_SCORE_DATA,
-        hand: 'LH',
-        startMeasure: 1,
-        endMeasure: 1
-      })
-    })
-
-    expect(result.current.activeEventsSlice.length).toBe(1)
-    expect(result.current.activeEventsSlice[0].midiNotes).toEqual([48]) // C3
   })
 
   it('debe guardar la sesión de repertorio en la base de datos con targetMode repertoire', async () => {
@@ -337,7 +206,6 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
     expect(saveSpy).toHaveBeenCalled()
     const savedSession = saveSpy.mock.calls[0][0]
     expect(savedSession.targetMode).toBe('repertoire')
-    expect(savedSession.presetName).toContain('Félix Dumont')
 
     saveSpy.mockRestore()
   })

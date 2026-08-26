@@ -3,18 +3,20 @@ export interface ScheduledNoteEvent {
   durationMs: number
   delayMs: number
   velocity?: number
-  channel?: number // 1: Piano/Melodía, 10: Metrónomo/Percusión
+  channel?: number // 1: Piano, 10: Metrónomo
 }
 
 export class StimulusScheduler {
   private activeTimers: Set<ReturnType<typeof setTimeout>> = new Set()
+  private metronomeTimer: ReturnType<typeof setInterval> | null = null
+  private currentIntervalMs = 0
 
   scheduleSequence(
     events: ScheduledNoteEvent[],
     playNoteFn: (note: number, durationMs: number, velocity?: number, channel?: number) => void,
     onComplete?: () => void
   ): void {
-    this.cancelAll()
+    this.cancelSequenceTimers()
 
     let maxDelay = 0
 
@@ -38,9 +40,53 @@ export class StimulusScheduler {
     }
   }
 
-  cancelAll(): void {
+  startContinuousMetronome(
+    stepUnitMs: number,
+    beatsPerMeasure = 2,
+    playNoteFn: (note: number, durationMs: number, velocity?: number, channel?: number) => void
+  ): void {
+    // Si ya está sonando al mismo intervalo, no reinicia para mantener la fase
+    if (this.metronomeTimer && this.currentIntervalMs === stepUnitMs) {
+      return
+    }
+
+    this.stopContinuousMetronome()
+    this.currentIntervalMs = stepUnitMs
+    let currentBeat = 0
+
+    // Primer clic en tiempo 1
+    playNoteFn(76, 120, 115, 10)
+    currentBeat = 1
+
+    this.metronomeTimer = setInterval(() => {
+      const isFirstBeat = currentBeat % beatsPerMeasure === 0
+      const note = isFirstBeat ? 76 : 77
+      const velocity = isFirstBeat ? 115 : 90
+      playNoteFn(note, 120, velocity, 10)
+      currentBeat++
+    }, stepUnitMs)
+  }
+
+  stopContinuousMetronome(): void {
+    if (this.metronomeTimer) {
+      clearInterval(this.metronomeTimer)
+      this.metronomeTimer = null
+      this.currentIntervalMs = 0
+    }
+  }
+
+  isContinuousMetronomeActive(): boolean {
+    return this.metronomeTimer !== null
+  }
+
+  cancelSequenceTimers(): void {
     this.activeTimers.forEach((timer) => clearTimeout(timer))
     this.activeTimers.clear()
+  }
+
+  cancelAll(): void {
+    this.cancelSequenceTimers()
+    this.stopContinuousMetronome()
   }
 
   hasPending(): boolean {

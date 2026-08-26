@@ -301,10 +301,10 @@ export function useMidi({
       if (!outputPort) return
 
       const chByte = (channel - 1) & 0x0f
+      const timerKey = `${channel}_${noteNumber}` // 👈 Clave única por canal y nota
 
-      // Si esta misma nota ya estaba sonando, enviamos Note Off inmediato para evitar solapamiento
-      if (stimulusTimersRef.current.has(noteNumber)) {
-        clearTimeout(stimulusTimersRef.current.get(noteNumber)!)
+      if (stimulusTimersRef.current.has(timerKey as unknown as number)) {
+        clearTimeout(stimulusTimersRef.current.get(timerKey as unknown as number)!)
         try {
           outputPort.send([0x80 | chByte, noteNumber, 0])
         } catch {
@@ -324,10 +324,10 @@ export function useMidi({
           // No-op
         }
         setActiveStimulusNotes((prev) => prev.filter((n) => n !== noteNumber))
-        stimulusTimersRef.current.delete(noteNumber)
+        stimulusTimersRef.current.delete(timerKey as unknown as number)
       }, durationMs)
 
-      stimulusTimersRef.current.set(noteNumber, timer)
+      stimulusTimersRef.current.set(timerKey as unknown as number, timer)
     },
     [midiAccess, selectedOutputId, isDeviceDisconnected]
   )
