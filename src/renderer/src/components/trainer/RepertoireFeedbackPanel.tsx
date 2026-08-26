@@ -31,9 +31,9 @@ export function RepertoireFeedbackPanel({
   const totalNotesInSlice = activeSlice.reduce((acc, e) => acc + e.midiNotes.length, 0)
 
   return (
-    <div className="h-28 w-full bg-zinc-950/90 border border-zinc-800 rounded-2xl p-3.5 flex items-center justify-between relative overflow-hidden select-none shadow-2xl backdrop-blur-xl">
+    <div className="h-28 w-full bg-zinc-950/90 border border-zinc-800 rounded-2xl p-3.5 flex items-center justify-between relative overflow-hidden select-none shadow-2xl backdrop-blur-xl font-mono">
       {!lastResult ? (
-        <div className="w-full flex items-center justify-between px-2">
+        <div className="w-full flex items-center justify-between px-2 gap-4">
           <div className="flex items-center gap-3">
             <div className="relative flex items-center justify-center">
               <span className="w-3.5 h-3.5 rounded-full bg-purple-400 animate-ping absolute" />
@@ -41,14 +41,12 @@ export function RepertoireFeedbackPanel({
             </div>
             <div>
               <div className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-                <span>
-                  👂 Escuchá la frase ({totalNotesInSlice} notas/acordes) y tocala en tu piano:
-                </span>
-                <span className="px-2 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-purple-300 font-bold">
+                <span>👂 Escuchá la frase ({totalNotesInSlice} notas/acordes) y tocala:</span>
+                <span className="px-2 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-[11px] text-purple-300 font-bold">
                   Compás {currentMeasure}
                 </span>
               </div>
-              <div className="text-xs text-zinc-400 font-mono mt-0.5 flex items-center gap-3">
+              <div className="text-xs text-zinc-400 mt-0.5 flex items-center gap-3">
                 <span>
                   Meta de Retención:{' '}
                   <strong className="text-amber-400">
@@ -68,7 +66,7 @@ export function RepertoireFeedbackPanel({
             variant="secondary"
             size="sm"
             onClick={onRepeatSlice}
-            className="font-mono text-xs"
+            className="text-xs shrink-0 cursor-pointer"
           >
             🔊 Escuchar (R)
           </Button>
@@ -89,12 +87,12 @@ export function RepertoireFeedbackPanel({
                 {lastResult.feedbackMessage}
               </span>
 
-              <span className="text-xs font-mono text-amber-300 bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded-md font-bold">
+              <span className="text-xs text-amber-300 bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded-md font-bold">
                 Streak: {currentStreak} / {streakTarget} ⭐
               </span>
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-mono">
+            <div className="flex items-center gap-2 text-xs">
               <span className="px-2.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300">
                 Afinación:{' '}
                 <strong
@@ -131,14 +129,12 @@ export function RepertoireFeedbackPanel({
                 variant="primary"
                 size="sm"
                 onClick={onAdvanceNext}
-                className="font-bold shadow-lg text-xs font-mono"
+                className="font-bold shadow-lg text-xs cursor-pointer"
               >
                 Siguiente Paso ➔ (Espacio)
               </Button>
             ) : (
-              <span className="text-[11px] text-zinc-500 font-mono italic">
-                Avanzando automáticamente...
-              </span>
+              <span className="text-[11px] text-zinc-500 italic">Avanzando automáticamente...</span>
             )}
           </div>
         </>

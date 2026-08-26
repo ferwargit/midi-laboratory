@@ -35,12 +35,12 @@ describe('stimulusScheduler - Programación y Cancelación Atómica de Estímulo
     expect(playNoteFn).toHaveBeenCalledTimes(2)
   })
 
-  it('startContinuousMetronome debe emitir clics en loop en Canal 10 y schedulePhraseOnContinuousGrid alinear las notas al compás', () => {
+  it('schedulePhraseOnContinuousGrid con 1 compás de pausa debe esperar exactamente 2 clics (1 compás en 2/4)', () => {
     const playNoteFn = vi.fn()
     const beatMs = 750 // 80 BPM
-    const beatsPerMeasure = 2
+    const beatsPerMeasure = 2 // 2/4 (1 compás = 1500ms = 2 clics)
 
-    // Iniciar metrónomo continuo (Compás 0: t = 0ms a 1500ms)
+    // Iniciar metrónomo continuo en t = 0ms
     scheduler.startContinuousMetronome(beatMs, beatsPerMeasure, playNoteFn)
     expect(scheduler.isContinuousMetronomeActive()).toBe(true)
 
@@ -51,20 +51,13 @@ describe('stimulusScheduler - Programación y Cancelación Atómica de Estímulo
     vi.advanceTimersByTime(750)
     expect(playNoteFn).toHaveBeenCalledWith(77, 120, 90, 10)
 
-    // Programar frase de piano con 1 compás completo de respiración (entrará en el compás 2 a los 3000ms)
+    // Programar frase de piano con 1 compás de respiración (entrará a los 1500ms = exactamente 2 clics de espera)
     const pianoEvents: ScheduledNoteEvent[] = [
       { note: 67, durationMs: 500, delayMs: 0, velocity: 100, channel: 1 }
     ]
     scheduler.schedulePhraseOnContinuousGrid(pianoEvents, 1, playNoteFn)
 
-    // Avanzamos por el compás de respiración libre (t = 1500ms a 3000ms)
-    vi.advanceTimersByTime(750)
-    expect(playNoteFn).toHaveBeenCalledWith(76, 120, 115, 10) // Clic 3
-
-    vi.advanceTimersByTime(750)
-    expect(playNoteFn).toHaveBeenCalledWith(77, 120, 90, 10) // Clic 4
-
-    // A los 3000ms (Tiempo 1 fuerte del Compás 2) entra el piano exactamente alineado
+    // A los 1500ms entra el piano exactamente en el Tiempo 1 fuerte del siguiente compás
     vi.advanceTimersByTime(750)
     expect(playNoteFn).toHaveBeenCalledWith(67, 500, 100, 1)
   })

@@ -23,7 +23,7 @@ export interface RepertoireEvaluationConfig {
 
 export const DEFAULT_REPERTOIRE_CONFIG: RepertoireEvaluationConfig = {
   rhythmMode: 'free_rubato',
-  rhythmTolerancePercent: 20,
+  rhythmTolerancePercent: 35,
   chordClusterWindowMs: 45,
   baseBpm: 86
 }
@@ -94,15 +94,14 @@ export function clusterPlayedMidiNotes(
 }
 
 /**
- * Evalúa la correspondencia entre la secuencia de eventos esperados de la partitura
- * y los eventos reales tocados por el alumno en el Roland FP-8.
+ * Evalúa la correspondencia de notas y ritmo adaptando dinámicamente los
+ * tiempos esperados al BPM de estudio activo.
  */
 export function evaluateRepertoireAttempt(
   expectedEvents: ScorePlaybackEvent[],
   playedRawNotes: RawPlayedMidiNote[],
   config: RepertoireEvaluationConfig = DEFAULT_REPERTOIRE_CONFIG
 ): RepertoireExerciseResult {
-  // Filtrar silencios de la lista de eventos esperados
   const targetEvents = expectedEvents.filter((e) => !e.isRest && e.midiNotes.length > 0)
   const clusteredPlayed = clusterPlayedMidiNotes(playedRawNotes, config.chordClusterWindowMs)
 
@@ -110,6 +109,8 @@ export function evaluateRepertoireAttempt(
   let pitchCorrectCount = 0
   let rhythmCorrectCount = 0
 
+  const activeBpm = config.baseBpm || 86
+  const beatDurationMs = Math.round(60000 / activeBpm)
   const firstPlayedTime = clusteredPlayed[0]?.timestampMs ?? 0
 
   for (let i = 0; i < targetEvents.length; i++) {
@@ -117,7 +118,6 @@ export function evaluateRepertoireAttempt(
     const played = clusteredPlayed[i]
 
     if (!played) {
-      // Evento no tocado
       evaluatedEvents.push({
         expectedEvent: expected,
         playedNotes: [],
@@ -142,7 +142,7 @@ export function evaluateRepertoireAttempt(
 
     if (isPitchCorrect) pitchCorrectCount++
 
-    // 2. Evaluación Rítmica
+    // 2. Evaluación Rítmica Escalada al BPM de Estudio
     let isRhythmCorrect = true
     let timeDeviationMs = 0
     let timeDeviationPercent = 0
@@ -155,15 +155,17 @@ export function evaluateRepertoireAttempt(
       if (i === 0) {
         isRhythmCorrect = true
       } else {
-        // Calcular tiempo acumulado teórico desde la primera nota
         const expectedTimeOffsetMs = targetEvents
           .slice(0, i)
-          .reduce((acc, evt) => acc + evt.durationMs, 0)
+          .reduce((acc, evt) => acc + Math.round((evt.durationBeats || 0.5) * beatDurationMs), 0)
         const actualTimeOffsetMs = played.timestampMs - firstPlayedTime
 
         timeDeviationMs = actualTimeOffsetMs - expectedTimeOffsetMs
-        const expectedDuration = expected.durationMs || 500
-        timeDeviationPercent = Math.round((Math.abs(timeDeviationMs) / expectedDuration) * 100)
+        const currentExpectedDuration =
+          Math.round((expected.durationBeats || 0.5) * beatDurationMs) || 500
+        timeDeviationPercent = Math.round(
+          (Math.abs(timeDeviationMs) / currentExpectedDuration) * 100
+        )
 
         isRhythmCorrect = timeDeviationPercent <= config.rhythmTolerancePercent
       }
@@ -171,7 +173,8 @@ export function evaluateRepertoireAttempt(
       if (i === 0) {
         isRhythmCorrect = true
       } else {
-        const expectedIoi = targetEvents[i - 1].durationMs
+        // Cálculo del IOI esperado según el BPM de estudio activo
+        const expectedIoi = Math.round((targetEvents[i - 1].durationBeats || 0.5) * beatDurationMs)
         const actualIoi = played.timestampMs - clusteredPlayed[i - 1].timestampMs
 
         timeDeviationMs = actualIoi - expectedIoi

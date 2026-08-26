@@ -29,6 +29,7 @@ export function RepertoireView({
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const msPerBeat = Math.round(60000 / trainer.studyBpm)
+  const beatsPerMeasure = trainer.currentScore?.timeSignature.beats || 2
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0]
@@ -160,16 +161,65 @@ export function RepertoireView({
         />
       )}
 
-      {/* 3. PIANO HERO */}
+      {/* 3. PIANO HERO CON TEMPORIZADOR VISUAL EN EL CENTRO EXACTO */}
       <div className="space-y-1.5">
-        <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1">
-          <span>
+        <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1 gap-2 flex-wrap sm:flex-nowrap">
+          {/* Lado izquierdo: Título */}
+          <span className="truncate">
             {trainer.isSessionActive
               ? `🎹 ENTRADA ROLAND FP-8 (${trainer.selectedHand === 'RH' ? 'MANO DERECHA' : trainer.selectedHand === 'LH' ? 'MANO IZQUIERDA' : 'AMBAS MANOS'}):`
               : 'TECLADO DE PRÁCTICA AUDIOMOTORA (TOCA EN TU ROLAND FP-8 O CLIC VIRTUAL):'}
           </span>
 
-          <div className="flex items-center gap-1 bg-zinc-950/90 p-1 rounded-xl border border-zinc-800/80 text-[10px] select-none">
+          {/* 🔴 ⚪ CENTRO: TEMPORIZADOR / BEAT VISUAL PERMANENTE (FLECHA ROJA) */}
+          {trainer.isSessionActive && (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-md select-none">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
+                Pulso:
+              </span>
+              {trainer.visualBeatEnabled ? (
+                <div className="flex items-center gap-1.5">
+                  {Array.from({ length: beatsPerMeasure }).map((_, idx) => {
+                    const isActive = trainer.activeBeatIndex === idx
+                    const isDownbeat = idx === 0
+                    return (
+                      <div
+                        key={idx}
+                        className={`w-3.5 h-3.5 rounded-full transition-all duration-75 flex items-center justify-center text-[8px] font-bold ${
+                          isActive
+                            ? isDownbeat
+                              ? 'bg-amber-400 text-zinc-950 scale-125 shadow-[0_0_15px_rgba(251,191,36,1)]'
+                              : 'bg-sky-400 text-zinc-950 scale-110 shadow-[0_0_12px_rgba(56,189,248,0.9)]'
+                            : 'bg-zinc-900 border border-zinc-700/60 text-zinc-500'
+                        }`}
+                        title={isDownbeat ? 'Tiempo 1 Fuerte' : `Tiempo ${idx + 1} Débil`}
+                      >
+                        {idx + 1}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <span className="text-[10px] text-zinc-600 italic">Apagado</span>
+              )}
+
+              <button
+                type="button"
+                onClick={() => trainer.setVisualBeatEnabled(!trainer.visualBeatEnabled)}
+                className={`ml-1 text-[10px] px-1 py-0.2 rounded cursor-pointer transition-colors ${
+                  trainer.visualBeatEnabled
+                    ? 'text-purple-300 hover:text-white'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+                title="Activar/Desactivar LEDs visuales de pulso"
+              >
+                {trainer.visualBeatEnabled ? '👁️' : '🕶️'}
+              </button>
+            </div>
+          )}
+
+          {/* Lado derecho: Selector de Estilo */}
+          <div className="flex items-center gap-1 bg-zinc-950/90 p-1 rounded-xl border border-zinc-800/80 text-[10px] select-none shrink-0">
             <span className="text-zinc-500 px-1 uppercase font-semibold">Estilo:</span>
             {[
               ['ghost_neon', '👻 Silueta'],
@@ -326,7 +376,7 @@ export function RepertoireView({
               </select>
             </div>
 
-            {/* Tolerancia Rítmica */}
+            {/* Tolerancia Rítmica (Slider ampliado hasta ±90%) */}
             <div>
               {trainer.rhythmMode === 'free_rubato' ? (
                 <div>
@@ -349,14 +399,15 @@ export function RepertoireView({
                   </div>
                   <input
                     type="range"
-                    min={5}
-                    max={50}
+                    min={10}
+                    max={90}
                     step={5}
                     value={trainer.rhythmTolerancePercent}
                     onChange={(e): void =>
                       trainer.setRhythmTolerancePercent(Number(e.target.value))
                     }
                     className="w-full accent-purple-500 cursor-pointer"
+                    title="Ajusta el margen de tolerancia rítmica (±10% estricto a ±90% permisivo)"
                   />
                 </>
               )}

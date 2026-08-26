@@ -119,21 +119,40 @@ describe('repertoireEvaluator - Motor de Evaluación Bimodal de Repertorio', () 
       expect(result.evaluatedEvents[1].extraNotes).toEqual([65])
     })
 
-    it('en modo relative_proportional (IOI) debe validar las proporciones de tiempo relativas', () => {
-      const rawNotesProportional: RawPlayedMidiNote[] = [
+    it('en modo strict_metronome debe exigir que el ritmo caiga dentro de la tolerancia configurada al BPM activo', () => {
+      // 86 BPM -> Negra = 698ms, Corchea = 349ms, Semicorchea = 174ms
+      const rawNotesExact: RawPlayedMidiNote[] = [
         { noteNumber: 67, velocity: 90, timestampMs: 1000 },
-        { noteNumber: 67, velocity: 90, timestampMs: 1350 },
-        { noteNumber: 69, velocity: 90, timestampMs: 1525 }
+        { noteNumber: 67, velocity: 90, timestampMs: 1349 }, // +349ms (exacto a 86 BPM)
+        { noteNumber: 69, velocity: 90, timestampMs: 1523 } // +174ms (exacto a 86 BPM)
       ]
 
-      const result = evaluateRepertoireAttempt(mockExpectedMelody, rawNotesProportional, {
+      const resultExact = evaluateRepertoireAttempt(mockExpectedMelody, rawNotesExact, {
         ...DEFAULT_REPERTOIRE_CONFIG,
-        rhythmMode: 'relative_proportional',
-        rhythmTolerancePercent: 20
+        rhythmMode: 'strict_metronome',
+        rhythmTolerancePercent: 20,
+        baseBpm: 86
       })
 
-      expect(result.isCompleteSuccess).toBe(true)
-      expect(result.rhythmAccuracyPercent).toBe(100)
+      expect(resultExact.isCompleteSuccess).toBe(true)
+      expect(resultExact.rhythmAccuracyPercent).toBe(100)
+
+      // Intento fuera de tolerancia (>20%)
+      const rawNotesRushed: RawPlayedMidiNote[] = [
+        { noteNumber: 67, velocity: 90, timestampMs: 1000 },
+        { noteNumber: 67, velocity: 90, timestampMs: 1150 }, // Muy anticipado (desvío >50%)
+        { noteNumber: 69, velocity: 90, timestampMs: 1250 }
+      ]
+
+      const resultRushed = evaluateRepertoireAttempt(mockExpectedMelody, rawNotesRushed, {
+        ...DEFAULT_REPERTOIRE_CONFIG,
+        rhythmMode: 'strict_metronome',
+        rhythmTolerancePercent: 20,
+        baseBpm: 86
+      })
+
+      expect(resultRushed.isCompleteSuccess).toBe(false)
+      expect(resultRushed.rhythmAccuracyPercent).toBeLessThan(100)
     })
 
     it('debe detectar acordes tríadas polifónicos incompletos o con notas erróneas', () => {

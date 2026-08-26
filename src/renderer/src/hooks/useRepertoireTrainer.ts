@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { ScoreDataModel, ScorePlaybackEvent, HandSelection } from '../domain/music/scoreTypes'
 import {
   RepertoireExerciseResult,
@@ -73,6 +73,9 @@ export interface UseRepertoireTrainerReturn {
   currentQuestionIndex: number
   lastResult: RepertoireExerciseResult | null
   sessionHistory: RepertoireExerciseResult[]
+  activeBeatIndex: number | null
+  visualBeatEnabled: boolean
+  setVisualBeatEnabled: (enabled: boolean) => void
   saveError: string | null
   clearSaveError: () => void
   startSession: (options?: RepertoireSessionOptions) => void
@@ -169,6 +172,10 @@ export function useRepertoireTrainer({
   const studyBpmRef = useRef<number>(86)
   const [autoSpeedRamp, setAutoSpeedRampState] = useState<boolean>(false)
 
+  // Estado del Beat Visual (LEDs)
+  const [activeBeatIndex, setActiveBeatIndex] = useState<number | null>(null)
+  const [visualBeatEnabled, setVisualBeatEnabled] = useState<boolean>(true)
+
   const [activeSliceLength, setActiveSliceLengthState] = useState<number>(1)
   const activeSliceLengthBufferRef = useRef<number>(1)
   const playedNotesBufferRef = useRef<RawPlayedMidiNote[]>([])
@@ -177,6 +184,19 @@ export function useRepertoireTrainer({
   const startMeasureRef = useRef<number>(1)
   const endMeasureRef = useRef<number>(4)
   const chainingDirectionRef = useRef<ChainingDirection>('forward')
+
+  // Conectar el callback del scheduler al estado reactivo del Beat
+  useEffect(() => {
+    stimulusScheduler.onBeatTick = (beatIndex: number): void => {
+      setActiveBeatIndex(beatIndex)
+      setTimeout(() => {
+        setActiveBeatIndex((prev) => (prev === beatIndex ? null : prev))
+      }, 140)
+    }
+    return (): void => {
+      stimulusScheduler.onBeatTick = undefined
+    }
+  }, [])
 
   const setCurrentScore = useCallback((score: ScoreDataModel | null): void => {
     currentScoreRef.current = score
@@ -431,13 +451,6 @@ export function useRepertoireTrainer({
         incRes
       )
 
-      console.log('🎼 [RepertoireTrainer] startSession:', {
-        score: scoreToUse?.title,
-        measures: `${startM}-${endM}`,
-        initialSliceLength: initialSlice.length,
-        incRes
-      })
-
       core.startCoreSession(options, () => {
         triggerPlayCurrentSlice(initialSlice)
       })
@@ -472,6 +485,7 @@ export function useRepertoireTrainer({
   const stopSession = useCallback((): void => {
     playedNotesBufferRef.current = []
     stimulusScheduler.cancelAll()
+    setActiveBeatIndex(null)
     core.stopCoreSession()
   }, [core])
 
@@ -480,6 +494,7 @@ export function useRepertoireTrainer({
     setActiveSliceLength(1)
     setStreak(0)
     stimulusScheduler.cancelAll()
+    setActiveBeatIndex(null)
     core.resetCoreToConfig()
   }, [core, setActiveSliceLength, setStreak])
 
@@ -508,7 +523,6 @@ export function useRepertoireTrainer({
       let now = Date.now()
       const lastNote = playedNotesBufferRef.current[playedNotesBufferRef.current.length - 1]
 
-      // 👈 Evita que notas consecutivas en el mismo milisegundo (tests a velocidad de CPU) se confundan con acordes
       if (lastNote && now <= lastNote.timestampMs) {
         now = lastNote.timestampMs + 50
       }
@@ -521,13 +535,6 @@ export function useRepertoireTrainer({
 
       const totalExpectedMidiNotesCount = slice.reduce((acc, e) => acc + e.midiNotes.length, 0)
       const currentBufferCount = playedNotesBufferRef.current.length
-
-      console.log('🎹 [RepertoireTrainer] handleUserNotePlayed:', {
-        note: noteName,
-        bufferCount: currentBufferCount,
-        expectedCount: totalExpectedMidiNotesCount,
-        activeSliceLen: slice.length
-      })
 
       if (currentBufferCount >= totalExpectedMidiNotesCount) {
         const playedNotesToEvaluate = [...playedNotesBufferRef.current]
@@ -558,7 +565,6 @@ export function useRepertoireTrainer({
           inputSource: source
         }
 
-        // Lógica de Streak y Expansión con Finalización Automática
         if (result.isCompleteSuccess) {
           const nextStreak = currentStreakRef.current + 1
 
@@ -584,13 +590,6 @@ export function useRepertoireTrainer({
             setStreak(0)
             const currentLen = activeSliceLengthBufferRef.current
 
-            console.log('🏆 [RepertoireTrainer] Streak logrado:', {
-              currentLen,
-              totalScopeLength,
-              isCompleted: currentLen >= totalScopeLength
-            })
-
-            // Si dominó la frase completa hasta el final
             if (currentLen >= totalScopeLength) {
               if (onTelemetryLog) {
                 onTelemetryLog(
@@ -690,6 +689,9 @@ export function useRepertoireTrainer({
     currentQuestionIndex: core.currentQuestionIndex,
     lastResult: core.lastResult,
     sessionHistory: core.sessionHistory,
+    activeBeatIndex,
+    visualBeatEnabled,
+    setVisualBeatEnabled,
     saveError: core.saveError,
     clearSaveError: core.clearSaveError,
     startSession,

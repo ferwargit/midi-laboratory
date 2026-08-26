@@ -14,6 +14,9 @@ export class StimulusScheduler {
   private currentBeatsPerMeasure = 2
   private isMetroRunning = false
 
+  // 👈 Declaración pública para sincronización con el indicador visual LED
+  public onBeatTick?: (beatIndex: number, isDownbeat?: boolean) => void
+
   scheduleSequence(
     events: ScheduledNoteEvent[],
     playNoteFn: (note: number, durationMs: number, velocity?: number, channel?: number) => void,
@@ -44,7 +47,7 @@ export class StimulusScheduler {
   }
 
   /**
-   * Inicia el Metrónomo Continuo Perpetuo en Canal 10.
+   * Inicia el Metrónomo Continuo en Canal 10 con notificación de Beat al indicador visual.
    */
   startContinuousMetronome(
     beatDurationMs: number,
@@ -62,22 +65,25 @@ export class StimulusScheduler {
     this.clockStartTime = Date.now()
 
     let currentBeat = 0
-    // Clic 1 inicial
+    // Clic 1 inicial (Tiempo 1 fuerte)
     playNoteFn(76, 120, 115, 10)
+    if (this.onBeatTick) this.onBeatTick(0, true)
     currentBeat = 1
 
     this.metronomeTimer = setInterval(() => {
-      const isDownbeat = currentBeat % beatsPerMeasure === 0
+      const beatIdx = currentBeat % beatsPerMeasure
+      const isDownbeat = beatIdx === 0
       const note = isDownbeat ? 76 : 77
       const velocity = isDownbeat ? 115 : 90
       playNoteFn(note, 120, velocity, 10)
+      if (this.onBeatTick) this.onBeatTick(beatIdx, isDownbeat)
       currentBeat++
     }, beatDurationMs)
   }
 
   /**
    * Programa la frase de piano para que entre exactamente en el tiempo 1 fuerte
-   * del compás que sigue tras los compases de respiración seleccionados.
+   * respetando la cantidad exacta de compases de respiración (1 o 2 compases).
    */
   schedulePhraseOnContinuousGrid(
     pianoEvents: ScheduledNoteEvent[],
@@ -90,11 +96,20 @@ export class StimulusScheduler {
     const measureDurationMs = this.currentBeatsPerMeasure * this.currentBeatDurationMs
     const elapsedSinceClockStart = now - this.clockStartTime
 
-    // Cuántos compases enteros han transcurrido en el reloj
+    // Compás actual en curso
     const currentMeasureIndex = Math.floor(elapsedSinceClockStart / measureDurationMs)
-    // El compás de entrada será el compás actual + 1 + compases de descanso
-    const targetMeasureStartMs = (currentMeasureIndex + 1 + restingMeasures) * measureDurationMs
-    const delayUntilTargetDownbeat = Math.max(100, targetMeasureStartMs - elapsedSinceClockStart)
+
+    // El compás objetivo es el compás actual + compases de descanso
+    let targetMeasureIndex = currentMeasureIndex + restingMeasures
+    let targetMeasureStartMs = targetMeasureIndex * measureDurationMs
+    let delayUntilTargetDownbeat = targetMeasureStartMs - elapsedSinceClockStart
+
+    // Si el cálculo da menos de 250ms (estamos cayendo al final del compás), pasa al siguiente compás entero
+    if (delayUntilTargetDownbeat < 250) {
+      targetMeasureIndex += 1
+      targetMeasureStartMs = targetMeasureIndex * measureDurationMs
+      delayUntilTargetDownbeat = targetMeasureStartMs - elapsedSinceClockStart
+    }
 
     const alignedEvents: ScheduledNoteEvent[] = pianoEvents.map((evt) => ({
       ...evt,
