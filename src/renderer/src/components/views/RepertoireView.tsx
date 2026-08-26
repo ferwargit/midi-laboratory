@@ -161,7 +161,7 @@ export function RepertoireView({
         />
       )}
 
-      {/* 3. PIANO HERO CON TEMPORIZADOR VISUAL EN EL CENTRO EXACTO */}
+      {/* 3. PIANO HERO CON TEMPORIZADOR VISUAL Y METRÓNOMO LIBRE */}
       <div className="space-y-1.5">
         <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1 gap-2 flex-wrap sm:flex-nowrap">
           {/* Lado izquierdo: Título */}
@@ -171,38 +171,54 @@ export function RepertoireView({
               : 'TECLADO DE PRÁCTICA AUDIOMOTORA (TOCA EN TU ROLAND FP-8 O CLIC VIRTUAL):'}
           </span>
 
-          {/* 🔴 ⚪ CENTRO: TEMPORIZADOR / BEAT VISUAL PERMANENTE (FLECHA ROJA) */}
-          {trainer.isSessionActive && (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-md select-none">
+          {/* 🔴 ⚪ CENTRO: METRÓNOMO / BEAT VISUAL (ACTIVO EN SESIÓN Y EN PRÁCTICA LIBRE) */}
+          <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-md select-none">
+            {!trainer.isSessionActive ? (
+              <button
+                type="button"
+                onClick={trainer.toggleFreeMetronome}
+                className={`flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-lg cursor-pointer transition-all ${
+                  trainer.isFreeMetronomeActive
+                    ? 'bg-amber-950/80 border border-amber-500 text-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.5)]'
+                    : 'bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white'
+                }`}
+                title="Activar/Detener metrónomo libre para practicar en el piano sin iniciar sesión"
+              >
+                <span>{trainer.isFreeMetronomeActive ? '⏹' : '▶'}</span>
+                <span>{trainer.isFreeMetronomeActive ? 'Detener Metro' : 'Metro Libre'}</span>
+              </button>
+            ) : (
               <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">
                 Pulso:
               </span>
-              {trainer.visualBeatEnabled ? (
-                <div className="flex items-center gap-1.5">
-                  {Array.from({ length: beatsPerMeasure }).map((_, idx) => {
-                    const isActive = trainer.activeBeatIndex === idx
-                    const isDownbeat = idx === 0
-                    return (
-                      <div
-                        key={idx}
-                        className={`w-3.5 h-3.5 rounded-full transition-all duration-75 flex items-center justify-center text-[8px] font-bold ${
-                          isActive
-                            ? isDownbeat
-                              ? 'bg-amber-400 text-zinc-950 scale-125 shadow-[0_0_15px_rgba(251,191,36,1)]'
-                              : 'bg-sky-400 text-zinc-950 scale-110 shadow-[0_0_12px_rgba(56,189,248,0.9)]'
-                            : 'bg-zinc-900 border border-zinc-700/60 text-zinc-500'
-                        }`}
-                        title={isDownbeat ? 'Tiempo 1 Fuerte' : `Tiempo ${idx + 1} Débil`}
-                      >
-                        {idx + 1}
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <span className="text-[10px] text-zinc-600 italic">Apagado</span>
-              )}
+            )}
 
+            {(trainer.isSessionActive || trainer.isFreeMetronomeActive) &&
+            trainer.visualBeatEnabled ? (
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: beatsPerMeasure }).map((_, idx) => {
+                  const isActive = trainer.activeBeatIndex === idx
+                  const isDownbeat = idx === 0
+                  return (
+                    <div
+                      key={idx}
+                      className={`w-3.5 h-3.5 rounded-full transition-all duration-75 flex items-center justify-center text-[8px] font-bold ${
+                        isActive
+                          ? isDownbeat
+                            ? 'bg-amber-400 text-zinc-950 scale-125 shadow-[0_0_15px_rgba(251,191,36,1)]'
+                            : 'bg-sky-400 text-zinc-950 scale-110 shadow-[0_0_12px_rgba(56,189,248,0.9)]'
+                          : 'bg-zinc-900 border border-zinc-700/60 text-zinc-500'
+                      }`}
+                      title={isDownbeat ? 'Tiempo 1 Fuerte' : `Tiempo ${idx + 1} Débil`}
+                    >
+                      {idx + 1}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
+
+            {trainer.isSessionActive && (
               <button
                 type="button"
                 onClick={() => trainer.setVisualBeatEnabled(!trainer.visualBeatEnabled)}
@@ -215,8 +231,8 @@ export function RepertoireView({
               >
                 {trainer.visualBeatEnabled ? '👁️' : '🕶️'}
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Lado derecho: Selector de Estilo */}
           <div className="flex items-center gap-1 bg-zinc-950/90 p-1 rounded-xl border border-zinc-800/80 text-[10px] select-none shrink-0">
@@ -376,7 +392,7 @@ export function RepertoireView({
               </select>
             </div>
 
-            {/* Tolerancia Rítmica (Slider ampliado hasta ±90%) */}
+            {/* Tolerancia Rítmica */}
             <div>
               {trainer.rhythmMode === 'free_rubato' ? (
                 <div>
@@ -407,7 +423,6 @@ export function RepertoireView({
                       trainer.setRhythmTolerancePercent(Number(e.target.value))
                     }
                     className="w-full accent-purple-500 cursor-pointer"
-                    title="Ajusta el margen de tolerancia rítmica (±10% estricto a ±90% permisivo)"
                   />
                 </>
               )}

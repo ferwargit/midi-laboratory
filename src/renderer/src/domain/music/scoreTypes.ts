@@ -30,7 +30,7 @@ export interface ScorePlaybackEvent {
   durationMs: number // Duración calculada en milisegundos según el BPM
   isChord: boolean // True si contiene 2 o más notas simultáneas
   isRest: boolean // True si es un silencio
-  hand: 'RH' | 'LH' // Asignación de mano (RH = pentagrama 1, LH = pentagrama 2)
+  hand: HandSelection // 👈 'RH' | 'LH' | 'both' (permite eventos polifónicos fusionados de ambas manos)
   staff: 1 | 2 // 1: Clave de Sol (MD), 2: Clave de Fa (MI)
   voice: number // 1, 5, etc.
   harmonicTag?: HarmonicContextTag // Cifrado armónico asociado

@@ -25,7 +25,6 @@ import { AiExercisePrescription } from './domain/ai/types'
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
 type AppMode = 'single_note' | 'intervals' | 'sequences' | 'repertoire' | 'analytics'
 
-// Partitura completa de 8 compases de Félix Dumont exportada de MuseScore 4
 const DEFAULT_PARTITURA_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
 <score-partwise version="4.0">
@@ -283,7 +282,14 @@ export default function App(): React.ReactElement {
     }
   })
 
-  // 4. Modalidad 4: Repertorio Audiomotor con Cuantización de Compás en el Downbeat
+  const handlePlayMetronomeTick = useCallback(
+    (note: number, dur: number, vel?: number, ch?: number): void => {
+      midi.sendNote(note, dur, vel, ch)
+    },
+    [midi]
+  )
+
+  // 4. Modalidad 4: Repertorio Audiomotor con Reloj Maestro Unificado
   const repertoireTrainer = useRepertoireTrainer({
     onPlaySlice: (
       events,
@@ -298,7 +304,6 @@ export default function App(): React.ReactElement {
       const beatDurationMs = Math.round(60000 / bpm)
       const pianoEvents: ScheduledNoteEvent[] = []
 
-      // Calculamos las posiciones relativas de las notas dentro del compás
       let currentOffsetMs = 0
 
       events.forEach((evt) => {
@@ -321,7 +326,6 @@ export default function App(): React.ReactElement {
       })
 
       if (isContinuousMetro) {
-        // Iniciar metrónomo perpetuo si no estaba activo
         if (!stimulusScheduler.isContinuousMetronomeActive()) {
           stimulusScheduler.startContinuousMetronome(
             beatDurationMs,
@@ -336,7 +340,6 @@ export default function App(): React.ReactElement {
           })
         }
 
-        // Programar la entrada del piano alineada al Tiempo 1 tras los compases de respiración
         stimulusScheduler.schedulePhraseOnContinuousGrid(
           pianoEvents,
           restingBars,
@@ -345,7 +348,6 @@ export default function App(): React.ReactElement {
           }
         )
       } else {
-        // Modo Pre-Roll clásico: 1 compás de clics previos y entrada de piano
         stimulusScheduler.stopContinuousMetronome()
         const preRollDurationMs = beats * beatDurationMs
         const unifiedEvents: ScheduledNoteEvent[] = []
@@ -386,30 +388,36 @@ export default function App(): React.ReactElement {
         .join(', ')
       midi.addLog({
         type: 'OUT',
-        message: `🎼 Frase (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
+        message: isIsochronous
+          ? `🎼 Frase (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
+          : `🎼 Frase (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
       })
     },
+    onPlayMetronomeTick: handlePlayMetronomeTick,
     onTelemetryLog: (type, message) => {
       midi.addLog({ type, message })
     }
   })
 
-  // Cargar partitura completa de 8 compases al montar
+  // ✅ Cargar partitura completa por defecto una sola vez al montar (evita resetear el BPM a 86 al mover el slider)
+  const hasLoadedDefaultScoreRef = useRef(false)
   const { setCurrentScore, setStartMeasure, setEndMeasure, setStudyBpm } = repertoireTrainer
 
   useEffect(() => {
+    if (hasLoadedDefaultScoreRef.current) return
     try {
       const defaultScore = parseMusicXml(DEFAULT_PARTITURA_XML)
       setCurrentScore(defaultScore)
       setStartMeasure(1)
       setEndMeasure(1)
       setStudyBpm(defaultScore.baseBpm)
+      hasLoadedDefaultScoreRef.current = true
     } catch {
       // No-op
     }
   }, [setCurrentScore, setStartMeasure, setEndMeasure, setStudyBpm])
 
-  // Router MIDI Síncrono con useLayoutEffect
+  // Router MIDI Síncrono
   useLayoutEffect(() => {
     handleNoteRef.current = (note, vel, source) => {
       if (appMode === 'single_note') {

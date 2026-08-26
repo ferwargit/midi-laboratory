@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import { useRepertoireTrainer } from './useRepertoireTrainer'
 import { ScoreDataModel } from '../domain/music/scoreTypes'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
@@ -59,7 +59,7 @@ const MOCK_SCORE_DATA: ScoreDataModel = {
       staff: 1,
       voice: 1
     },
-    // Compás 2 - Mano Derecha (Nota de resolución C5 en tiempo 1.0)
+    // Compás 2 - Mano Derecha (Nota C5 en tiempo 1.0)
     {
       id: 'e4',
       measureNumber: 2,
@@ -75,10 +75,73 @@ const MOCK_SCORE_DATA: ScoreDataModel = {
       staff: 1,
       voice: 1
     },
-    // Compás 1 - Mano Izquierda
+    {
+      id: 'e5',
+      measureNumber: 2,
+      beatPosition: 1.5,
+      notes: [{ pitch: 64, step: 'E', alter: 0, octave: 4 }],
+      midiNotes: [64],
+      durationDivisions: 1,
+      durationBeats: 0.25,
+      durationMs: 174,
+      isChord: false,
+      isRest: false,
+      hand: 'RH',
+      staff: 1,
+      voice: 1
+    },
+    // Compás 3 - Mano Derecha (Nota F4 en tiempo 1.0)
+    {
+      id: 'e6',
+      measureNumber: 3,
+      beatPosition: 1.0,
+      notes: [{ pitch: 65, step: 'F', alter: 0, octave: 4 }],
+      midiNotes: [65],
+      durationDivisions: 2,
+      durationBeats: 0.5,
+      durationMs: 348,
+      isChord: false,
+      isRest: false,
+      hand: 'RH',
+      staff: 1,
+      voice: 1
+    },
+    // Compás 4 - Mano Derecha (Resolución E4 en tiempo 1.0)
+    {
+      id: 'e7',
+      measureNumber: 4,
+      beatPosition: 1.0,
+      notes: [{ pitch: 64, step: 'E', alter: 0, octave: 4 }],
+      midiNotes: [64],
+      durationDivisions: 2,
+      durationBeats: 0.5,
+      durationMs: 348,
+      isChord: false,
+      isRest: false,
+      hand: 'RH',
+      staff: 1,
+      voice: 1
+    },
+    // Compás 1 - Mano Izquierda (C3 en tiempo 1.0)
     {
       id: 'lh1',
       measureNumber: 1,
+      beatPosition: 1.0,
+      notes: [{ pitch: 48, step: 'C', alter: 0, octave: 3 }],
+      midiNotes: [48],
+      durationDivisions: 2,
+      durationBeats: 0.5,
+      durationMs: 348,
+      isChord: false,
+      isRest: false,
+      hand: 'LH',
+      staff: 2,
+      voice: 5
+    },
+    // Compás 2 - Mano Izquierda (C3 en tiempo 1.0)
+    {
+      id: 'lh2',
+      measureNumber: 2,
       beatPosition: 1.0,
       notes: [{ pitch: 48, step: 'C', alter: 0, octave: 3 }],
       midiNotes: [48],
@@ -116,6 +179,76 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
     expect(result.current.includeResolutionNote).toBe(true)
     expect(result.current.continuousMetronome).toBe(false)
     expect(result.current.restingMeasures).toBe(1)
+    expect(result.current.isFreeMetronomeActive).toBe(false)
+  })
+
+  it('debe permitir activar y detener el Metrónomo Libre en reposo y cambiar tempo en vivo', () => {
+    const onPlayMetronomeTick = vi.fn()
+    const { result } = renderHook(() =>
+      useRepertoireTrainer({
+        onPlaySlice: vi.fn(),
+        onPlayMetronomeTick
+      })
+    )
+
+    act(() => {
+      result.current.toggleFreeMetronome()
+    })
+    expect(result.current.isFreeMetronomeActive).toBe(true)
+    expect(onPlayMetronomeTick).toHaveBeenCalled()
+
+    act(() => {
+      result.current.setStudyBpm(100)
+    })
+    expect(result.current.studyBpm).toBe(100)
+
+    act(() => {
+      result.current.toggleFreeMetronome()
+    })
+    expect(result.current.isFreeMetronomeActive).toBe(false)
+  })
+
+  it('en Ambas Manos con includeResolutionNote debe terminar en la resolución estricta del tiempo 1.0 (C3 + C5)', () => {
+    const onPlaySlice = vi.fn()
+    const { result } = renderHook(() =>
+      useRepertoireTrainer({
+        onPlaySlice
+      })
+    )
+
+    act(() => {
+      result.current.startSession({
+        score: MOCK_SCORE_DATA,
+        hand: 'both',
+        startMeasure: 1,
+        endMeasure: 1,
+        includeResolutionNote: true
+      })
+    })
+
+    expect(result.current.activeEventsSlice[0].midiNotes).toEqual([48, 67]) // C3 + G4
+  })
+
+  it('en rango arbitrario del Compás 2 al 3 con includeResolutionNote debe anexar exactamente el primer evento del Compás 4 (E4)', () => {
+    const onPlaySlice = vi.fn()
+    const { result } = renderHook(() =>
+      useRepertoireTrainer({
+        onPlaySlice
+      })
+    )
+
+    act(() => {
+      result.current.startSession({
+        score: MOCK_SCORE_DATA,
+        hand: 'RH',
+        startMeasure: 2,
+        endMeasure: 3,
+        includeResolutionNote: true
+      })
+    })
+
+    // El primer evento del compás 2 es C5 (72)
+    expect(result.current.activeEventsSlice[0].midiNotes).toEqual([72])
   })
 
   it('debe configurar y propagar el BPM de estudio a la reproducción del estímulo', () => {
@@ -171,28 +304,6 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
     expect(result.current.activeEventsSlice[0].midiNotes).toEqual([67]) // G4
   })
 
-  it('includeResolutionNote debe anexar la nota de llegada del tiempo 1 del compás siguiente (C5)', () => {
-    const onPlaySlice = vi.fn()
-    const { result } = renderHook(() =>
-      useRepertoireTrainer({
-        onPlaySlice
-      })
-    )
-
-    act(() => {
-      result.current.startSession({
-        score: MOCK_SCORE_DATA,
-        hand: 'RH',
-        startMeasure: 1,
-        endMeasure: 1,
-        includeResolutionNote: true
-      })
-    })
-
-    // Rango Compás 1 tiene 3 notas + 1 nota de resolución del compás 2 = 4 eventos en total
-    expect(result.current.activeEventsSlice[0].midiNotes).toEqual([67]) // Primera nota G4
-  })
-
   it('Backward Chaining debe iniciar en la última nota y anteponer la anterior tras cumplir el streak', () => {
     const onPlaySlice = vi.fn()
     const { result } = renderHook(() =>
@@ -242,14 +353,12 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
       })
     })
 
-    // Intento 1 correcto
     act(() => {
       result.current.handleUserNotePlayed(67, 90, 'midi_hardware')
     })
     expect(result.current.currentStreak).toBe(1)
     expect(result.current.activeSliceLength).toBe(1)
 
-    // Intento 2 correcto -> Cumple el streak target (2) y expande a 2 notas
     act(() => {
       result.current.handleUserNotePlayed(67, 90, 'midi_hardware')
     })
@@ -277,13 +386,11 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
       })
     })
 
-    // Acierto 1
     act(() => {
       result.current.handleUserNotePlayed(67)
     })
     expect(result.current.currentStreak).toBe(1)
 
-    // Fallo (toca F4 en vez de G4)
     act(() => {
       result.current.handleUserNotePlayed(65)
     })
@@ -303,32 +410,30 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
         hand: 'RH',
         startMeasure: 1,
         endMeasure: 1,
-        includeResolutionNote: false, // 3 notas: e1 (67), e2 (67), e3 (69)
+        includeResolutionNote: false,
         streakTarget: 1,
         rhythmMode: 'free_rubato'
       })
     })
 
-    // Nota 1 (expande a 2)
     act(() => {
       result.current.handleUserNotePlayed(67)
     })
 
-    // Nota 1+2 (expande a 3)
     act(() => {
       result.current.handleUserNotePlayed(67)
       result.current.handleUserNotePlayed(67)
     })
 
-    // Nota 1+2+3 (domina las 3 notas completas -> finaliza la sesión!)
     await act(async () => {
       result.current.handleUserNotePlayed(67)
       result.current.handleUserNotePlayed(67)
       result.current.handleUserNotePlayed(69)
-      await Promise.resolve()
     })
 
-    expect(result.current.isSessionFinished).toBe(true)
+    await waitFor(() => {
+      expect(result.current.isSessionFinished).toBe(true)
+    })
     expect(saveSpy).toHaveBeenCalled()
 
     saveSpy.mockRestore()

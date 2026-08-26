@@ -76,6 +76,8 @@ export interface UseRepertoireTrainerReturn {
   activeBeatIndex: number | null
   visualBeatEnabled: boolean
   setVisualBeatEnabled: (enabled: boolean) => void
+  isFreeMetronomeActive: boolean
+  toggleFreeMetronome: () => void
   saveError: string | null
   clearSaveError: () => void
   startSession: (options?: RepertoireSessionOptions) => void
@@ -99,7 +101,53 @@ interface RepertoireTrainerProps {
     isContinuousMetro?: boolean,
     restingBars?: number
   ) => void
+  onPlayMetronomeTick?: (
+    note: number,
+    durationMs: number,
+    velocity?: number,
+    channel?: number
+  ) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
+}
+
+function fuseConcurrentEvents(events: ScorePlaybackEvent[]): ScorePlaybackEvent[] {
+  const fusedMap = new Map<string, ScorePlaybackEvent>()
+
+  events.forEach((evt) => {
+    const timeKey = `${evt.measureNumber}_${evt.beatPosition.toFixed(3)}`
+
+    if (!fusedMap.has(timeKey)) {
+      fusedMap.set(timeKey, {
+        ...evt,
+        notes: [...evt.notes],
+        midiNotes: [...evt.midiNotes]
+      })
+    } else {
+      const existing = fusedMap.get(timeKey)!
+      evt.notes.forEach((n) => {
+        if (!existing.notes.some((en) => en.pitch === n.pitch)) {
+          existing.notes.push(n)
+        }
+      })
+      evt.midiNotes.forEach((m) => {
+        if (!existing.midiNotes.includes(m)) {
+          existing.midiNotes.push(m)
+        }
+      })
+      existing.notes.sort((a, b) => a.pitch - b.pitch)
+      existing.midiNotes.sort((a, b) => a - b)
+      existing.isChord = existing.midiNotes.length > 1
+      existing.hand = 'both'
+      existing.durationDivisions = Math.min(existing.durationDivisions, evt.durationDivisions)
+      existing.durationBeats = Math.min(existing.durationBeats, evt.durationBeats)
+      existing.durationMs = Math.min(existing.durationMs, evt.durationMs)
+    }
+  })
+
+  return Array.from(fusedMap.values()).sort((a, b) => {
+    if (a.measureNumber !== b.measureNumber) return a.measureNumber - b.measureNumber
+    return a.beatPosition - b.beatPosition
+  })
 }
 
 function computeSliceEvents(
@@ -112,7 +160,9 @@ function computeSliceEvents(
   includeResolution = true
 ): ScorePlaybackEvent[] {
   if (!score) return []
-  const filtered = score.events.filter((e) => {
+
+  // 1. Filtrar eventos del rango seleccionado (startM a endM)
+  const rawFiltered = score.events.filter((e) => {
     const withinMeasure = e.measureNumber >= startM && e.measureNumber <= endM
     const matchesHand =
       hand === 'both' || (hand === 'RH' && e.hand === 'RH') || (hand === 'LH' && e.hand === 'LH')
@@ -120,17 +170,26 @@ function computeSliceEvents(
     return withinMeasure && matchesHand && isPlayable
   })
 
+  const filtered = hand === 'both' ? fuseConcurrentEvents(rawFiltered) : rawFiltered
+
+  // 2. ✅ RESOLUCIÓN UNIVERSAL: Tomar ESTRICTAMENTE el 1er evento jugable del compás siguiente
   if (includeResolution && endM < score.totalMeasures) {
-    const resolutionEvent = score.events.find((e) => {
+    const nextMeasureEvents = score.events.filter((e) => {
       const isNextMeasure = e.measureNumber === endM + 1
-      const isDownbeat = e.beatPosition <= 1.5
       const matchesHand =
         hand === 'both' || (hand === 'RH' && e.hand === 'RH') || (hand === 'LH' && e.hand === 'LH')
       const isPlayable = !e.isRest && e.midiNotes.length > 0
-      return isNextMeasure && isDownbeat && matchesHand && isPlayable
+      return isNextMeasure && matchesHand && isPlayable
     })
-    if (resolutionEvent && !filtered.some((e) => e.id === resolutionEvent.id)) {
-      filtered.push(resolutionEvent)
+
+    const fusedNext = hand === 'both' ? fuseConcurrentEvents(nextMeasureEvents) : nextMeasureEvents
+
+    // Tomamos exactamente el PRIMER evento (índice 0) del compás siguiente
+    if (fusedNext.length > 0) {
+      const firstLandingEvent = fusedNext[0]
+      if (!filtered.some((e) => e.id === firstLandingEvent.id)) {
+        filtered.push(firstLandingEvent)
+      }
     }
   }
 
@@ -140,6 +199,7 @@ function computeSliceEvents(
 
 export function useRepertoireTrainer({
   onPlaySlice,
+  onPlayMetronomeTick,
   onTelemetryLog
 }: RepertoireTrainerProps): UseRepertoireTrainerReturn {
   const [currentScore, setCurrentScoreState] = useState<ScoreDataModel | null>(null)
@@ -172,9 +232,10 @@ export function useRepertoireTrainer({
   const studyBpmRef = useRef<number>(86)
   const [autoSpeedRamp, setAutoSpeedRampState] = useState<boolean>(false)
 
-  // Estado del Beat Visual (LEDs)
   const [activeBeatIndex, setActiveBeatIndex] = useState<number | null>(null)
   const [visualBeatEnabled, setVisualBeatEnabled] = useState<boolean>(true)
+  const [isFreeMetronomeActive, setIsFreeMetronomeActive] = useState<boolean>(false)
+  const isFreeMetronomeActiveRef = useRef<boolean>(false)
 
   const [activeSliceLength, setActiveSliceLengthState] = useState<number>(1)
   const activeSliceLengthBufferRef = useRef<number>(1)
@@ -185,7 +246,6 @@ export function useRepertoireTrainer({
   const endMeasureRef = useRef<number>(4)
   const chainingDirectionRef = useRef<ChainingDirection>('forward')
 
-  // Conectar el callback del scheduler al estado reactivo del Beat
   useEffect(() => {
     stimulusScheduler.onBeatTick = (beatIndex: number): void => {
       setActiveBeatIndex(beatIndex)
@@ -222,6 +282,44 @@ export function useRepertoireTrainer({
     restingMeasuresRef.current = m
     setRestingMeasuresState(m)
   }, [])
+
+  const setStudyBpm = useCallback(
+    (bpm: number): void => {
+      studyBpmRef.current = bpm
+      setStudyBpmState(bpm)
+
+      if (isFreeMetronomeActiveRef.current && stimulusScheduler.isContinuousMetronomeActive()) {
+        const beats = currentScoreRef.current?.timeSignature.beats || 2
+        const beatMs = Math.round(60000 / bpm)
+        stimulusScheduler.startContinuousMetronome(beatMs, beats, (note, dur, vel, ch) => {
+          if (onPlayMetronomeTick) onPlayMetronomeTick(note, dur, vel, ch)
+        })
+      }
+    },
+    [onPlayMetronomeTick]
+  )
+
+  const toggleFreeMetronome = useCallback((): void => {
+    if (isFreeMetronomeActiveRef.current || stimulusScheduler.isContinuousMetronomeActive()) {
+      stimulusScheduler.stopContinuousMetronome()
+      isFreeMetronomeActiveRef.current = false
+      setIsFreeMetronomeActive(false)
+      setActiveBeatIndex(null)
+      if (onTelemetryLog) onTelemetryLog('EVAL', '⏱️ Metrónomo Libre detenido')
+    } else {
+      const bpm = studyBpmRef.current
+      const beats = currentScoreRef.current?.timeSignature.beats || 2
+      const beatMs = Math.round(60000 / bpm)
+
+      stimulusScheduler.startContinuousMetronome(beatMs, beats, (note, dur, vel, ch) => {
+        if (onPlayMetronomeTick) onPlayMetronomeTick(note, dur, vel, ch)
+      })
+      isFreeMetronomeActiveRef.current = true
+      setIsFreeMetronomeActive(true)
+      if (onTelemetryLog)
+        onTelemetryLog('EVAL', `⏱️ Metrónomo Libre iniciado a ${bpm} BPM (${beats} tiempos)`)
+    }
+  }, [onPlayMetronomeTick, onTelemetryLog])
 
   const getActiveSlice = useCallback((): ScorePlaybackEvent[] => {
     const score = currentScoreRef.current || currentScore
@@ -346,11 +444,6 @@ export function useRepertoireTrainer({
     setRhythmTolerancePercentState(tol)
   }, [])
 
-  const setStudyBpm = useCallback((bpm: number): void => {
-    studyBpmRef.current = bpm
-    setStudyBpmState(bpm)
-  }, [])
-
   const setAutoSpeedRamp = useCallback((ramp: boolean): void => {
     setAutoSpeedRampState(ramp)
   }, [])
@@ -386,6 +479,10 @@ export function useRepertoireTrainer({
 
   const startSession = useCallback(
     (options?: RepertoireSessionOptions): void => {
+      stimulusScheduler.stopContinuousMetronome()
+      isFreeMetronomeActiveRef.current = false
+      setIsFreeMetronomeActive(false)
+
       let scoreToUse = options?.score || currentScoreRef.current || currentScore
       let handToUse = selectedHandRef.current
       let startM = startMeasureRef.current
@@ -485,6 +582,8 @@ export function useRepertoireTrainer({
   const stopSession = useCallback((): void => {
     playedNotesBufferRef.current = []
     stimulusScheduler.cancelAll()
+    isFreeMetronomeActiveRef.current = false
+    setIsFreeMetronomeActive(false)
     setActiveBeatIndex(null)
     core.stopCoreSession()
   }, [core])
@@ -494,6 +593,8 @@ export function useRepertoireTrainer({
     setActiveSliceLength(1)
     setStreak(0)
     stimulusScheduler.cancelAll()
+    isFreeMetronomeActiveRef.current = false
+    setIsFreeMetronomeActive(false)
     setActiveBeatIndex(null)
     core.resetCoreToConfig()
   }, [core, setActiveSliceLength, setStreak])
@@ -565,6 +666,7 @@ export function useRepertoireTrainer({
           inputSource: source
         }
 
+        // Lógica de Streak y Expansión con Finalización Automática
         if (result.isCompleteSuccess) {
           const nextStreak = currentStreakRef.current + 1
 
@@ -590,6 +692,7 @@ export function useRepertoireTrainer({
             setStreak(0)
             const currentLen = activeSliceLengthBufferRef.current
 
+            // Si dominó la frase completa hasta el final
             if (currentLen >= totalScopeLength) {
               if (onTelemetryLog) {
                 onTelemetryLog(
@@ -692,6 +795,8 @@ export function useRepertoireTrainer({
     activeBeatIndex,
     visualBeatEnabled,
     setVisualBeatEnabled,
+    isFreeMetronomeActive,
+    toggleFreeMetronome,
     saveError: core.saveError,
     clearSaveError: core.clearSaveError,
     startSession,
