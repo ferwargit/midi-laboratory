@@ -28,6 +28,7 @@ export interface RepertoireSessionOptions extends CoreStartSessionOptions {
   rhythmTolerancePercent?: number
   includeResolutionNote?: boolean
   continuousMetronome?: boolean
+  restingMeasures?: number
   studyBpm?: number
   autoSpeedRamp?: boolean
 }
@@ -56,6 +57,8 @@ export interface UseRepertoireTrainerReturn {
   setIncludeResolutionNote: (inc: boolean) => void
   continuousMetronome: boolean
   setContinuousMetronome: (cont: boolean) => void
+  restingMeasures: number
+  setRestingMeasures: (m: number) => void
   studyBpm: number
   setStudyBpm: (bpm: number) => void
   autoSpeedRamp: boolean
@@ -90,7 +93,8 @@ interface RepertoireTrainerProps {
     bpm: number,
     beatsPerMeasure?: number,
     rhythmMode?: RhythmEvaluationMode,
-    isContinuousMetro?: boolean
+    isContinuousMetro?: boolean,
+    restingBars?: number
   ) => void
   onTelemetryLog?: (type: 'AI' | 'EVAL', message: string) => void
 }
@@ -158,6 +162,9 @@ export function useRepertoireTrainer({
   const [continuousMetronome, setContinuousMetronomeState] = useState<boolean>(false)
   const continuousMetronomeRef = useRef<boolean>(false)
 
+  const [restingMeasures, setRestingMeasuresState] = useState<number>(1)
+  const restingMeasuresRef = useRef<number>(1)
+
   const [studyBpm, setStudyBpmState] = useState<number>(86)
   const studyBpmRef = useRef<number>(86)
   const [autoSpeedRamp, setAutoSpeedRampState] = useState<boolean>(false)
@@ -189,6 +196,11 @@ export function useRepertoireTrainer({
   const setContinuousMetronome = useCallback((cont: boolean): void => {
     continuousMetronomeRef.current = cont
     setContinuousMetronomeState(cont)
+  }, [])
+
+  const setRestingMeasures = useCallback((m: number): void => {
+    restingMeasuresRef.current = m
+    setRestingMeasuresState(m)
   }, [])
 
   const getActiveSlice = useCallback((): ScorePlaybackEvent[] => {
@@ -275,7 +287,8 @@ export function useRepertoireTrainer({
     defaultQuestionsCount: 25,
     defaultDurationMinutes: 10,
     defaultAdvanceMode: 'smart',
-    autoAdvanceFastDelayMs: 900,
+    autoAdvanceFastDelayMs: 1700,
+    autoAdvanceSlowDelayMs: 3200,
     onBuildSessionRecord
   })
 
@@ -344,7 +357,8 @@ export function useRepertoireTrainer({
         studyBpmRef.current,
         beats,
         rhythmModeRef.current,
-        continuousMetronomeRef.current
+        continuousMetronomeRef.current,
+        restingMeasuresRef.current
       )
     },
     [core, getActiveSlice, onPlaySlice]
@@ -395,6 +409,9 @@ export function useRepertoireTrainer({
       if (options?.continuousMetronome !== undefined) {
         setContinuousMetronome(options.continuousMetronome)
       }
+      if (options?.restingMeasures !== undefined) {
+        setRestingMeasures(options.restingMeasures)
+      }
       if (options?.studyBpm) {
         setStudyBpm(options.studyBpm)
       }
@@ -414,6 +431,13 @@ export function useRepertoireTrainer({
         incRes
       )
 
+      console.log('🎼 [RepertoireTrainer] startSession:', {
+        score: scoreToUse?.title,
+        measures: `${startM}-${endM}`,
+        initialSliceLength: initialSlice.length,
+        incRes
+      })
+
       core.startCoreSession(options, () => {
         triggerPlayCurrentSlice(initialSlice)
       })
@@ -430,6 +454,7 @@ export function useRepertoireTrainer({
       setRhythmTolerancePercent,
       setIncludeResolutionNote,
       setContinuousMetronome,
+      setRestingMeasures,
       setStudyBpm,
       setAutoSpeedRamp,
       setActiveSliceLength,
@@ -446,7 +471,7 @@ export function useRepertoireTrainer({
 
   const stopSession = useCallback((): void => {
     playedNotesBufferRef.current = []
-    stimulusScheduler.stopContinuousMetronome()
+    stimulusScheduler.cancelAll()
     core.stopCoreSession()
   }, [core])
 
@@ -454,7 +479,7 @@ export function useRepertoireTrainer({
     playedNotesBufferRef.current = []
     setActiveSliceLength(1)
     setStreak(0)
-    stimulusScheduler.stopContinuousMetronome()
+    stimulusScheduler.cancelAll()
     core.resetCoreToConfig()
   }, [core, setActiveSliceLength, setStreak])
 
@@ -480,7 +505,14 @@ export function useRepertoireTrainer({
 
       if (!core.isSessionActive || slice.length === 0) return
 
-      const now = Date.now()
+      let now = Date.now()
+      const lastNote = playedNotesBufferRef.current[playedNotesBufferRef.current.length - 1]
+
+      // 👈 Evita que notas consecutivas en el mismo milisegundo (tests a velocidad de CPU) se confundan con acordes
+      if (lastNote && now <= lastNote.timestampMs) {
+        now = lastNote.timestampMs + 50
+      }
+
       playedNotesBufferRef.current.push({
         noteNumber,
         velocity,
@@ -490,7 +522,17 @@ export function useRepertoireTrainer({
       const totalExpectedMidiNotesCount = slice.reduce((acc, e) => acc + e.midiNotes.length, 0)
       const currentBufferCount = playedNotesBufferRef.current.length
 
+      console.log('🎹 [RepertoireTrainer] handleUserNotePlayed:', {
+        note: noteName,
+        bufferCount: currentBufferCount,
+        expectedCount: totalExpectedMidiNotesCount,
+        activeSliceLen: slice.length
+      })
+
       if (currentBufferCount >= totalExpectedMidiNotesCount) {
+        const playedNotesToEvaluate = [...playedNotesBufferRef.current]
+        playedNotesBufferRef.current = []
+
         const evalConfig: RepertoireEvaluationConfig = {
           ...DEFAULT_REPERTOIRE_CONFIG,
           rhythmMode,
@@ -498,7 +540,7 @@ export function useRepertoireTrainer({
           baseBpm: studyBpmRef.current
         }
 
-        const result = evaluateRepertoireAttempt(slice, playedNotesBufferRef.current, evalConfig)
+        const result = evaluateRepertoireAttempt(slice, playedNotesToEvaluate, evalConfig)
 
         const firstExpectedNote = slice[0]?.midiNotes[0] ?? 60
         const answerRecord: DbAnswerRecord = {
@@ -516,6 +558,7 @@ export function useRepertoireTrainer({
           inputSource: source
         }
 
+        // Lógica de Streak y Expansión con Finalización Automática
         if (result.isCompleteSuccess) {
           const nextStreak = currentStreakRef.current + 1
 
@@ -541,6 +584,13 @@ export function useRepertoireTrainer({
             setStreak(0)
             const currentLen = activeSliceLengthBufferRef.current
 
+            console.log('🏆 [RepertoireTrainer] Streak logrado:', {
+              currentLen,
+              totalScopeLength,
+              isCompleted: currentLen >= totalScopeLength
+            })
+
+            // Si dominó la frase completa hasta el final
             if (currentLen >= totalScopeLength) {
               if (onTelemetryLog) {
                 onTelemetryLog(
@@ -548,7 +598,8 @@ export function useRepertoireTrainer({
                   `🏆 ¡Fragmento de Repertorio 100% Dominado! (${totalScopeLength} notas completadas)`
                 )
               }
-              stimulusScheduler.stopContinuousMetronome()
+              stimulusScheduler.cancelAll()
+              core.recordAnswer(result, answerRecord, true, () => {})
               void core.finalizeAndSaveSession()
               return
             }
@@ -623,6 +674,8 @@ export function useRepertoireTrainer({
     setIncludeResolutionNote,
     continuousMetronome,
     setContinuousMetronome,
+    restingMeasures,
+    setRestingMeasures,
     studyBpm,
     setStudyBpm,
     autoSpeedRamp,

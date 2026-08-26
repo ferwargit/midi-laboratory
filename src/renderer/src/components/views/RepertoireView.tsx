@@ -306,7 +306,7 @@ export function RepertoireView({
             </div>
           </div>
 
-          {/* FILA 2: RITMO, CONTROL MAESTRO DE TEMPO, METRÓNOMO Y STREAKS */}
+          {/* FILA 2: RITMO, TEMPO, METRÓNOMO CONTINUO Y STREAKS */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-zinc-800/80">
             {/* Modo Rítmico */}
             <div>
@@ -326,7 +326,7 @@ export function RepertoireView({
               </select>
             </div>
 
-            {/* Tolerancia Rítmica (Visible en Modos 2 y 3) o Explicación (Modo 1) */}
+            {/* Tolerancia Rítmica */}
             <div>
               {trainer.rhythmMode === 'free_rubato' ? (
                 <div>
@@ -362,19 +362,32 @@ export function RepertoireView({
               )}
             </div>
 
-            {/* CONTROL MAESTRO DE TEMPO (BPM y ms unificados) */}
+            {/* CONTROL MAESTRO DE TEMPO + METRÓNOMO CONTINUO */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="text-xs uppercase text-zinc-400 font-bold">Tempo (BPM):</label>
-                <label className="flex items-center gap-1 text-[10px] text-amber-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={trainer.continuousMetronome}
-                    onChange={(e): void => trainer.setContinuousMetronome(e.target.checked)}
-                    className="rounded bg-zinc-950 border-zinc-700 text-amber-500"
-                  />
-                  <span>Metro. Continuo</span>
-                </label>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1 text-[10px] text-amber-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={trainer.continuousMetronome}
+                      onChange={(e): void => trainer.setContinuousMetronome(e.target.checked)}
+                      className="rounded bg-zinc-950 border-zinc-700 text-amber-500"
+                    />
+                    <span>Continuo</span>
+                  </label>
+                  {trainer.continuousMetronome && (
+                    <select
+                      value={trainer.restingMeasures}
+                      onChange={(e): void => trainer.setRestingMeasures(Number(e.target.value))}
+                      className="bg-zinc-950 border border-zinc-800 text-[10px] text-amber-300 rounded px-1"
+                      title="Compases de descanso / respiración entre repeticiones"
+                    >
+                      <option value={1}>1 C. Pausa</option>
+                      <option value={2}>2 C. Pausa</option>
+                    </select>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -450,7 +463,9 @@ export function RepertoireView({
 
           <div className="bg-zinc-950/80 p-2.5 rounded-xl border border-zinc-800/80">
             <span className="text-[10px] uppercase tracking-wider text-zinc-500 block font-bold">
-              {trainer.continuousMetronome ? 'Metrónomo Continuo' : 'Tempo'}
+              {trainer.continuousMetronome
+                ? `Metrónomo (${trainer.restingMeasures} C. Pausa)`
+                : 'Tempo'}
             </span>
             <strong className="text-sm text-emerald-400">
               {trainer.studyBpm} BPM{' '}

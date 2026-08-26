@@ -283,24 +283,45 @@ export default function App(): React.ReactElement {
     }
   })
 
-  // 4. Modalidad 4: Repertorio Audiomotor con Tempo Unificado en BPM
+  // 4. Modalidad 4: Repertorio Audiomotor con Cuantización de Compás en el Downbeat
   const repertoireTrainer = useRepertoireTrainer({
     onPlaySlice: (
       events,
       bpm,
       beatsPerMeasure = 2,
       rhythmMode = 'free_rubato',
-      isContinuousMetro = false
+      isContinuousMetro = false,
+      restingBars = 1
     ) => {
       const isIsochronous = rhythmMode === 'free_rubato'
       const beats = beatsPerMeasure || 2
-
-      // Un solo cálculo de milisegundos por tiempo según el BPM activo
       const beatDurationMs = Math.round(60000 / bpm)
-      const preRollDurationMs = beats * beatDurationMs
+      const pianoEvents: ScheduledNoteEvent[] = []
 
-      // A. CONTROL DE METRÓNOMO CONTINUO
+      // Calculamos las posiciones relativas de las notas dentro del compás
+      let currentOffsetMs = 0
+
+      events.forEach((evt) => {
+        const noteIntervalMs = isIsochronous
+          ? beatDurationMs
+          : Math.round((evt.durationBeats || 0.5) * beatDurationMs)
+
+        const soundingDurationMs = Math.max(80, Math.round(noteIntervalMs * 0.88))
+
+        evt.midiNotes.forEach((note) => {
+          pianoEvents.push({
+            note,
+            durationMs: soundingDurationMs,
+            delayMs: currentOffsetMs,
+            velocity: 100,
+            channel: 1 // Piano Acústico
+          })
+        })
+        currentOffsetMs += noteIntervalMs
+      })
+
       if (isContinuousMetro) {
+        // Iniciar metrónomo perpetuo si no estaba activo
         if (!stimulusScheduler.isContinuousMetronomeActive()) {
           stimulusScheduler.startContinuousMetronome(
             beatDurationMs,
@@ -314,58 +335,50 @@ export default function App(): React.ReactElement {
             message: `⏱️ Metrónomo Continuo activo en Canal 10 (${bpm} BPM)`
           })
         }
+
+        // Programar la entrada del piano alineada al Tiempo 1 tras los compases de respiración
+        stimulusScheduler.schedulePhraseOnContinuousGrid(
+          pianoEvents,
+          restingBars,
+          (note, dur, vel, ch) => {
+            midi.sendNote(note, dur, vel, ch)
+          }
+        )
       } else {
+        // Modo Pre-Roll clásico: 1 compás de clics previos y entrada de piano
         stimulusScheduler.stopContinuousMetronome()
-      }
+        const preRollDurationMs = beats * beatDurationMs
+        const unifiedEvents: ScheduledNoteEvent[] = []
 
-      const scheduledEvents: ScheduledNoteEvent[] = []
-
-      // B. CUENTA PREVIA DE 1 COMPÁS (2 CLICS)
-      if (!isContinuousMetro) {
         for (let beat = 0; beat < beats; beat++) {
-          const isFirstBeat = beat === 0
-          scheduledEvents.push({
-            note: isFirstBeat ? 76 : 77,
+          const isDownbeat = beat === 0
+          unifiedEvents.push({
+            note: isDownbeat ? 76 : 77,
             durationMs: 120,
             delayMs: beat * beatDurationMs,
-            velocity: isFirstBeat ? 115 : 90,
+            velocity: isDownbeat ? 115 : 90,
             channel: 10
           })
         }
-        midi.addLog({
-          type: 'OUT',
-          message: `⏱️ Metrónomo: ${beats} tiempos a ${bpm} BPM (${beatDurationMs}ms/tiempo)`
-        })
-      }
 
-      // C. NOTAS DE PIANO TRAS EL COMPÁS LIBRE DE CUENTA PREVIA
-      let currentOffsetMs = preRollDurationMs
-
-      events.forEach((evt) => {
-        // En Modo 1 Isócrono: cada nota dura 1 negra (beatDurationMs)
-        // En Modos 2 y 3: dura su valor métrico de partitura
-        const noteIntervalMs = isIsochronous
-          ? beatDurationMs
-          : Math.round((evt.durationBeats || 0.5) * beatDurationMs)
-
-        const soundingDurationMs = Math.max(80, Math.round(noteIntervalMs * 0.88))
-
-        evt.midiNotes.forEach((note) => {
-          scheduledEvents.push({
-            note,
-            durationMs: soundingDurationMs,
-            delayMs: currentOffsetMs,
-            velocity: 100,
-            channel: 1
+        pianoEvents.forEach((e) => {
+          unifiedEvents.push({
+            ...e,
+            delayMs: preRollDurationMs + e.delayMs
           })
         })
-        currentOffsetMs += noteIntervalMs
-      })
 
-      // D. PROGRAMACIÓN ATÓMICA
-      stimulusScheduler.scheduleSequence(scheduledEvents, (note, dur, vel, ch) => {
-        midi.sendNote(note, dur, vel, ch)
-      })
+        stimulusScheduler.scheduleSequence(unifiedEvents, (note, dur, vel, ch) => {
+          midi.sendNote(note, dur, vel, ch)
+        })
+
+        midi.addLog({
+          type: 'OUT',
+          message: isIsochronous
+            ? `⏱️ Metrónomo: ${beats} tiempos a ${bpm} BPM (${beatDurationMs}ms/tiempo)`
+            : `⏱️ Metrónomo: ${beats} tiempos a ${bpm} BPM`
+        })
+      }
 
       const noteNames = events
         .flatMap((e) => e.midiNotes)
@@ -373,9 +386,7 @@ export default function App(): React.ReactElement {
         .join(', ')
       midi.addLog({
         type: 'OUT',
-        message: isIsochronous
-          ? `🎼 Frase Isócrona (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
-          : `🎼 Frase (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
+        message: `🎼 Frase (${events.length} notas a ${bpm} BPM) -> ${noteNames}`
       })
     },
     onTelemetryLog: (type, message) => {

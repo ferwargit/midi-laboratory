@@ -9,7 +9,10 @@ export interface ScheduledNoteEvent {
 export class StimulusScheduler {
   private activeTimers: Set<ReturnType<typeof setTimeout>> = new Set()
   private metronomeTimer: ReturnType<typeof setInterval> | null = null
-  private currentIntervalMs = 0
+  private clockStartTime = 0
+  private currentBeatDurationMs = 700
+  private currentBeatsPerMeasure = 2
+  private isMetroRunning = false
 
   scheduleSequence(
     events: ScheduledNoteEvent[],
@@ -40,43 +43,77 @@ export class StimulusScheduler {
     }
   }
 
+  /**
+   * Inicia el Metrónomo Continuo Perpetuo en Canal 10.
+   */
   startContinuousMetronome(
-    stepUnitMs: number,
+    beatDurationMs: number,
     beatsPerMeasure = 2,
     playNoteFn: (note: number, durationMs: number, velocity?: number, channel?: number) => void
   ): void {
-    // Si ya está sonando al mismo intervalo, no reinicia para mantener la fase
-    if (this.metronomeTimer && this.currentIntervalMs === stepUnitMs) {
+    if (this.metronomeTimer && this.currentBeatDurationMs === beatDurationMs) {
       return
     }
 
     this.stopContinuousMetronome()
-    this.currentIntervalMs = stepUnitMs
-    let currentBeat = 0
+    this.currentBeatDurationMs = beatDurationMs
+    this.currentBeatsPerMeasure = beatsPerMeasure
+    this.isMetroRunning = true
+    this.clockStartTime = Date.now()
 
-    // Primer clic en tiempo 1
+    let currentBeat = 0
+    // Clic 1 inicial
     playNoteFn(76, 120, 115, 10)
     currentBeat = 1
 
     this.metronomeTimer = setInterval(() => {
-      const isFirstBeat = currentBeat % beatsPerMeasure === 0
-      const note = isFirstBeat ? 76 : 77
-      const velocity = isFirstBeat ? 115 : 90
+      const isDownbeat = currentBeat % beatsPerMeasure === 0
+      const note = isDownbeat ? 76 : 77
+      const velocity = isDownbeat ? 115 : 90
       playNoteFn(note, 120, velocity, 10)
       currentBeat++
-    }, stepUnitMs)
+    }, beatDurationMs)
+  }
+
+  /**
+   * Programa la frase de piano para que entre exactamente en el tiempo 1 fuerte
+   * del compás que sigue tras los compases de respiración seleccionados.
+   */
+  schedulePhraseOnContinuousGrid(
+    pianoEvents: ScheduledNoteEvent[],
+    restingMeasures = 1,
+    playNoteFn: (note: number, durationMs: number, velocity?: number, channel?: number) => void
+  ): void {
+    this.cancelSequenceTimers()
+
+    const now = Date.now()
+    const measureDurationMs = this.currentBeatsPerMeasure * this.currentBeatDurationMs
+    const elapsedSinceClockStart = now - this.clockStartTime
+
+    // Cuántos compases enteros han transcurrido en el reloj
+    const currentMeasureIndex = Math.floor(elapsedSinceClockStart / measureDurationMs)
+    // El compás de entrada será el compás actual + 1 + compases de descanso
+    const targetMeasureStartMs = (currentMeasureIndex + 1 + restingMeasures) * measureDurationMs
+    const delayUntilTargetDownbeat = Math.max(100, targetMeasureStartMs - elapsedSinceClockStart)
+
+    const alignedEvents: ScheduledNoteEvent[] = pianoEvents.map((evt) => ({
+      ...evt,
+      delayMs: delayUntilTargetDownbeat + evt.delayMs
+    }))
+
+    this.scheduleSequence(alignedEvents, playNoteFn)
   }
 
   stopContinuousMetronome(): void {
     if (this.metronomeTimer) {
       clearInterval(this.metronomeTimer)
       this.metronomeTimer = null
-      this.currentIntervalMs = 0
+      this.isMetroRunning = false
     }
   }
 
   isContinuousMetronomeActive(): boolean {
-    return this.metronomeTimer !== null
+    return this.isMetroRunning
   }
 
   cancelSequenceTimers(): void {

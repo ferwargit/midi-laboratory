@@ -59,7 +59,6 @@ export function clusterPlayedMidiNotes(
 ): ClusteredPlayedEvent[] {
   if (!rawNotes || rawNotes.length === 0) return []
 
-  // Ordenar por tiempo
   const sorted = [...rawNotes].sort((a, b) => a.timestampMs - b.timestampMs)
   const clusters: ClusteredPlayedEvent[] = []
 
@@ -72,10 +71,12 @@ export function clusterPlayedMidiNotes(
     const note = sorted[i]
     const timeDelta = note.timestampMs - currentCluster.timestampMs
 
-    if (timeDelta <= clusterWindowMs) {
-      if (!currentCluster.notes.includes(note.noteNumber)) {
-        currentCluster.notes.push(note.noteNumber)
-      }
+    // Un acorde polifónico solo contiene notas distintas (ej: C3 + E3).
+    // Si es la MISMA tecla repetida (ej: G4 y luego G4), siempre es una nota melódica secuencial.
+    const isSameNote = currentCluster.notes.includes(note.noteNumber)
+
+    if (timeDelta <= clusterWindowMs && !isSameNote) {
+      currentCluster.notes.push(note.noteNumber)
     } else {
       currentCluster.notes.sort((a, b) => a - b)
       clusters.push(currentCluster)
