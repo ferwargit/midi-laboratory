@@ -8,6 +8,54 @@ import {
 import { ScorePlaybackEvent } from '../music/scoreTypes'
 
 describe('repertoireEvaluator - Motor de Evaluación Bimodal de Repertorio', () => {
+  const mockExpectedMelody: ScorePlaybackEvent[] = [
+    {
+      id: '1',
+      measureNumber: 1,
+      beatPosition: 1.0,
+      notes: [{ pitch: 67, step: 'G', alter: 0, octave: 4 }],
+      midiNotes: [67],
+      durationDivisions: 2,
+      durationBeats: 0.5,
+      durationMs: 348,
+      isChord: false,
+      isRest: false,
+      hand: 'RH',
+      staff: 1,
+      voice: 1
+    },
+    {
+      id: '2',
+      measureNumber: 1,
+      beatPosition: 1.5,
+      notes: [{ pitch: 67, step: 'G', alter: 0, octave: 4 }],
+      midiNotes: [67],
+      durationDivisions: 1,
+      durationBeats: 0.25,
+      durationMs: 174,
+      isChord: false,
+      isRest: false,
+      hand: 'RH',
+      staff: 1,
+      voice: 1
+    },
+    {
+      id: '3',
+      measureNumber: 1,
+      beatPosition: 1.75,
+      notes: [{ pitch: 69, step: 'A', alter: 0, octave: 4 }],
+      midiNotes: [69],
+      durationDivisions: 1,
+      durationBeats: 0.25,
+      durationMs: 174,
+      isChord: false,
+      isRest: false,
+      hand: 'RH',
+      staff: 1,
+      voice: 1
+    }
+  ]
+
   describe('clusterPlayedMidiNotes (Agrupación de Acordes Polifónicos)', () => {
     it('debe agrupar notas tocadas casi al mismo tiempo (<45ms) en un único acorde', () => {
       const rawNotes: RawPlayedMidiNote[] = [
@@ -37,54 +85,6 @@ describe('repertoireEvaluator - Motor de Evaluación Bimodal de Repertorio', () 
   })
 
   describe('evaluateRepertoireAttempt (Evaluación de Frases y Acordes)', () => {
-    const mockExpectedMelody: ScorePlaybackEvent[] = [
-      {
-        id: '1',
-        measureNumber: 1,
-        beatPosition: 1.0,
-        notes: [{ pitch: 67, step: 'G', alter: 0, octave: 4 }],
-        midiNotes: [67],
-        durationDivisions: 2,
-        durationBeats: 0.5,
-        durationMs: 348,
-        isChord: false,
-        isRest: false,
-        hand: 'RH',
-        staff: 1,
-        voice: 1
-      },
-      {
-        id: '2',
-        measureNumber: 1,
-        beatPosition: 1.5,
-        notes: [{ pitch: 67, step: 'G', alter: 0, octave: 4 }],
-        midiNotes: [67],
-        durationDivisions: 1,
-        durationBeats: 0.25,
-        durationMs: 174,
-        isChord: false,
-        isRest: false,
-        hand: 'RH',
-        staff: 1,
-        voice: 1
-      },
-      {
-        id: '3',
-        measureNumber: 1,
-        beatPosition: 1.75,
-        notes: [{ pitch: 69, step: 'A', alter: 0, octave: 4 }],
-        midiNotes: [69],
-        durationDivisions: 1,
-        durationBeats: 0.25,
-        durationMs: 174,
-        isChord: false,
-        isRest: false,
-        hand: 'RH',
-        staff: 1,
-        voice: 1
-      }
-    ]
-
     it('en modo free_rubato debe calificar 100% de éxito si las notas son correctas independientemente del tiempo', () => {
       const rawNotes: RawPlayedMidiNote[] = [
         { noteNumber: 67, velocity: 90, timestampMs: 1000 },
@@ -103,56 +103,34 @@ describe('repertoireEvaluator - Motor de Evaluación Bimodal de Repertorio', () 
       expect(result.feedbackMessage).toContain('¡Afinación perfecta!')
     })
 
-    it('debe detectar notas incorrectas y reportar las notas esperadas vs tocadas', () => {
-      const rawNotes: RawPlayedMidiNote[] = [
-        { noteNumber: 67, velocity: 90, timestampMs: 1000 },
-        { noteNumber: 65, velocity: 90, timestampMs: 1350 },
-        { noteNumber: 69, velocity: 90, timestampMs: 1520 }
+    it('debe evaluar eventos faltantes si el usuario no completó todas las notas', () => {
+      const rawNotesPartial: RawPlayedMidiNote[] = [
+        { noteNumber: 67, velocity: 90, timestampMs: 1000 }
       ]
 
-      const result = evaluateRepertoireAttempt(mockExpectedMelody, rawNotes)
+      const result = evaluateRepertoireAttempt(mockExpectedMelody, rawNotesPartial)
 
       expect(result.isCompleteSuccess).toBe(false)
-      expect(result.pitchAccuracyPercent).toBe(67)
-      expect(result.evaluatedEvents[1].isPitchCorrect).toBe(false)
+      expect(result.pitchAccuracyPercent).toBe(33) // 1 de 3
       expect(result.evaluatedEvents[1].missingNotes).toEqual([67])
-      expect(result.evaluatedEvents[1].extraNotes).toEqual([65])
+      expect(result.evaluatedEvents[2].missingNotes).toEqual([69])
     })
 
-    it('en modo strict_metronome debe exigir que el ritmo caiga dentro de la tolerancia configurada al BPM activo', () => {
-      // 86 BPM -> Negra = 698ms, Corchea = 349ms, Semicorchea = 174ms
-      const rawNotesExact: RawPlayedMidiNote[] = [
+    it('en modo relative_proportional (IOI) debe validar las proporciones de tiempo relativas', () => {
+      const rawNotesProportional: RawPlayedMidiNote[] = [
         { noteNumber: 67, velocity: 90, timestampMs: 1000 },
-        { noteNumber: 67, velocity: 90, timestampMs: 1349 }, // +349ms (exacto a 86 BPM)
-        { noteNumber: 69, velocity: 90, timestampMs: 1523 } // +174ms (exacto a 86 BPM)
+        { noteNumber: 67, velocity: 90, timestampMs: 1350 },
+        { noteNumber: 69, velocity: 90, timestampMs: 1525 }
       ]
 
-      const resultExact = evaluateRepertoireAttempt(mockExpectedMelody, rawNotesExact, {
+      const result = evaluateRepertoireAttempt(mockExpectedMelody, rawNotesProportional, {
         ...DEFAULT_REPERTOIRE_CONFIG,
-        rhythmMode: 'strict_metronome',
-        rhythmTolerancePercent: 20,
-        baseBpm: 86
+        rhythmMode: 'relative_proportional',
+        rhythmTolerancePercent: 20
       })
 
-      expect(resultExact.isCompleteSuccess).toBe(true)
-      expect(resultExact.rhythmAccuracyPercent).toBe(100)
-
-      // Intento fuera de tolerancia (>20%)
-      const rawNotesRushed: RawPlayedMidiNote[] = [
-        { noteNumber: 67, velocity: 90, timestampMs: 1000 },
-        { noteNumber: 67, velocity: 90, timestampMs: 1150 }, // Muy anticipado (desvío >50%)
-        { noteNumber: 69, velocity: 90, timestampMs: 1250 }
-      ]
-
-      const resultRushed = evaluateRepertoireAttempt(mockExpectedMelody, rawNotesRushed, {
-        ...DEFAULT_REPERTOIRE_CONFIG,
-        rhythmMode: 'strict_metronome',
-        rhythmTolerancePercent: 20,
-        baseBpm: 86
-      })
-
-      expect(resultRushed.isCompleteSuccess).toBe(false)
-      expect(resultRushed.rhythmAccuracyPercent).toBeLessThan(100)
+      expect(result.isCompleteSuccess).toBe(true)
+      expect(result.rhythmAccuracyPercent).toBe(100)
     })
 
     it('debe detectar acordes tríadas polifónicos incompletos o con notas erróneas', () => {

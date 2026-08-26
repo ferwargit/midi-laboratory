@@ -18,7 +18,7 @@ export default defineConfig({
         'src/renderer/src/hooks/**',
         'src/renderer/src/services/**'
       ],
-      exclude: ['src/**/*.d.ts', 'src/**/types.ts']
+      exclude: ['src/**/*.d.ts', 'src/**/types.ts', 'src/**/*Types.ts'] // 👈 Excluye interfaces puras
     }
   },
   resolve: {
