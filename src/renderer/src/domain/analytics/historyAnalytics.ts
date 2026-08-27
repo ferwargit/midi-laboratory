@@ -2,6 +2,7 @@ import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 import { midiNoteToName } from '../music/noteUtils'
 import { EXERCISE_PRESETS } from '../music/presets'
 import { AiExercisePrescription } from '../ai/types'
+import { NotePerformance } from '../adaptation/types'
 
 export const COGNITIVE_LATENCY_THRESHOLDS = {
   FAST_MAX_MS: 1400,
@@ -79,6 +80,71 @@ export interface DetailedSessionAnalysis {
   cpiScore: number
 }
 
+export interface QuestionTelemetryPoint {
+  questionIndex: number
+  expectedNote: number
+  expectedName: string
+  playedNote: number
+  playedName: string
+  isCorrect: boolean
+  semitoneDistance: number
+  responseTimeMs: number
+  velocity: number
+  inputSource?: 'midi_hardware' | 'virtual_ui'
+  movingAvgLatencyMs: number
+}
+
+export interface SessionTimelineAnalysis {
+  session: DbSessionRecord
+  questions: QuestionTelemetryPoint[]
+  totalQuestions: number
+  correctCount: number
+  errorCount: number
+  overallAccuracy: number
+  avgLatencyMs: number
+  warmUpErrorsCount: number
+  postErrorSlowingAvgDeltaMs: number | null
+  firstHalfAccuracy: number
+  secondHalfAccuracy: number
+  firstHalfAvgLatencyMs: number
+  secondHalfAvgLatencyMs: number
+  fatigueDetected: boolean
+  fastReflexCount: number
+  activeNotes: number[]
+}
+
+export const PITCH_CLASSES = [
+  'C',
+  'C#',
+  'D',
+  'D#',
+  'E',
+  'F',
+  'F#',
+  'G',
+  'G#',
+  'A',
+  'A#',
+  'B'
+] as const
+
+export interface PitchClassConfusionCell {
+  expectedPc: number
+  playedPc: number
+  expectedName: string
+  playedName: string
+  count: number
+  percentageOfExpected: number
+  isDiagonal: boolean
+}
+
+export interface ConfusionMatrix2DData {
+  pitchClasses: typeof PITCH_CLASSES
+  grid: PitchClassConfusionCell[][]
+  totalTestsPerPitchClass: number[]
+  maxOffDiagonalCount: number
+}
+
 export interface LongitudinalComparison {
   contentName: string
   baselineSession: DbSessionRecord
@@ -112,9 +178,6 @@ export interface AnalyticsMetrics {
   longitudinalComparisons: LongitudinalComparison[]
 }
 
-/**
- * Resuelve de forma canónica el formato objetivo configurado para una sesión.
- */
 export function resolveSessionFormat(session: DbSessionRecord): SessionFormatInfo {
   const name = (session.presetName || '').toLowerCase()
   const isTimed = name.includes('tiempo') || name.includes('cronometrado')
@@ -236,6 +299,184 @@ export function isSingleNoteSession(s: DbSessionRecord): boolean {
     name.includes('tiempo') ||
     name.includes('cronometrado')
   )
+}
+
+export function computeNotePerformancesFromAnswers(
+  answers: DbAnswerRecord[]
+): Map<number, NotePerformance> {
+  const map = new Map<number, NotePerformance>()
+
+  for (const ans of answers) {
+    if (!map.has(ans.expectedNote)) {
+      map.set(ans.expectedNote, {
+        noteNumber: ans.expectedNote,
+        attempts: 0,
+        correct: 0,
+        lastResultWasCorrect: null,
+        accuracyPercentage: 0,
+        weight: 1.0
+      })
+    }
+    const perf = map.get(ans.expectedNote)!
+    perf.attempts += 1
+    if (ans.isCorrect) {
+      perf.correct += 1
+      perf.lastResultWasCorrect = true
+    } else {
+      perf.lastResultWasCorrect = false
+    }
+    perf.accuracyPercentage = Math.round((perf.correct / perf.attempts) * 100)
+  }
+
+  return map
+}
+
+export function analyzeSessionTimeline(
+  session: DbSessionRecord,
+  sessionAnswers: DbAnswerRecord[]
+): SessionTimelineAnalysis {
+  const sorted = [...sessionAnswers].sort((a, b) => a.questionIndex - b.questionIndex)
+  const total = sorted.length
+
+  const activeNotes = Array.from(new Set(sorted.map((a) => a.expectedNote))).sort((a, b) => a - b)
+  let correctCount = 0
+  let totalLatency = 0
+  let fastCount = 0
+
+  const questions: QuestionTelemetryPoint[] = []
+
+  for (let i = 0; i < sorted.length; i++) {
+    const a = sorted[i]
+    if (a.isCorrect) correctCount++
+    totalLatency += a.responseTimeMs
+    if (a.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) fastCount++
+
+    const windowSlice = sorted.slice(Math.max(0, i - 2), i + 1)
+    const windowAvg = Math.round(
+      windowSlice.reduce((sum, item) => sum + item.responseTimeMs, 0) / windowSlice.length
+    )
+
+    questions.push({
+      questionIndex: a.questionIndex || i + 1,
+      expectedNote: a.expectedNote,
+      expectedName: midiNoteToName(a.expectedNote),
+      playedNote: a.playedNote,
+      playedName: midiNoteToName(a.playedNote),
+      isCorrect: a.isCorrect,
+      semitoneDistance: a.semitoneDistance,
+      responseTimeMs: a.responseTimeMs,
+      velocity: a.velocity,
+      inputSource: a.inputSource,
+      movingAvgLatencyMs: windowAvg
+    })
+  }
+
+  const warmUpSlice = sorted.slice(0, 3)
+  const warmUpErrorsCount = warmUpSlice.filter((a) => !a.isCorrect).length
+
+  const postErrorDeltas: number[] = []
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (!sorted[i].isCorrect) {
+      const regularAvg = totalLatency / Math.max(1, total)
+      const nextTime = sorted[i + 1].responseTimeMs
+      postErrorDeltas.push(nextTime - regularAvg)
+    }
+  }
+
+  const postErrorSlowingAvgDeltaMs =
+    postErrorDeltas.length > 0
+      ? Math.round(postErrorDeltas.reduce((sum, d) => sum + d, 0) / postErrorDeltas.length)
+      : null
+
+  const mid = Math.floor(total / 2)
+  const firstHalf = sorted.slice(0, mid)
+  const secondHalf = sorted.slice(mid)
+
+  const firstHalfAcc =
+    firstHalf.length > 0
+      ? Math.round((firstHalf.filter((a) => a.isCorrect).length / firstHalf.length) * 100)
+      : 100
+  const secondHalfAcc =
+    secondHalf.length > 0
+      ? Math.round((secondHalf.filter((a) => a.isCorrect).length / secondHalf.length) * 100)
+      : 100
+
+  const firstHalfAvgLat =
+    firstHalf.length > 0
+      ? Math.round(firstHalf.reduce((sum, a) => sum + a.responseTimeMs, 0) / firstHalf.length)
+      : 0
+  const secondHalfAvgLat =
+    secondHalf.length > 0
+      ? Math.round(secondHalf.reduce((sum, a) => sum + a.responseTimeMs, 0) / secondHalf.length)
+      : 0
+
+  const fatigueDetected =
+    total >= 10 && (secondHalfAvgLat > firstHalfAvgLat + 180 || secondHalfAcc < firstHalfAcc - 12)
+
+  return {
+    session,
+    questions,
+    totalQuestions: total,
+    correctCount,
+    errorCount: total - correctCount,
+    overallAccuracy: total > 0 ? Math.round((correctCount / total) * 100) : 0,
+    avgLatencyMs: total > 0 ? Math.round(totalLatency / total) : 0,
+    warmUpErrorsCount,
+    postErrorSlowingAvgDeltaMs,
+    firstHalfAccuracy: firstHalfAcc,
+    secondHalfAccuracy: secondHalfAcc,
+    firstHalfAvgLatencyMs: firstHalfAvgLat,
+    secondHalfAvgLatencyMs: secondHalfAvgLat,
+    fatigueDetected,
+    fastReflexCount: fastCount,
+    activeNotes
+  }
+}
+
+export function computePitchClassConfusionMatrix(answers: DbAnswerRecord[]): ConfusionMatrix2DData {
+  const counts: number[][] = Array.from({ length: 12 }, () => Array(12).fill(0))
+  const totalsPerExpected: number[] = Array(12).fill(0)
+  let maxOffDiagonal = 0
+
+  for (const ans of answers) {
+    if (ans.expectedNote < 0 || ans.playedNote < 0) continue
+    const expPc = ans.expectedNote % 12
+    const playPc = ans.playedNote % 12
+
+    counts[expPc][playPc] += 1
+    totalsPerExpected[expPc] += 1
+
+    if (expPc !== playPc && counts[expPc][playPc] > maxOffDiagonal) {
+      maxOffDiagonal = counts[expPc][playPc]
+    }
+  }
+
+  const grid: PitchClassConfusionCell[][] = []
+  for (let exp = 0; exp < 12; exp++) {
+    const row: PitchClassConfusionCell[] = []
+    for (let play = 0; play < 12; play++) {
+      const c = counts[exp][play]
+      const totalExp = totalsPerExpected[exp]
+      const percentage = totalExp > 0 ? Math.round((c / totalExp) * 100) : 0
+      row.push({
+        expectedPc: exp,
+        playedPc: play,
+        expectedName: PITCH_CLASSES[exp],
+        playedName: PITCH_CLASSES[play],
+        count: c,
+        percentageOfExpected: percentage,
+        isDiagonal: exp === play
+      })
+    }
+    grid.push(row)
+  }
+
+  return {
+    pitchClasses: PITCH_CLASSES,
+    grid,
+    totalTestsPerPitchClass: totalsPerExpected,
+    maxOffDiagonalCount: Math.max(1, maxOffDiagonal)
+  }
 }
 
 export function filterSessionsAdvanced(

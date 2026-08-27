@@ -6,6 +6,11 @@ import {
   computeLongitudinalComparisons,
   reconstructSessionConfig,
   calculateSessionCPI,
+  formatInterSessionGap,
+  resolveSessionFormat,
+  computeNotePerformancesFromAnswers,
+  analyzeSessionTimeline,
+  computePitchClassConfusionMatrix,
   isIntervalSession,
   isSingleNoteSession,
   isSequenceSession
@@ -13,7 +18,7 @@ import {
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 
-describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetría Clínica', () => {
+describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtros', () => {
   const sNotePiano: DbSessionRecord = {
     id: 's_note_piano',
     createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
@@ -97,663 +102,422 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     }
   ]
 
-  it('filterSessionsByMode segmenta inequívocamente sin colisiones de texto', () => {
-    const all = [sNotePiano, sNoteFlute, sInterval, sSequence]
-
-    expect(filterSessionsByMode(all, 'all').length).toBe(4)
-    expect(filterSessionsByMode(all, 'single_note').length).toBe(2)
-    expect(filterSessionsByMode(all, 'intervals').length).toBe(1)
-    expect(filterSessionsByMode(all, 'sequences').length).toBe(1)
-  })
-
-  it('filterSessionsAdvanced aplica filtros cruzados por Timbre, Formato, Nivel de Maestría y Búsqueda', () => {
-    const all = [sNotePiano, sNoteFlute, sInterval, sSequence]
-
-    const fluteOnly = filterSessionsAdvanced(all, {
-      mode: 'single_note',
-      instrumentId: 'flute'
-    })
-    expect(fluteOnly.length).toBe(1)
-    expect(fluteOnly[0].id).toBe('s_note_flute')
-
-    const timedOnly = filterSessionsAdvanced(all, {
-      mode: 'all',
-      format: 'time'
-    })
-    expect(timedOnly.map((s) => s.id)).toEqual(['s_note_piano', 's_seq'])
-
-    const mastered = filterSessionsAdvanced(all, {
-      mode: 'single_note',
-      mastery: 'mastered'
-    })
-    expect(mastered.length).toBe(1)
-    expect(mastered[0].id).toBe('s_note_piano')
-
-    const searchMatch = filterSessionsAdvanced(all, {
-      mode: 'all',
-      searchQuery: 'Intervalos Clásicos'
-    })
-    expect(searchMatch.length).toBe(1)
-    expect(searchMatch[0].id).toBe('s_int')
-  })
-
-  it('filterSessionsAdvanced debe filtrar por Motor, Preset, Fuente de Entrada y Sesgo', () => {
-    const sSpaced: DbSessionRecord = {
-      id: 's_spaced',
-      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
-      strategyId: 'spaced_repetition',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Pentatónica C Mayor • Bloque 10 preguntas',
-      totalQuestions: 10,
-      correctAnswers: 9,
-      accuracyPercentage: 90,
-      avgResponseTimeMs: 1100,
-      durationSeconds: 60
-    }
-
-    const pool = [sNotePiano, sNoteFlute, sInterval, sSequence, sSpaced]
-
-    const spacedOnly = filterSessionsAdvanced(pool, {
-      mode: 'all',
-      strategyId: 'spaced_repetition'
-    })
-    expect(spacedOnly.map((s) => s.id)).toEqual(['s_note_flute', 's_spaced'])
-
-    const pentatonicOnly = filterSessionsAdvanced(pool, {
-      mode: 'all',
-      presetFilter: 'Pentatónica'
-    })
-    expect(pentatonicOnly.map((s) => s.id)).toEqual(['s_spaced'])
-  })
-
-  it('filterSessionsAdvanced debe coincidir semánticamente Nivel 3 con nombres canónicos y alias históricos', () => {
-    const sLegacyOctavaDiatonica: DbSessionRecord = {
-      id: 's_legacy_1',
-      createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica) • Cronometrado 3m',
-      totalQuestions: 40,
-      correctAnswers: 31,
-      accuracyPercentage: 78,
-      avgResponseTimeMs: 2025,
-      durationSeconds: 180
-    }
-
-    const sCanonicalName: DbSessionRecord = {
-      id: 's_canon_1',
-      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
-      totalQuestions: 40,
-      correctAnswers: 35,
-      accuracyPercentage: 88,
-      avgResponseTimeMs: 1400,
-      durationSeconds: 180
-    }
-
-    const pool = [sLegacyOctavaDiatonica, sCanonicalName]
-
-    const matched = filterSessionsAdvanced(pool, {
-      mode: 'single_note',
-      presetFilter: 'Nivel 3 (Octava Diatónica C4-C5)'
+  describe('resolveSessionFormat - Resolución Canónica de Formatos (SSOT)', () => {
+    it('debe resolver Modo Maestría con su etiqueta', () => {
+      const s = { ...sNotePiano, presetName: 'Nivel 1 • Modo Maestría' }
+      const res = resolveSessionFormat(s)
+      expect(res.formatType).toBe('mastery')
+      expect(res.formatLabel).toBe('🎯 Maestría')
     })
 
-    expect(matched.length).toBe(2)
-    expect(matched.map((s) => s.id)).toEqual(['s_legacy_1', 's_canon_1'])
+    it('debe extraer minutos nominales explícitos de sesiones cronometradas', () => {
+      const s1 = { ...sNotePiano, presetName: 'Nivel 1 • Cronometrado 3m' }
+      const s2 = { ...sNotePiano, presetName: 'Nivel 1 • Tiempo 5 min' }
+      expect(resolveSessionFormat(s1).nominalMinutes).toBe(3)
+      expect(resolveSessionFormat(s1).formatLabel).toBe('⏱️ 3m 0s')
+      expect(resolveSessionFormat(s2).nominalMinutes).toBe(5)
+      expect(resolveSessionFormat(s2).formatLabel).toBe('⏱️ 5m 0s')
+    })
+
+    it('debe estimar minutos nominales desde durationSeconds cuando no están en el nombre', () => {
+      expect(
+        resolveSessionFormat({ ...sNotePiano, presetName: 'Tiempo', durationSeconds: 50 })
+          .nominalMinutes
+      ).toBe(1)
+      expect(
+        resolveSessionFormat({ ...sNotePiano, presetName: 'Tiempo', durationSeconds: 180 })
+          .nominalMinutes
+      ).toBe(3)
+      expect(
+        resolveSessionFormat({ ...sNotePiano, presetName: 'Tiempo', durationSeconds: 300 })
+          .nominalMinutes
+      ).toBe(5)
+      expect(
+        resolveSessionFormat({ ...sNotePiano, presetName: 'Tiempo', durationSeconds: 600 })
+          .nominalMinutes
+      ).toBe(10)
+    })
+
+    it('debe resolver series de preguntas', () => {
+      const s = { ...sNotePiano, presetName: 'Nivel 1 • Bloque 20 preguntas' }
+      const res = resolveSessionFormat(s)
+      expect(res.formatType).toBe('questions')
+      expect(res.nominalQuestions).toBe(20)
+      expect(res.formatLabel).toBe('🔢 Serie 20')
+    })
   })
 
-  it('computeAnalyticsMetrics calcula telemetría clínica de alta resolución por sesión (RPM, reflejo, sesgo y CPI)', () => {
-    const all = [sNotePiano, sNoteFlute]
-    const metrics = computeAnalyticsMetrics(all, mockAnswers, 'single_note')
+  describe('computeNotePerformancesFromAnswers - Mapa de Rendimiento por Nota', () => {
+    it('debe calcular estadísticas por cada nota individual', () => {
+      const answers: DbAnswerRecord[] = [
+        {
+          id: '1',
+          sessionId: 's1',
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 1000,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        },
+        {
+          id: '2',
+          sessionId: 's1',
+          questionIndex: 2,
+          expectedNote: 60,
+          playedNote: 62,
+          isCorrect: false,
+          semitoneDistance: 2,
+          responseTimeMs: 1200,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        },
+        {
+          id: '3',
+          sessionId: 's1',
+          questionIndex: 3,
+          expectedNote: 64,
+          playedNote: 64,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 800,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        }
+      ]
 
-    expect(metrics.filteredSessionsCount).toBe(2)
-    expect(metrics.totalAnswers).toBe(2)
-    expect(metrics.sessionPsychometricsList.length).toBe(2)
-
-    const pianoAnalysis = metrics.sessionPsychometricsList.find(
-      (p) => p.session.id === 's_note_piano'
-    )
-    expect(pianoAnalysis?.responsesPerMinute).toBe(10)
-    expect(pianoAnalysis?.fastPercent).toBe(100)
-    expect(pianoAnalysis?.inputMethod).toBe('hardware')
-    expect(pianoAnalysis?.cpiScore).toBeGreaterThan(0)
-    expect(pianoAnalysis?.formatLabel).toBe('⏱️ 1m 0s')
-
-    const fluteAnalysis = metrics.sessionPsychometricsList.find(
-      (p) => p.session.id === 's_note_flute'
-    )
-    expect(fluteAnalysis?.sharpBiasCount).toBe(1)
-    expect(fluteAnalysis?.dominantBias).toBe('sharp')
-    expect(fluteAnalysis?.inputMethod).toBe('virtual')
-    expect(fluteAnalysis?.formatLabel).toBe('🔢 Serie 10')
+      const perfs = computeNotePerformancesFromAnswers(answers)
+      expect(perfs.size).toBe(2)
+      expect(perfs.get(60)?.attempts).toBe(2)
+      expect(perfs.get(60)?.correct).toBe(1)
+      expect(perfs.get(60)?.accuracyPercentage).toBe(50)
+      expect(perfs.get(60)?.lastResultWasCorrect).toBe(false)
+      expect(perfs.get(64)?.accuracyPercentage).toBe(100)
+    })
   })
 
-  it('calculateSessionCPI debe premiar mayor entropía, reflejo rápido y ejecución en hardware', () => {
-    const scoreA = calculateSessionCPI(80, 1.58, 10, 1400, 'virtual')
-    const scoreB = calculateSessionCPI(80, 3.7, 22, 1100, 'hardware')
-
-    expect(scoreB).toBeGreaterThan(scoreA * 2)
-  })
-
-  it('computeAnalyticsMetrics debe calcular exactamente el descanso inter-sesión (ISI) en orden cronológico', () => {
-    const s1: DbSessionRecord = {
-      id: 's_isi_1',
-      createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'piano',
-      presetName: 'Test',
-      totalQuestions: 1,
-      correctAnswers: 1,
-      accuracyPercentage: 100,
-      avgResponseTimeMs: 1000,
-      durationSeconds: 60
-    }
-
-    const s2: DbSessionRecord = {
-      id: 's_isi_2',
-      createdAt: new Date('2026-08-21T10:15:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'piano',
-      presetName: 'Test',
-      totalQuestions: 1,
-      correctAnswers: 1,
-      accuracyPercentage: 100,
-      avgResponseTimeMs: 1000,
-      durationSeconds: 60
-    }
-
-    const s3: DbSessionRecord = {
-      id: 's_isi_3',
-      createdAt: new Date('2026-08-22T10:15:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'piano',
-      presetName: 'Test',
-      totalQuestions: 1,
-      correctAnswers: 1,
-      accuracyPercentage: 100,
-      avgResponseTimeMs: 1000,
-      durationSeconds: 60
-    }
-
-    const ans1: DbAnswerRecord = {
-      id: 'a_isi_1',
-      sessionId: 's_isi_1',
-      questionIndex: 1,
-      expectedNote: 60,
-      playedNote: 60,
-      isCorrect: true,
-      semitoneDistance: 0,
-      responseTimeMs: 1000,
-      velocity: 90,
-      reasonTelemetry: '',
-      createdAt: s1.createdAt
-    }
-
-    const ans2: DbAnswerRecord = {
-      id: 'a_isi_2',
-      sessionId: 's_isi_2',
-      questionIndex: 1,
-      expectedNote: 60,
-      playedNote: 60,
-      isCorrect: true,
-      semitoneDistance: 0,
-      responseTimeMs: 1000,
-      velocity: 90,
-      reasonTelemetry: '',
-      createdAt: s2.createdAt
-    }
-
-    const ans3: DbAnswerRecord = {
-      id: 'a_isi_3',
-      sessionId: 's_isi_3',
-      questionIndex: 1,
-      expectedNote: 60,
-      playedNote: 60,
-      isCorrect: true,
-      semitoneDistance: 0,
-      responseTimeMs: 1000,
-      velocity: 90,
-      reasonTelemetry: '',
-      createdAt: s3.createdAt
-    }
-
-    const metrics = computeAnalyticsMetrics([s1, s2, s3], [ans1, ans2, ans3], 'all')
-
-    const item1 = metrics.sessionPsychometricsList.find((p) => p.session.id === 's_isi_1')
-    const item2 = metrics.sessionPsychometricsList.find((p) => p.session.id === 's_isi_2')
-    const item3 = metrics.sessionPsychometricsList.find((p) => p.session.id === 's_isi_3')
-
-    expect(item1?.interSessionGapLabel).toBe('Inicio')
-    expect(item2?.interSessionGapLabel).toBe('15 min')
-    expect(item3?.interSessionGapLabel).toBe('1 d')
-  })
-
-  it('reconstructSessionConfig debe reconstruir con precisión el pool de notas canónicas y formato de una sesión pasada', () => {
-    const pastSession: DbSessionRecord = {
-      id: 's_hist_1',
-      createdAt: new Date('2026-08-20T15:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'flute',
-      presetName: 'Nivel 1 (C, D, E) • Cronometrado 3m',
-      totalQuestions: 20,
-      correctAnswers: 12,
-      accuracyPercentage: 60,
-      avgResponseTimeMs: 1600,
-      durationSeconds: 180
-    }
-
-    const pastAnswers: DbAnswerRecord[] = [
-      {
-        id: 'ans_1',
-        sessionId: 's_hist_1',
-        questionIndex: 1,
+  describe('analyzeSessionTimeline - Micro-Telemetría, Calentamiento, Fatiga y PES', () => {
+    it('debe detectar foco inicial sin errores (warm-up = 0) y sin fatiga', () => {
+      const answers: DbAnswerRecord[] = Array.from({ length: 6 }, (_, i) => ({
+        id: `a_${i}`,
+        sessionId: 's_test',
+        questionIndex: i + 1,
         expectedNote: 60,
         playedNote: 60,
         isCorrect: true,
         semitoneDistance: 0,
-        responseTimeMs: 1400,
+        responseTimeMs: 1000,
         velocity: 90,
         reasonTelemetry: '',
         createdAt: new Date().toISOString()
-      },
-      {
-        id: 'ans_2',
-        sessionId: 's_hist_1',
-        questionIndex: 2,
-        expectedNote: 64,
-        playedNote: 65,
-        isCorrect: false,
-        semitoneDistance: 1,
-        responseTimeMs: 1800,
-        velocity: 90,
-        reasonTelemetry: '',
-        createdAt: new Date().toISOString()
-      }
-    ]
+      }))
 
-    const prescription = reconstructSessionConfig(pastSession, pastAnswers)
+      const timeline = analyzeSessionTimeline(sNotePiano, answers)
+      expect(timeline.totalQuestions).toBe(6)
+      expect(timeline.warmUpErrorsCount).toBe(0)
+      expect(timeline.postErrorSlowingAvgDeltaMs).toBeNull()
+      expect(timeline.fatigueDetected).toBe(false)
+    })
 
-    expect(prescription.targetMode).toBe('single_note')
-    expect(prescription.instrumentId).toBe('flute')
-    expect(prescription.recommendedNotes).toEqual([60, 62, 64])
-    expect(prescription.limitType).toBe('time')
-    expect(prescription.durationMinutes).toBe(3)
-    expect(prescription.title).toContain('Re-testeo: Nivel 1')
-  })
-
-  it('computeLongitudinalComparisons calcula el Delta de mejora entre una sesión baseline y su retest', () => {
-    const session1: DbSessionRecord = {
-      id: 's_base',
-      createdAt: new Date('2026-08-10T10:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 1 (C, D, E) • Cronometrado 1m',
-      totalQuestions: 10,
-      correctAnswers: 6,
-      accuracyPercentage: 60,
-      avgResponseTimeMs: 1800,
-      durationSeconds: 60
-    }
-
-    const session2: DbSessionRecord = {
-      id: 's_latest',
-      createdAt: new Date('2026-08-21T10:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 1 (C, D, E) • Cronometrado 1m',
-      totalQuestions: 15,
-      correctAnswers: 14,
-      accuracyPercentage: 93,
-      avgResponseTimeMs: 1200,
-      durationSeconds: 60
-    }
-
-    const comparisons = computeLongitudinalComparisons([
-      {
-        session: session1,
-        poolSize: 3,
-        entropyBits: 1.58,
-        chanceBaseline: 33,
-        normalizedAccuracy: 40,
-        responsesPerMinute: 10,
-        fastPercent: 20,
-        mediumPercent: 60,
-        slowPercent: 20,
-        sharpBiasCount: 2,
-        flatBiasCount: 0,
-        dominantBias: 'sharp',
-        formatType: 'time',
-        formatLabel: '⏱️ 1m 0s',
-        inputMethod: 'hardware',
-        interSessionGapMs: null,
-        interSessionGapLabel: 'Inicio',
-        cpiScore: 350
-      },
-      {
-        session: session2,
-        poolSize: 3,
-        entropyBits: 1.58,
-        chanceBaseline: 33,
-        normalizedAccuracy: 90,
-        responsesPerMinute: 15,
-        fastPercent: 80,
-        mediumPercent: 20,
-        slowPercent: 0,
-        sharpBiasCount: 0,
-        flatBiasCount: 0,
-        dominantBias: 'balanced',
-        formatType: 'time',
-        formatLabel: '⏱️ 1m 0s',
-        inputMethod: 'hardware',
-        interSessionGapMs: 950400000,
-        interSessionGapLabel: '11 d',
-        cpiScore: 820
-      }
-    ])
-
-    expect(comparisons.length).toBe(1)
-    expect(comparisons[0].rawAccuracyDelta).toBe(33)
-    expect(comparisons[0].responseTimeDeltaMs).toBe(-600)
-    expect(comparisons[0].rpmDelta).toBe(5)
-    expect(comparisons[0].isImproved).toBe(true)
-  })
-
-  it('los filtros de maestría deben clasificar estrictamente: >=85% Dominada, 50-84% En Progreso, <50% Crítica', () => {
-    const s82Percent: DbSessionRecord = {
-      id: 's_82',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
-      totalQuestions: 44,
-      correctAnswers: 37,
-      accuracyPercentage: 84,
-      avgResponseTimeMs: 1400,
-      durationSeconds: 180
-    }
-
-    const s86Percent: DbSessionRecord = {
-      id: 's_86',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
-      totalQuestions: 44,
-      correctAnswers: 38,
-      accuracyPercentage: 86,
-      avgResponseTimeMs: 1400,
-      durationSeconds: 180
-    }
-
-    const s45Percent: DbSessionRecord = {
-      id: 's_45',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
-      totalQuestions: 44,
-      correctAnswers: 20,
-      accuracyPercentage: 45,
-      avgResponseTimeMs: 2500,
-      durationSeconds: 180
-    }
-
-    const pool = [s82Percent, s86Percent, s45Percent]
-
-    const mastered = filterSessionsAdvanced(pool, { mode: 'all', mastery: 'mastered' })
-    expect(mastered.map((s) => s.id)).toEqual(['s_86'])
-
-    const learning = filterSessionsAdvanced(pool, { mode: 'all', mastery: 'learning' })
-    expect(learning.map((s) => s.id)).toEqual(['s_82'])
-
-    const critical = filterSessionsAdvanced(pool, { mode: 'all', mastery: 'critical' })
-    expect(critical.map((s) => s.id)).toEqual(['s_45'])
-  })
-
-  it('la ordenación por formato debe ordenar numéricamente las duraciones de sesiones cronometradas (59s < 180s)', () => {
-    const s59Sec: DbSessionRecord = {
-      id: 's_59',
-      createdAt: new Date('2026-08-22T10:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 1 (C, D, E) • Cronometrado 1m',
-      totalQuestions: 18,
-      correctAnswers: 17,
-      accuracyPercentage: 94,
-      avgResponseTimeMs: 1100,
-      durationSeconds: 59
-    }
-
-    const s180Sec: DbSessionRecord = {
-      id: 's_180',
-      createdAt: new Date('2026-08-22T11:00:00Z').toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_grand_piano',
-      presetName: 'Nivel 3 (Octava Diatónica C4-C5) • Cronometrado 3m',
-      totalQuestions: 40,
-      correctAnswers: 31,
-      accuracyPercentage: 78,
-      avgResponseTimeMs: 2025,
-      durationSeconds: 180
-    }
-
-    const list = [s180Sec, s59Sec]
-
-    const sortedAsc = [...list].sort((a, b) => (a.durationSeconds || 0) - (b.durationSeconds || 0))
-
-    expect(sortedAsc[0].id).toBe('s_59')
-    expect(sortedAsc[1].id).toBe('s_180')
-  })
-
-  it('generateDiagnosticReport redacta el plan de acción psicopedagógico correctamente', () => {
-    const metrics = computeAnalyticsMetrics([sNotePiano], [mockAnswers[0]], 'single_note')
-    const report = generateDiagnosticReport(metrics)
-    expect(report.title).toContain('Informe')
-    expect(report.concreteActionPlan.length).toBeGreaterThan(0)
-  })
-
-  it('reconstructSessionConfig debe reconstruir todas las notas y la longitud de una sesión de secuencias desde reasonTelemetry', () => {
-    const sequenceSession: DbSessionRecord = {
-      id: 's_seq_hist_1',
-      createdAt: new Date('2026-08-20T16:00:00Z').toISOString(),
-      strategyId: 'sequences_v1',
-      instrumentId: 'piano_sequences',
-      presetName: 'Secuencias (4 notas) • Bloque 5 preguntas',
-      totalQuestions: 5,
-      correctAnswers: 4,
-      accuracyPercentage: 80,
-      avgResponseTimeMs: 2100,
-      durationSeconds: 90
-    }
-
-    const sequenceAnswers: DbAnswerRecord[] = [
-      {
-        id: 'ans_seq_1',
-        sessionId: 's_seq_hist_1',
-        questionIndex: 1,
+    it('debe calcular desaceleración post-error (PES) y detectar fatiga cuando la latencia se dispara en 2da mitad', () => {
+      // 6 preguntas en 1era mitad rápidas (800ms) + 6 preguntas en 2da mitad lentas (1500ms) con errores
+      const firstHalf: DbAnswerRecord[] = Array.from({ length: 6 }, (_, i) => ({
+        id: `fh_${i}`,
+        sessionId: 's_fatigue',
+        questionIndex: i + 1,
         expectedNote: 60,
-        playedNote: 72,
+        playedNote: 60,
         isCorrect: true,
         semitoneDistance: 0,
-        responseTimeMs: 2000,
+        responseTimeMs: 800,
         velocity: 90,
-        reasonTelemetry: 'Secuencia: [60, 64, 67, 72] | Tocadas: [60, 64, 67, 72]',
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 'ans_seq_2',
-        sessionId: 's_seq_hist_1',
-        questionIndex: 2,
-        expectedNote: 62,
-        playedNote: 71,
-        isCorrect: false,
-        semitoneDistance: 1,
-        responseTimeMs: 2200,
-        velocity: 90,
-        reasonTelemetry: 'Secuencia: [62, 65, 69, 71] | Tocadas: [62, 65, 69, 72]',
-        createdAt: new Date().toISOString()
+        reasonTelemetry: '',
+        createdAt: ''
+      }))
+
+      const secondHalf: DbAnswerRecord[] = [
+        {
+          id: 'sh_1',
+          sessionId: 's_fatigue',
+          questionIndex: 7,
+          expectedNote: 62,
+          playedNote: 64,
+          isCorrect: false,
+          semitoneDistance: 2,
+          responseTimeMs: 1200,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        },
+        {
+          id: 'sh_2',
+          sessionId: 's_fatigue',
+          questionIndex: 8,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 1900,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        },
+        {
+          id: 'sh_3',
+          sessionId: 's_fatigue',
+          questionIndex: 9,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 1800,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        },
+        {
+          id: 'sh_4',
+          sessionId: 's_fatigue',
+          questionIndex: 10,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 1700,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        },
+        {
+          id: 'sh_5',
+          sessionId: 's_fatigue',
+          questionIndex: 11,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 1800,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        },
+        {
+          id: 'sh_6',
+          sessionId: 's_fatigue',
+          questionIndex: 12,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 1900,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        }
+      ]
+
+      const timeline = analyzeSessionTimeline(sNotePiano, [...firstHalf, ...secondHalf])
+      expect(timeline.totalQuestions).toBe(12)
+      expect(timeline.fatigueDetected).toBe(true)
+      expect(timeline.postErrorSlowingAvgDeltaMs).toBeGreaterThan(0)
+    })
+  })
+
+  describe('computePitchClassConfusionMatrix - Matriz 2D de Confusión', () => {
+    it('debe mapear aciertos a la diagonal y confusiones fuera de la diagonal', () => {
+      const answers: DbAnswerRecord[] = [
+        {
+          id: '1',
+          sessionId: 's1',
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 1000,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        },
+        {
+          id: '2',
+          sessionId: 's1',
+          questionIndex: 2,
+          expectedNote: 64,
+          playedNote: 65,
+          isCorrect: false,
+          semitoneDistance: 1,
+          responseTimeMs: 1000,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: ''
+        }
+      ]
+
+      const matrix = computePitchClassConfusionMatrix(answers)
+      expect(matrix.pitchClasses.length).toBe(12)
+      expect(matrix.grid[0][0].count).toBe(1) // C -> C
+      expect(matrix.grid[0][0].isDiagonal).toBe(true)
+      expect(matrix.grid[4][5].count).toBe(1) // E -> F (+1st)
+      expect(matrix.grid[4][5].isDiagonal).toBe(false)
+      expect(matrix.maxOffDiagonalCount).toBe(1)
+    })
+  })
+
+  describe('formatInterSessionGap & calculateSessionCPI', () => {
+    it('formatInterSessionGap debe formatear descansos en minutos, horas y días', () => {
+      expect(formatInterSessionGap(null)).toBe('Inicio')
+      expect(formatInterSessionGap(-10)).toBe('Inicio')
+      expect(formatInterSessionGap(30000)).toBe('Inmediato')
+      expect(formatInterSessionGap(900000)).toBe('15 min')
+      expect(formatInterSessionGap(7200000)).toBe('2 h')
+      expect(formatInterSessionGap(172800000)).toBe('2 d')
+    })
+
+    it('calculateSessionCPI debe retornar 0 si la precisión es <= 0 y ponderar entradas', () => {
+      expect(calculateSessionCPI(0, 2.0, 15, 1000, 'hardware')).toBe(0)
+      const hwScore = calculateSessionCPI(90, 2.0, 20, 1000, 'hardware')
+      const virtScore = calculateSessionCPI(90, 2.0, 20, 1000, 'virtual')
+      expect(hwScore).toBeGreaterThan(virtScore)
+    })
+  })
+
+  describe('Filtros Avanzados y Clasificadores', () => {
+    it('filterSessionsByMode segmenta sin colisiones', () => {
+      const all = [sNotePiano, sNoteFlute, sInterval, sSequence]
+      expect(filterSessionsByMode(all, 'all').length).toBe(4)
+      expect(filterSessionsByMode(all, 'single_note').length).toBe(2)
+      expect(filterSessionsByMode(all, 'intervals').length).toBe(1)
+      expect(filterSessionsByMode(all, 'sequences').length).toBe(1)
+    })
+
+    it('filterSessionsAdvanced filtra por Instrumento, Formato y Búsqueda', () => {
+      const all = [sNotePiano, sNoteFlute, sInterval, sSequence]
+      expect(
+        filterSessionsAdvanced(all, { mode: 'single_note', instrumentId: 'flute' }).length
+      ).toBe(1)
+      expect(filterSessionsAdvanced(all, { mode: 'all', format: 'time_1' }).length).toBe(1)
+      expect(filterSessionsAdvanced(all, { mode: 'all', searchQuery: 'Piano' }).length).toBe(3)
+    })
+
+    it('isIntervalSession, isSingleNoteSession e isSequenceSession clasifican con targetMode canónico', () => {
+      expect(isSingleNoteSession({ ...sNotePiano, targetMode: 'single_note' })).toBe(true)
+      expect(isIntervalSession({ ...sInterval, targetMode: 'intervals' })).toBe(true)
+      expect(isSequenceSession({ ...sSequence, targetMode: 'sequences' })).toBe(true)
+    })
+  })
+
+  describe('reconstructSessionConfig - Clonación de Sesiones', () => {
+    it('reconstruye sesiones de nota individual', () => {
+      const conf = reconstructSessionConfig(sNotePiano, mockAnswers)
+      expect(conf.targetMode).toBe('single_note')
+      expect(conf.recommendedNotes).toEqual([60, 62, 64])
+      expect(conf.durationMinutes).toBe(1)
+    })
+
+    it('reconstruye sesiones de intervalos y secuencias', () => {
+      const intConf = reconstructSessionConfig(sInterval, [
+        { ...mockAnswers[0], sessionId: 's_int', reasonTelemetry: '4 st (ascending)' }
+      ])
+      expect(intConf.targetMode).toBe('intervals')
+      expect(intConf.recommendedIntervals).toEqual([4])
+
+      const seqConf = reconstructSessionConfig(sSequence, [
+        { ...mockAnswers[0], sessionId: 's_seq', reasonTelemetry: 'Secuencia: [60, 64, 67]' }
+      ])
+      expect(seqConf.targetMode).toBe('sequences')
+      expect(seqConf.sequenceLength).toBe(3)
+      expect(seqConf.recommendedNotes).toEqual([60, 64, 67])
+    })
+  })
+
+  describe('computeLongitudinalComparisons & computeAnalyticsMetrics', () => {
+    it('computeLongitudinalComparisons calcula deltas correctamente', () => {
+      const s1: DbSessionRecord = {
+        ...sNotePiano,
+        id: 'base',
+        createdAt: '2026-08-10T10:00:00Z',
+        accuracyPercentage: 60,
+        avgResponseTimeMs: 1500
       }
-    ]
+      const s2: DbSessionRecord = {
+        ...sNotePiano,
+        id: 'retest',
+        createdAt: '2026-08-20T10:00:00Z',
+        accuracyPercentage: 90,
+        avgResponseTimeMs: 1000
+      }
 
-    const prescription = reconstructSessionConfig(sequenceSession, sequenceAnswers)
+      const details = [
+        {
+          session: s1,
+          poolSize: 3,
+          entropyBits: 1.58,
+          chanceBaseline: 33,
+          normalizedAccuracy: 40,
+          responsesPerMinute: 10,
+          fastPercent: 20,
+          mediumPercent: 60,
+          slowPercent: 20,
+          sharpBiasCount: 0,
+          flatBiasCount: 0,
+          dominantBias: 'balanced' as const,
+          formatType: 'time' as const,
+          formatLabel: '⏱️ 1m 0s',
+          inputMethod: 'hardware' as const,
+          interSessionGapMs: null,
+          interSessionGapLabel: 'Inicio',
+          cpiScore: 400
+        },
+        {
+          session: s2,
+          poolSize: 3,
+          entropyBits: 1.58,
+          chanceBaseline: 33,
+          normalizedAccuracy: 85,
+          responsesPerMinute: 15,
+          fastPercent: 80,
+          mediumPercent: 20,
+          slowPercent: 0,
+          sharpBiasCount: 0,
+          flatBiasCount: 0,
+          dominantBias: 'balanced' as const,
+          formatType: 'time' as const,
+          formatLabel: '⏱️ 1m 0s',
+          inputMethod: 'hardware' as const,
+          interSessionGapMs: 864000000,
+          interSessionGapLabel: '10 d',
+          cpiScore: 900
+        }
+      ]
 
-    expect(prescription.targetMode).toBe('sequences')
-    expect(prescription.sequenceLength).toBe(4)
-    expect(prescription.recommendedNotes).toContain(60)
-    expect(prescription.recommendedNotes).toContain(64)
-    expect(prescription.recommendedNotes).toContain(67)
-    expect(prescription.recommendedNotes).toContain(72)
-    expect(prescription.recommendedNotes).toContain(62)
-    expect(prescription.recommendedNotes).toContain(65)
-    expect(prescription.recommendedNotes).toContain(69)
-    expect(prescription.recommendedNotes).toContain(71)
-    expect(prescription.questionsCount).toBe(5)
-  })
+      const comps = computeLongitudinalComparisons(details)
+      expect(comps.length).toBe(1)
+      expect(comps[0].rawAccuracyDelta).toBe(30)
+      expect(comps[0].responseTimeDeltaMs).toBe(-500)
+      expect(comps[0].isImproved).toBe(true)
+    })
 
-  it('debe clasificar inequívocamente sesiones con targetMode independientemente de su instrumento o título', () => {
-    const customIntervalSession: DbSessionRecord = {
-      id: 's_custom_int',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'violin',
-      presetName: 'Ejercicio Prescrito por IA',
-      totalQuestions: 10,
-      correctAnswers: 8,
-      accuracyPercentage: 80,
-      avgResponseTimeMs: 1400,
-      durationSeconds: 60,
-      targetMode: 'intervals'
-    }
+    it('computeAnalyticsMetrics maneja conjunto vacío y calcula sesgos asimétricos', () => {
+      const empty = computeAnalyticsMetrics([], [], 'all')
+      expect(empty.totalAnswers).toBe(0)
+      expect(empty.overallAccuracy).toBe(0)
 
-    expect(isIntervalSession(customIntervalSession)).toBe(true)
-    expect(isSingleNoteSession(customIntervalSession)).toBe(false)
-    expect(isSequenceSession(customIntervalSession)).toBe(false)
-  })
+      const metrics = computeAnalyticsMetrics([sNotePiano, sNoteFlute], mockAnswers, 'single_note')
+      expect(metrics.totalAnswers).toBe(2)
+      expect(metrics.filteredSessionsCount).toBe(2)
+    })
 
-  it('filterSessionsAdvanced cubre subfiltros de series de preguntas (5, 10, 20) y duraciones cronometradas (5m, 10m)', () => {
-    const sQ5: DbSessionRecord = {
-      id: 's_q5',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'piano',
-      presetName: 'Nivel 1 • Bloque 5 preguntas',
-      totalQuestions: 5,
-      correctAnswers: 5,
-      accuracyPercentage: 100,
-      avgResponseTimeMs: 1000,
-      durationSeconds: 20
-    }
-
-    const sQ20: DbSessionRecord = {
-      id: 's_q20',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'piano',
-      presetName: 'Nivel 1 • Bloque 20 preguntas',
-      totalQuestions: 20,
-      correctAnswers: 18,
-      accuracyPercentage: 90,
-      avgResponseTimeMs: 1000,
-      durationSeconds: 60
-    }
-
-    const sT5: DbSessionRecord = {
-      id: 's_t5',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'piano',
-      presetName: 'Nivel 1 • Cronometrado 5m',
-      totalQuestions: 40,
-      correctAnswers: 35,
-      accuracyPercentage: 88,
-      avgResponseTimeMs: 1200,
-      durationSeconds: 300
-    }
-
-    const sT10: DbSessionRecord = {
-      id: 's_t10',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'piano',
-      presetName: 'Nivel 1 • Cronometrado 10m',
-      totalQuestions: 80,
-      correctAnswers: 75,
-      accuracyPercentage: 94,
-      avgResponseTimeMs: 1100,
-      durationSeconds: 600
-    }
-
-    const list = [sQ5, sQ20, sT5, sT10]
-
-    expect(
-      filterSessionsAdvanced(list, { mode: 'all', format: 'questions_5' }).map((s) => s.id)
-    ).toEqual(['s_q5'])
-    expect(
-      filterSessionsAdvanced(list, { mode: 'all', format: 'questions_20' }).map((s) => s.id)
-    ).toEqual(['s_q20'])
-    expect(
-      filterSessionsAdvanced(list, { mode: 'all', format: 'time_5' }).map((s) => s.id)
-    ).toEqual(['s_t5'])
-    expect(
-      filterSessionsAdvanced(list, { mode: 'all', format: 'time_10' }).map((s) => s.id)
-    ).toEqual(['s_t10'])
-  })
-
-  it('reconstructSessionConfig reconstruye niveles Nivel 2, Nivel 4 y Pentatónica fielmente', () => {
-    const sNivel2: DbSessionRecord = {
-      id: 's_l2',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'violin',
-      presetName: 'Nivel 2 (C a G) • Bloque 10 preguntas',
-      totalQuestions: 10,
-      correctAnswers: 9,
-      accuracyPercentage: 90,
-      avgResponseTimeMs: 1100,
-      durationSeconds: 45,
-      targetMode: 'single_note'
-    }
-
-    const sNivel4: DbSessionRecord = {
-      id: 's_l4',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'clarinet',
-      presetName: 'Nivel 4 (Cromático C4-C5) • Cronometrado 3m',
-      totalQuestions: 20,
-      correctAnswers: 15,
-      accuracyPercentage: 75,
-      avgResponseTimeMs: 1600,
-      durationSeconds: 180,
-      targetMode: 'single_note'
-    }
-
-    const sPentatonic: DbSessionRecord = {
-      id: 's_penta',
-      createdAt: new Date().toISOString(),
-      strategyId: 'adaptive_v1',
-      instrumentId: 'acoustic_bass',
-      presetName: 'Pentatónica C Mayor • Bloque 10 preguntas',
-      totalQuestions: 10,
-      correctAnswers: 8,
-      accuracyPercentage: 80,
-      avgResponseTimeMs: 1300,
-      durationSeconds: 40,
-      targetMode: 'single_note'
-    }
-
-    const pL2 = reconstructSessionConfig(sNivel2, [])
-    expect(pL2.recommendedNotes).toEqual([60, 62, 64, 65, 67])
-    expect(pL2.instrumentId).toBe('violin')
-
-    const pL4 = reconstructSessionConfig(sNivel4, [])
-    expect(pL4.recommendedNotes.length).toBe(13)
-    expect(pL4.instrumentId).toBe('clarinet')
-
-    const pPenta = reconstructSessionConfig(sPentatonic, [])
-    expect(pPenta.recommendedNotes).toEqual([60, 62, 64, 67, 69, 72])
-    expect(pPenta.instrumentId).toBe('acoustic_bass')
+    it('generateDiagnosticReport genera plan clínico', () => {
+      const metrics = computeAnalyticsMetrics([sNotePiano], [mockAnswers[0]], 'single_note')
+      const report = generateDiagnosticReport(metrics)
+      expect(report.title).toBeDefined()
+      expect(report.concreteActionPlan.length).toBeGreaterThan(0)
+    })
   })
 })

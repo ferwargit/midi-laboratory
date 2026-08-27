@@ -626,7 +626,7 @@ export default function App(): React.ReactElement {
   const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
 
   return (
-    <div className="min-h-screen flex flex-col justify-between p-4 md:p-6 max-w-[1540px] w-full mx-auto space-y-3 font-sans">
+    <div className="min-h-screen flex flex-col justify-between p-3 md:p-5 max-w-[1800px] w-full mx-auto space-y-3 font-sans">
       {/* 1. MASTER TOPBAR */}
       <StudioTopBar
         appMode={appMode}

@@ -5,6 +5,7 @@ import { useAiStore } from '../../stores/useAiStore'
 import {
   AnalyticsMasteryFilter,
   filterSessionsAdvanced,
+  computeAnalyticsMetrics,
   DetailedSessionAnalysis
 } from '../../domain/analytics/historyAnalytics'
 import { LmStudioService } from '../../domain/ai/lmStudioService'
@@ -68,6 +69,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const [selectedIsi, setSelectedIsi] = useState<'all' | 'massed' | 'optimal' | 'spaced'>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
 
+  // Estado de Aislamiento de Selección Manual
+  const [isolatedSessionIds, setIsolatedSessionIds] = useState<Set<string> | null>(null)
+
   // Estado de Ordenamiento
   const [sortKey, setSortKey] = useState<SortColumnKey>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
@@ -101,19 +105,6 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     }
   }, [isAiAnalyzing])
 
-  const currentAiResponse = aiResponsesByMode[modeFilter]
-
-  const handleRunDiagnostic = async (): Promise<void> => {
-    setReasoningSeconds(0)
-    await runAiDiagnostic(metrics, saveAiReport)
-    const nowStr = new Date().toLocaleTimeString('es-AR', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
-    setLastGeneratedAt(nowStr)
-  }
-
   const handleResetAllFilters = (): void => {
     setSearchQuery('')
     setSelectedInstrument('all')
@@ -125,6 +116,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     setSelectedBias('all')
     setSelectedPoolSize('all')
     setSelectedIsi('all')
+    setIsolatedSessionIds(null)
   }
 
   const handleSortClick = (column: SortColumnKey): void => {
@@ -147,6 +139,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     }
   }
 
+  // 1. Filtrado Reactivo de Sesiones
   const displayedAnalysisList: DetailedSessionAnalysis[] = useMemo(() => {
     const filteredRaw = filterSessionsAdvanced(sessions, {
       mode: modeFilter,
@@ -175,11 +168,16 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       list = list.filter((item) => {
         const gap = item.interSessionGapMs
         if (gap === null) return selectedIsi === 'spaced'
-        if (selectedIsi === 'massed') return gap < 900000 // < 15m
-        if (selectedIsi === 'optimal') return gap >= 43200000 && gap <= 172800000 // 12h-48h
-        if (selectedIsi === 'spaced') return gap > 172800000 // > 48h
+        if (selectedIsi === 'massed') return gap < 900000
+        if (selectedIsi === 'optimal') return gap >= 43200000 && gap <= 172800000
+        if (selectedIsi === 'spaced') return gap > 172800000
         return true
       })
+    }
+
+    // Si está activo el modo aislamiento por casillas
+    if (isolatedSessionIds && isolatedSessionIds.size > 0) {
+      list = list.filter((item) => isolatedSessionIds.has(item.session.id))
     }
 
     return [...list].sort((a, b) => {
@@ -257,10 +255,42 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     selectedPoolSize,
     selectedIsi,
     searchQuery,
+    isolatedSessionIds,
     metrics,
     sortKey,
     sortDirection
   ])
+
+  // 2. Filtrado Reactivo de Respuestas Específicas del Subconjunto
+  const displayedSessionIds = useMemo(() => {
+    return new Set(displayedAnalysisList.map((d) => d.session.id))
+  }, [displayedAnalysisList])
+
+  const displayedAnswers = useMemo(() => {
+    return answers.filter((a) => displayedSessionIds.has(a.sessionId))
+  }, [answers, displayedSessionIds])
+
+  const displayedSessions = useMemo(() => {
+    return displayedAnalysisList.map((d) => d.session)
+  }, [displayedAnalysisList])
+
+  // 3. Métricas Psicométricas Reactivas del Subconjunto Filtrado
+  const displayedMetrics = useMemo(() => {
+    return computeAnalyticsMetrics(displayedSessions, displayedAnswers, modeFilter)
+  }, [displayedSessions, displayedAnswers, modeFilter])
+
+  const currentAiResponse = aiResponsesByMode[modeFilter]
+
+  const handleRunDiagnostic = async (): Promise<void> => {
+    setReasoningSeconds(0)
+    await runAiDiagnostic(displayedMetrics, saveAiReport)
+    const nowStr = new Date().toLocaleTimeString('es-AR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+    setLastGeneratedAt(nowStr)
+  }
 
   const handleCompareSessionsWithAi = async (selectedIds: string[]): Promise<void> => {
     const selectedAnalysis = displayedAnalysisList.filter((d) => selectedIds.includes(d.session.id))
@@ -269,7 +299,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     setActiveTab('ai_consultation')
 
     try {
-      const res = await aiService.askMultiSessionComparison(selectedAnalysis, metrics)
+      const res = await aiService.askMultiSessionComparison(selectedAnalysis, displayedMetrics)
 
       const namesSummary = selectedAnalysis.map((s) => s.session.presetName).join(' vs ')
       const consultationRecord: DbAiConsultationRecord = {
@@ -280,10 +310,10 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         userQuery: `Comparativa Cruzada (${selectedAnalysis.length} sesiones): ${namesSummary}`,
         aiResponse: res.content,
         associatedMetricsSnapshot: {
-          overallAccuracy: metrics.overallAccuracy,
-          normalizedAccuracy: metrics.normalizedOverallAccuracy,
-          avgLatencyMs: metrics.avgResponseTimeMs,
-          poolEntropyBits: metrics.avgEntropyBits
+          overallAccuracy: displayedMetrics.overallAccuracy,
+          normalizedAccuracy: displayedMetrics.normalizedOverallAccuracy,
+          avgLatencyMs: displayedMetrics.avgResponseTimeMs,
+          poolEntropyBits: displayedMetrics.avgEntropyBits
         }
       }
       await saveAiConsultation(consultationRecord)
@@ -297,14 +327,40 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   )
 
   return (
-    <div className="space-y-4 font-sans">
-      {/* 1. KPIs Psicométricos Superiores */}
-      <AnalyticsKpiCards metrics={metrics} totalFilteredSessions={displayedAnalysisList.length} />
+    <div className="space-y-4 font-sans w-full">
+      {/* BANNER DE MODO AISLADO ACTIVO */}
+      {isolatedSessionIds && (
+        <div className="p-3 bg-gradient-to-r from-sky-950 via-purple-950 to-zinc-950 border border-sky-400 rounded-2xl flex justify-between items-center font-mono text-xs shadow-2xl animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 rounded-full bg-sky-400 animate-ping" />
+            <span className="text-zinc-100 font-bold">
+              🔍 MODO AISLADO ACTIVO: Visualizando analítica exclusiva de {isolatedSessionIds.size}{' '}
+              sesión(es) seleccionada(s).
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsolatedSessionIds(null)}
+            className="px-3 py-1 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-all cursor-pointer shadow-md"
+          >
+            ✕ Quitar Aislamiento (Ver Todas)
+          </button>
+        </div>
+      )}
 
-      {/* 2. Barra de Filtros Multidimensionales con Sub-Grupos de Tiempo y Carga */}
+      {/* 1. KPIs Psicométricos Superiores Reactivos al Filtro Activo */}
+      <AnalyticsKpiCards
+        metrics={displayedMetrics}
+        totalFilteredSessions={displayedAnalysisList.length}
+      />
+
+      {/* 2. Barra de Filtros */}
       <AnalyticsFilterBar
         modeFilter={modeFilter}
-        onSelectModeFilter={(m): void => setModeFilter(m, sessions, answers)}
+        onSelectModeFilter={(m): void => {
+          setIsolatedSessionIds(null)
+          setModeFilter(m, sessions, answers)
+        }}
         isLmStudioOnline={isLmStudioOnline}
         onCheckLmStudio={checkLmStudioStatus}
         searchQuery={searchQuery}
@@ -335,7 +391,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         sessionsCount={displayedAnalysisList.length}
-        longitudinalCount={metrics.longitudinalComparisons?.length || 0}
+        longitudinalCount={displayedMetrics.longitudinalComparisons?.length || 0}
         aiHistoryCount={filteredReports.length}
       />
 
@@ -351,6 +407,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           onDeleteSession={deleteSession}
           onDeleteSessions={deleteSessions}
           onCompareSessionsWithAi={handleCompareSessionsWithAi}
+          onIsolateSessions={(ids) => setIsolatedSessionIds(new Set(ids))}
+          isIsolatedMode={isolatedSessionIds !== null}
+          onClearIsolation={() => setIsolatedSessionIds(null)}
         />
       )}
 
@@ -361,7 +420,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           isAiAnalyzing={isAiAnalyzing}
           reasoningSeconds={reasoningSeconds}
           lastGeneratedAt={lastGeneratedAt}
-          metrics={metrics}
+          metrics={displayedMetrics}
           onRunDiagnostic={handleRunDiagnostic}
           onLoadPrescription={onLoadPrescription}
         />
@@ -370,7 +429,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
       {activeTab === 'ai_consultation' && (
         <AiConsultationTab
           modeFilter={modeFilter}
-          metrics={metrics}
+          metrics={displayedMetrics}
           consultations={aiConsultations}
           aiReports={aiReports}
           onSaveConsultation={saveAiConsultation}
@@ -379,20 +438,25 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
 
       {activeTab === 'longitudinal' && (
         <LongitudinalTab
-          comparisons={metrics.longitudinalComparisons || []}
+          comparisons={displayedMetrics.longitudinalComparisons || []}
           answers={answers}
           onLoadPrescription={onLoadPrescription}
         />
       )}
 
       {activeTab === 'confusions' && (
-        <ConfusionMatrixTab modeFilter={modeFilter} metrics={metrics} />
+        <ConfusionMatrixTab
+          modeFilter={modeFilter}
+          metrics={displayedMetrics}
+          answers={displayedAnswers}
+          totalFilteredSessions={displayedAnalysisList.length}
+        />
       )}
 
       {activeTab === 'charts' && (
         <AnalyticsCharts
-          sessions={displayedAnalysisList.map((d) => d.session)}
-          answers={answers}
+          sessions={displayedSessions}
+          answers={displayedAnswers}
           psychometrics={displayedAnalysisList.map((d) => ({
             sessionId: d.session.id,
             poolSize: d.poolSize,

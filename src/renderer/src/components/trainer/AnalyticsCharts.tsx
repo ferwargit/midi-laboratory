@@ -3,8 +3,13 @@ import { DbSessionRecord, DbAnswerRecord } from '../../domain/database/types'
 import {
   SessionPsychometrics,
   MASTERY_THRESHOLDS,
-  AnalyticsModeFilter
+  AnalyticsModeFilter,
+  computeNotePerformancesFromAnswers
 } from '../../domain/analytics/historyAnalytics'
+import { PianoKeyboard, KeyboardVisualTheme } from './PianoKeyboard'
+import { generateMidiRange } from '../../domain/music/noteUtils'
+
+const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
 
 interface AnalyticsChartsProps {
   sessions: DbSessionRecord[]
@@ -32,11 +37,19 @@ function AnalyticsChartsComponent({
   activeFiltersLabel = 'Todos los datos'
 }: AnalyticsChartsProps): React.ReactElement {
   const [hoveredPoint, setHoveredPoint] = useState<HoveredPointInfo | null>(null)
+  const [visualTheme, setVisualTheme] = useState<KeyboardVisualTheme>('ghost_neon')
 
   const recentSessions = useMemo(() => [...sessions].slice(0, 14).reverse(), [sessions])
   const recentPsychometrics = useMemo(
     () => [...psychometrics].slice(0, 14).reverse(),
     [psychometrics]
+  )
+
+  // Mapa de calor psicométrico de notas evaluadas
+  const keyboardPerformances = useMemo(() => computeNotePerformancesFromAnswers(answers), [answers])
+  const activeTestedNotes = useMemo(
+    () => Array.from(keyboardPerformances.keys()).sort((a, b) => a - b),
+    [keyboardPerformances]
   )
 
   const { biasDistribution, maxBiasCount } = useMemo(() => {
@@ -63,7 +76,66 @@ function AnalyticsChartsComponent({
 
   return (
     <div className="space-y-4 select-none font-mono">
-      {/* 1. BANNER DINÁMICO EDUCATIVO Y DE CONTEXTO */}
+      {/* 1. TECLADO HEATMAP REACTIVO POR TONO */}
+      <div className="p-4 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-2.5 shadow-2xl">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🎹</span>
+            <div>
+              <span className="font-bold text-zinc-100 text-xs uppercase tracking-wider block">
+                Mapa de Calor Psicométrico por Tono ({activeTestedNotes.length} notas evaluadas):
+              </span>
+              <span className="text-[10px] text-zinc-500 font-sans">
+                Refleja la precisión acústica acumulada de las {answers.length} respuestas
+                filtradas:
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-[11px] font-sans">
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-[0_0_8px_rgba(16,185,129,0.7)]" />{' '}
+              Dominada (&gt;85%)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> En progreso
+              (50-85%)
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" /> A reforzar
+              (&lt;50%)
+            </span>
+
+            <div className="flex items-center gap-1 bg-zinc-900 px-1.5 py-0.5 rounded-lg border border-zinc-800 text-[10px] font-mono ml-2">
+              <button
+                type="button"
+                onClick={() => setVisualTheme('ghost_neon')}
+                className={`px-1.5 py-0.5 rounded ${visualTheme === 'ghost_neon' ? 'bg-sky-600 text-white font-bold' : 'text-zinc-400'}`}
+              >
+                Silueta
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisualTheme('ambient_glow')}
+                className={`px-1.5 py-0.5 rounded ${visualTheme === 'ambient_glow' ? 'bg-sky-600 text-white font-bold' : 'text-zinc-400'}`}
+              >
+                Aura
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <PianoKeyboard
+          keys={PIANO_KEYS}
+          activeNotes={activeTestedNotes}
+          performances={keyboardPerformances}
+          showHeatmap={true}
+          disabled={true}
+          visualTheme={visualTheme}
+        />
+      </div>
+
+      {/* 2. BANNER DE CONTEXTO EDUCATIVO */}
       <div className="p-4 bg-gradient-to-r from-sky-950/40 via-purple-950/40 to-zinc-900 rounded-2xl border border-sky-500/30 space-y-2.5 shadow-xl">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
           <div className="flex items-center gap-2">
@@ -78,7 +150,6 @@ function AnalyticsChartsComponent({
           </span>
         </div>
 
-        {/* Guía de lectura pedagógica de la curva */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 font-sans text-xs">
           <div className="p-2 bg-zinc-950/80 rounded-xl border border-sky-800/40 space-y-0.5">
             <strong className="text-sky-400 font-mono text-[11px] flex items-center gap-1.5">
@@ -112,7 +183,7 @@ function AnalyticsChartsComponent({
         </div>
       </div>
 
-      {/* 2. CURVA TEMPORAL PSICOMÉTRICA CON EJES GRADUADOS */}
+      {/* 3. CURVA TEMPORAL PSICOMÉTRICA CON EJES GRADUADOS */}
       <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-2xl relative">
         <div className="flex justify-between items-center pb-2 border-b border-zinc-800/80 text-xs">
           <span className="font-bold text-zinc-100 uppercase tracking-wider">
@@ -337,7 +408,7 @@ function AnalyticsChartsComponent({
         )}
       </div>
 
-      {/* 3. HISTOGRAMA DE SESGOS Y CARGA CONTEXTUAL */}
+      {/* 4. HISTOGRAMA DE SESGOS Y CARGA CONTEXTUAL */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl">
           <div className="flex justify-between items-center text-xs">
