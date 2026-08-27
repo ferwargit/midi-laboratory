@@ -218,7 +218,8 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(pianoAnalysis?.responsesPerMinute).toBe(10)
     expect(pianoAnalysis?.fastPercent).toBe(100)
     expect(pianoAnalysis?.inputMethod).toBe('hardware')
-    expect(pianoAnalysis?.cpiScore).toBeGreaterThan(0) // Validación CPI Score
+    expect(pianoAnalysis?.cpiScore).toBeGreaterThan(0)
+    expect(pianoAnalysis?.formatLabel).toBe('⏱️ 1m 0s')
 
     const fluteAnalysis = metrics.sessionPsychometricsList.find(
       (p) => p.session.id === 's_note_flute'
@@ -226,6 +227,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
     expect(fluteAnalysis?.sharpBiasCount).toBe(1)
     expect(fluteAnalysis?.dominantBias).toBe('sharp')
     expect(fluteAnalysis?.inputMethod).toBe('virtual')
+    expect(fluteAnalysis?.formatLabel).toBe('🔢 Serie 10')
   })
 
   it('calculateSessionCPI debe premiar mayor entropía, reflejo rápido y ejecución en hardware', () => {
@@ -423,6 +425,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
         flatBiasCount: 0,
         dominantBias: 'sharp',
         formatType: 'time',
+        formatLabel: '⏱️ 1m 0s',
         inputMethod: 'hardware',
         interSessionGapMs: null,
         interSessionGapLabel: 'Inicio',
@@ -442,6 +445,7 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
         flatBiasCount: 0,
         dominantBias: 'balanced',
         formatType: 'time',
+        formatLabel: '⏱️ 1m 0s',
         inputMethod: 'hardware',
         interSessionGapMs: 950400000,
         interSessionGapLabel: '11 d',
@@ -597,7 +601,6 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
 
     expect(prescription.targetMode).toBe('sequences')
     expect(prescription.sequenceLength).toBe(4)
-    // Debe haber recolectado las notas únicas de ambas secuencias: [60, 62, 64, 65, 67, 69, 71, 72]
     expect(prescription.recommendedNotes).toContain(60)
     expect(prescription.recommendedNotes).toContain(64)
     expect(prescription.recommendedNotes).toContain(67)
@@ -614,14 +617,14 @@ describe('historyAnalytics - Psicometría, Filtros Multidimensionales y Telemetr
       id: 's_custom_int',
       createdAt: new Date().toISOString(),
       strategyId: 'adaptive_v1',
-      instrumentId: 'violin', // Timbre violín
-      presetName: 'Ejercicio Prescrito por IA', // Sin palabra "intervalo"
+      instrumentId: 'violin',
+      presetName: 'Ejercicio Prescrito por IA',
       totalQuestions: 10,
       correctAnswers: 8,
       accuracyPercentage: 80,
       avgResponseTimeMs: 1400,
       durationSeconds: 60,
-      targetMode: 'intervals' // 👈 CANÓNICO
+      targetMode: 'intervals'
     }
 
     expect(isIntervalSession(customIntervalSession)).toBe(true)

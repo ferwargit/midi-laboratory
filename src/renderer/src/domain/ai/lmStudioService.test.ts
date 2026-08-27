@@ -53,6 +53,7 @@ describe('ai - Servicios de IA, Prescripción, Tutor y Comparador Multi-Sesión'
       flatBiasCount: 0,
       dominantBias: 'sharp',
       formatType: 'time',
+      formatLabel: '⏱️ 1m 0s',
       inputMethod: 'hardware',
       interSessionGapMs: null,
       interSessionGapLabel: 'Inicio',

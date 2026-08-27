@@ -54,6 +54,7 @@ describe('promptBuilder - Generación de Prompts Especializados y Tutor Psicoac�
         flatBiasCount: 0,
         dominantBias: 'sharp',
         formatType: 'time',
+        formatLabel: '⏱️ 1m 0s',
         inputMethod: 'hardware',
         interSessionGapMs: null,
         interSessionGapLabel: 'Inicio',

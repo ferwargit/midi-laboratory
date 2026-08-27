@@ -208,7 +208,7 @@ export function SessionsTableTab({
                     </div>
                   </th>
 
-                  {/* NUEVA COLUMNA: SCORE CPI */}
+                  {/* SCORE CPI */}
                   <th
                     onClick={(): void => onSortClick('cpi')}
                     className="pb-2.5 text-center cursor-pointer hover:text-zinc-200 transition-colors group"
@@ -403,7 +403,7 @@ export function SessionsTableTab({
                       <td className="py-3 whitespace-nowrap">
                         {item.formatType === 'time' ? (
                           <span className="px-2 py-0.5 rounded-md bg-amber-950/70 border border-amber-800 text-amber-300 text-[10px] font-bold">
-                            ⏱️ {formatDuration(s.durationSeconds || 60)}
+                            {item.formatLabel}
                           </span>
                         ) : item.formatType === 'mastery' ? (
                           <span className="px-2 py-0.5 rounded-md bg-purple-950/70 border border-purple-800 text-purple-300 text-[10px] font-bold">
@@ -411,7 +411,7 @@ export function SessionsTableTab({
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">
-                            🔢 Serie {s.totalQuestions}
+                            {item.formatLabel}
                           </span>
                         )}
                       </td>

@@ -25,11 +25,11 @@ export interface AnalyticsFilterOptions {
   instrumentId?: string
   strategyId?: string
   presetFilter?: string
-  format?: string // Soporta: 'all', 'time_all', 'time_1', 'time_3', 'time_5', 'questions_all', 'questions_10', 'mastery', etc.
+  format?: string
   mastery?: AnalyticsMasteryFilter
   inputSource?: 'all' | 'hardware' | 'virtual'
   biasFilter?: 'all' | 'sharp' | 'flat' | 'balanced'
-  poolSizeFilter?: string // 'all', '3', '4', '5', '6', '7', '8', '13'
+  poolSizeFilter?: string
   isiFilter?: 'all' | 'massed' | 'optimal' | 'spaced'
   searchQuery?: string
 }
@@ -51,6 +51,13 @@ export interface SessionPsychometrics {
   responsesPerMinute: number
 }
 
+export interface SessionFormatInfo {
+  formatType: 'time' | 'mastery' | 'questions' | 'infinite'
+  formatLabel: string
+  nominalMinutes?: number
+  nominalQuestions?: number
+}
+
 export interface DetailedSessionAnalysis {
   session: DbSessionRecord
   poolSize: number
@@ -65,6 +72,7 @@ export interface DetailedSessionAnalysis {
   flatBiasCount: number
   dominantBias: 'sharp' | 'flat' | 'balanced'
   formatType: 'time' | 'mastery' | 'questions' | 'infinite'
+  formatLabel: string
   inputMethod: 'hardware' | 'virtual' | 'mixed'
   interSessionGapMs: number | null
   interSessionGapLabel: string
@@ -102,6 +110,50 @@ export interface AnalyticsMetrics {
   strongestNotes: Array<{ noteName: string; accuracy: number; attempts: number }>
   sessionPsychometricsList: DetailedSessionAnalysis[]
   longitudinalComparisons: LongitudinalComparison[]
+}
+
+/**
+ * Resuelve de forma canónica el formato objetivo configurado para una sesión.
+ */
+export function resolveSessionFormat(session: DbSessionRecord): SessionFormatInfo {
+  const name = (session.presetName || '').toLowerCase()
+  const isTimed = name.includes('tiempo') || name.includes('cronometrado')
+  const isMastery = name.includes('maestría')
+
+  if (isMastery) {
+    return {
+      formatType: 'mastery',
+      formatLabel: '🎯 Maestría'
+    }
+  }
+
+  if (isTimed) {
+    const matchMin = name.match(/(?:cronometrado|tiempo)\s*(\d+)\s*(?:m|min)?/i)
+    let nominalMinutes = matchMin ? parseInt(matchMin[1], 10) : undefined
+
+    if (!nominalMinutes) {
+      const dur = session.durationSeconds || 60
+      if (dur <= 90) nominalMinutes = 1
+      else if (dur <= 240) nominalMinutes = 3
+      else if (dur <= 420) nominalMinutes = 5
+      else nominalMinutes = 10
+    }
+
+    return {
+      formatType: 'time',
+      nominalMinutes,
+      formatLabel: `⏱️ ${nominalMinutes}m 0s`
+    }
+  }
+
+  const matchQ = name.match(/(?:bloque|serie)\s*(\d+)/i)
+  const nominalQuestions = matchQ ? parseInt(matchQ[1], 10) : session.totalQuestions || 10
+
+  return {
+    formatType: 'questions',
+    nominalQuestions,
+    formatLabel: `🔢 Serie ${nominalQuestions}`
+  }
 }
 
 export function calculateSessionCPI(
@@ -244,70 +296,32 @@ export function filterSessionsAdvanced(
       }
     }
 
-    // 5. Formato y Duración Quirúrgica
-    const name = (s.presetName || '').toLowerCase()
-    const isTimed = name.includes('tiempo') || name.includes('cronometrado')
-    const isMastery = name.includes('maestría')
-
+    // 5. Formato y Duración Quirúrgica con SSOT
     if (filters.format && filters.format !== 'all') {
+      const formatInfo = resolveSessionFormat(s)
+
       if (filters.format === 'time' || filters.format === 'time_all') {
-        if (!isTimed) return false
+        if (formatInfo.formatType !== 'time') return false
       } else if (filters.format === 'time_1') {
-        if (
-          !isTimed ||
-          (s.durationSeconds !== 59 &&
-            s.durationSeconds !== 60 &&
-            !name.includes('1m') &&
-            !name.includes('1 min'))
-        )
-          return false
+        if (formatInfo.formatType !== 'time' || formatInfo.nominalMinutes !== 1) return false
       } else if (filters.format === 'time_3') {
-        if (
-          !isTimed ||
-          (!name.includes('3m') &&
-            !name.includes('3 min') &&
-            (s.durationSeconds < 170 || s.durationSeconds > 190))
-        )
-          return false
+        if (formatInfo.formatType !== 'time' || formatInfo.nominalMinutes !== 3) return false
       } else if (filters.format === 'time_5') {
-        if (
-          !isTimed ||
-          (!name.includes('5m') &&
-            !name.includes('5 min') &&
-            (s.durationSeconds < 290 || s.durationSeconds > 310))
-        )
-          return false
+        if (formatInfo.formatType !== 'time' || formatInfo.nominalMinutes !== 5) return false
       } else if (filters.format === 'time_10') {
-        if (
-          !isTimed ||
-          (!name.includes('10m') && !name.includes('10 min') && s.durationSeconds < 550)
-        )
-          return false
+        if (formatInfo.formatType !== 'time' || formatInfo.nominalMinutes !== 10) return false
       } else if (filters.format === 'questions' || filters.format === 'questions_all') {
-        if (isTimed || isMastery) return false
+        if (formatInfo.formatType !== 'questions') return false
       } else if (filters.format === 'questions_5') {
-        if (
-          isTimed ||
-          isMastery ||
-          (s.totalQuestions !== 5 && !name.includes('5 preguntas') && !name.includes('5 ej'))
-        )
-          return false
+        if (formatInfo.formatType !== 'questions' || formatInfo.nominalQuestions !== 5) return false
       } else if (filters.format === 'questions_10') {
-        if (
-          isTimed ||
-          isMastery ||
-          (s.totalQuestions !== 10 && !name.includes('10 preguntas') && !name.includes('10 ej'))
-        )
+        if (formatInfo.formatType !== 'questions' || formatInfo.nominalQuestions !== 10)
           return false
       } else if (filters.format === 'questions_20') {
-        if (
-          isTimed ||
-          isMastery ||
-          (s.totalQuestions !== 20 && !name.includes('20 preguntas') && !name.includes('20 ej'))
-        )
+        if (formatInfo.formatType !== 'questions' || formatInfo.nominalQuestions !== 20)
           return false
       } else if (filters.format === 'mastery') {
-        if (!isMastery) return false
+        if (formatInfo.formatType !== 'mastery') return false
       }
     }
 
@@ -636,13 +650,7 @@ export function computeAnalyticsMetrics(
 
     const dominantBias = sSharp > sFlat * 1.4 ? 'sharp' : sFlat > sSharp * 1.4 ? 'flat' : 'balanced'
 
-    const pName = (session.presetName || '').toLowerCase()
-    const formatType: 'time' | 'mastery' | 'questions' | 'infinite' =
-      pName.includes('tiempo') || pName.includes('cronometrado')
-        ? 'time'
-        : pName.includes('maestría')
-          ? 'mastery'
-          : 'questions'
+    const formatInfo = resolveSessionFormat(session)
 
     const inputMethod: 'hardware' | 'virtual' | 'mixed' =
       virtualCount === 0 ? 'hardware' : hardwareCount === 0 ? 'virtual' : 'mixed'
@@ -670,7 +678,8 @@ export function computeAnalyticsMetrics(
       sharpBiasCount: sSharp,
       flatBiasCount: sFlat,
       dominantBias,
-      formatType,
+      formatType: formatInfo.formatType,
+      formatLabel: formatInfo.formatLabel,
       inputMethod,
       interSessionGapMs: gapInfo.gapMs,
       interSessionGapLabel: gapInfo.label,

@@ -31,6 +31,7 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
       flatBiasCount: 0,
       dominantBias: 'sharp',
       formatType: 'time',
+      formatLabel: '⏱️ 1m 0s',
       inputMethod: 'hardware',
       interSessionGapMs: null,
       interSessionGapLabel: 'Inicio',
@@ -61,6 +62,7 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
       flatBiasCount: 0,
       dominantBias: 'balanced',
       formatType: 'time',
+      formatLabel: '⏱️ 1m 0s',
       inputMethod: 'hardware',
       interSessionGapMs: 86400000,
       interSessionGapLabel: '1 d',
@@ -85,7 +87,7 @@ describe('SessionsTableTab - Interacciones CRUD, Selección Múltiple y Comparad
 
     expect(screen.getAllByText('Nivel 1 (C, D, E)').length).toBe(2)
     expect(screen.getAllByText('🎹 Roland FP-8').length).toBe(2)
-    expect(screen.getByText(/🌟 890/i)).toBeDefined() // Score CPI destacado
+    expect(screen.getByText(/🌟 890/i)).toBeDefined()
     expect(screen.getAllByText('Re-testar').length).toBe(2)
   })
 
