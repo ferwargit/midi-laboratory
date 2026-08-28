@@ -25,7 +25,8 @@ const initialResponses: Record<AnalyticsModeFilter, AiAnalysisResponse | null> =
   all: null,
   single_note: null,
   intervals: null,
-  sequences: null
+  sequences: null,
+  repertoire: null
 }
 
 export const useAiStore = create<AiState>((set, get) => ({
@@ -51,12 +52,18 @@ export const useAiStore = create<AiState>((set, get) => ({
       all: null,
       single_note: null,
       intervals: null,
-      sequences: null
+      sequences: null,
+      repertoire: null
     }
-    const modes: AnalyticsModeFilter[] = ['all', 'single_note', 'intervals', 'sequences']
+    const modes: AnalyticsModeFilter[] = [
+      'all',
+      'single_note',
+      'intervals',
+      'sequences',
+      'repertoire'
+    ]
 
     modes.forEach((mode) => {
-      // 1. Si existe un reporte guardado en DB para esta modalidad, lo carga
       const match = reports.find((r) => r.modeFilter === mode)
       if (match) {
         currentMap[mode] = {
@@ -66,8 +73,6 @@ export const useAiStore = create<AiState>((set, get) => ({
           prescription: match.prescription
         }
       } else {
-        // 2. Si no hay reporte guardado (ej: tras un reset o antes de correr IA),
-        // calcula el informe algorítmico basado en las métricas ACTUALES de la sesión
         const modeMetrics = { ...metrics, modeFilter: mode }
         currentMap[mode] = generateAlgorithmicFallback(modeMetrics)
       }

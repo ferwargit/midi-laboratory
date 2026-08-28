@@ -4,7 +4,10 @@ import {
   SessionPsychometrics,
   MASTERY_THRESHOLDS,
   AnalyticsModeFilter,
-  computeNotePerformancesFromAnswers
+  COGNITIVE_LATENCY_THRESHOLDS,
+  computeNotePerformancesFromAnswers,
+  computePerNoteLatencyStats,
+  PerNoteLatencyStat
 } from '../../domain/analytics/historyAnalytics'
 import { PianoKeyboard, KeyboardVisualTheme } from './PianoKeyboard'
 import { generateMidiRange } from '../../domain/music/noteUtils'
@@ -37,6 +40,7 @@ function AnalyticsChartsComponent({
   activeFiltersLabel = 'Todos los datos'
 }: AnalyticsChartsProps): React.ReactElement {
   const [hoveredPoint, setHoveredPoint] = useState<HoveredPointInfo | null>(null)
+  const [hoveredNoteLatency, setHoveredNoteLatency] = useState<PerNoteLatencyStat | null>(null)
   const [visualTheme, setVisualTheme] = useState<KeyboardVisualTheme>('ghost_neon')
 
   const recentSessions = useMemo(() => [...sessions].slice(0, 14).reverse(), [sessions])
@@ -45,12 +49,15 @@ function AnalyticsChartsComponent({
     [psychometrics]
   )
 
-  // Mapa de calor psicométrico de notas evaluadas
+  // Mapa de calor psicométrico
   const keyboardPerformances = useMemo(() => computeNotePerformancesFromAnswers(answers), [answers])
   const activeTestedNotes = useMemo(
     () => Array.from(keyboardPerformances.keys()).sort((a, b) => a - b),
     [keyboardPerformances]
   )
+
+  // Cronometría de Latencia por Nota y Octavas
+  const latencyAnalysis = useMemo(() => computePerNoteLatencyStats(answers), [answers])
 
   const { biasDistribution, maxBiasCount } = useMemo(() => {
     const dist: Record<number, number> = {
@@ -74,6 +81,11 @@ function AnalyticsChartsComponent({
     }
   }, [answers])
 
+  const maxNoteLatencyMs = useMemo(() => {
+    if (latencyAnalysis.notes.length === 0) return 3000
+    return Math.max(3000, ...latencyAnalysis.notes.map((n) => n.avgLatencyMs))
+  }, [latencyAnalysis])
+
   return (
     <div className="space-y-4 select-none font-mono">
       {/* 1. TECLADO HEATMAP REACTIVO POR TONO */}
@@ -86,8 +98,7 @@ function AnalyticsChartsComponent({
                 Mapa de Calor Psicométrico por Tono ({activeTestedNotes.length} notas evaluadas):
               </span>
               <span className="text-[10px] text-zinc-500 font-sans">
-                Refleja la precisión acústica acumulada de las {answers.length} respuestas
-                filtradas:
+                Refleja la precisión acústica de las {answers.length} respuestas filtradas:
               </span>
             </div>
           </div>
@@ -242,7 +253,7 @@ function AnalyticsChartsComponent({
                   fontFamily="monospace"
                   fontWeight="bold"
                 >
-                  85%
+                  {MASTERY_THRESHOLDS.MASTERED_MIN}%
                 </text>
 
                 <line
@@ -408,7 +419,201 @@ function AnalyticsChartsComponent({
         )}
       </div>
 
-      {/* 4. HISTOGRAMA DE SESGOS Y CARGA CONTEXTUAL */}
+      {/* 4. CRONOMETRÍA DE LATENCIA POR NOTA Y POR OCTAVA */}
+      <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-4 shadow-2xl">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/80 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⚡</span>
+            <div>
+              <span className="font-bold text-sky-400 uppercase tracking-wider text-sm block">
+                Velocidad de Acceso Mental por Tono y por Octava (Latencia TR en Aciertos)
+              </span>
+              <span className="text-[10px] text-zinc-500 font-sans">
+                Mide cuántos milisegundos tarda tu cerebro en accionar la tecla exacta tras escuchar
+                el estímulo:
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs font-sans">
+            <span className="text-emerald-400 font-semibold">● &lt;1.4s (Reflejo)</span>
+            <span className="text-amber-400 font-semibold">● 1.4s-2.8s (Deducción)</span>
+            <span className="text-rose-400 font-semibold">● &gt;2.8s (Duda)</span>
+          </div>
+        </div>
+
+        {latencyAnalysis.notes.length === 0 ? (
+          <div className="text-center py-6 text-zinc-600 text-xs italic">
+            Sin respuestas de aciertos registradas para calcular la cronometría por nota.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Gráfico de Barras de Latencia por Nota */}
+            <div className="h-44 w-full relative pt-2 pb-6">
+              <svg
+                className="w-full h-full overflow-visible"
+                viewBox="0 0 900 130"
+                preserveAspectRatio="none"
+              >
+                {/* Líneas Guía Horizontales */}
+                <line x1="40" y1="10" x2="880" y2="10" stroke="#27272a" strokeWidth="1" />
+                <text x="5" y="13" fill="#71717a" fontSize="9" fontFamily="monospace">
+                  {(maxNoteLatencyMs / 1000).toFixed(1)}s
+                </text>
+
+                {COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS <= maxNoteLatencyMs && (
+                  <>
+                    <line
+                      x1="40"
+                      y1={115 - (COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS / maxNoteLatencyMs) * 105}
+                      x2="880"
+                      y2={115 - (COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS / maxNoteLatencyMs) * 105}
+                      stroke="#10b981"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                      opacity="0.6"
+                    />
+                    <text
+                      x="5"
+                      y={118 - (COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS / maxNoteLatencyMs) * 105}
+                      fill="#34d399"
+                      fontSize="9"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                    >
+                      1.4s
+                    </text>
+                  </>
+                )}
+
+                <line x1="40" y1="115" x2="880" y2="115" stroke="#3f3f46" strokeWidth="1" />
+                <text x="18" y="118" fill="#71717a" fontSize="9" fontFamily="monospace">
+                  0s
+                </text>
+
+                {(() => {
+                  const xStart = 50
+                  const xEnd = 870
+                  const yBottom = 115
+                  const totalBars = latencyAnalysis.notes.length
+                  const barWidth = Math.max(12, Math.min(36, (xEnd - xStart) / totalBars - 6))
+
+                  return latencyAnalysis.notes.map((stat, idx) => {
+                    const x =
+                      xStart + (idx / Math.max(1, totalBars - 1)) * (xEnd - xStart - barWidth)
+                    const height =
+                      (Math.min(maxNoteLatencyMs, stat.avgLatencyMs) / maxNoteLatencyMs) * 105
+                    const y = yBottom - height
+
+                    const color =
+                      stat.avgLatencyMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS
+                        ? '#10b981'
+                        : stat.avgLatencyMs <= COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_MAX_MS
+                          ? '#f59e0b'
+                          : '#f43f5e'
+
+                    return (
+                      <g
+                        key={stat.noteNumber}
+                        className="cursor-pointer group"
+                        onMouseEnter={() => setHoveredNoteLatency(stat)}
+                        onMouseLeave={() => setHoveredNoteLatency(null)}
+                      >
+                        <rect
+                          x={x}
+                          y={y}
+                          width={barWidth}
+                          height={height}
+                          fill={color}
+                          rx="4"
+                          className="transition-all duration-200 group-hover:brightness-125"
+                        />
+                        <text
+                          x={x + barWidth / 2}
+                          y={yBottom + 14}
+                          fill="#a1a1aa"
+                          fontSize="9"
+                          textAnchor="middle"
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                        >
+                          {stat.noteName}
+                        </text>
+                      </g>
+                    )
+                  })
+                })()}
+              </svg>
+
+              {hoveredNoteLatency && (
+                <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-full p-2.5 bg-zinc-950 border border-sky-400 rounded-xl shadow-2xl text-xs font-mono space-y-1 z-30 pointer-events-none whitespace-nowrap">
+                  <div className="font-bold text-zinc-100 flex justify-between gap-4 border-b border-zinc-800 pb-1">
+                    <span>
+                      Tono: <strong className="text-sky-300">{hoveredNoteLatency.noteName}</strong>
+                    </span>
+                    <span>
+                      Octava: <strong>{hoveredNoteLatency.octave}</strong>
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span>
+                      Latencia Media TR:{' '}
+                      <strong className="text-emerald-400 font-bold">
+                        {(hoveredNoteLatency.avgLatencyMs / 1000).toFixed(2)}s
+                      </strong>
+                    </span>
+                    <span>
+                      Precisión: <strong>{hoveredNoteLatency.accuracyPercentage}%</strong>
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400">
+                    ⚡ Tasa de Reflejo Inmediato:{' '}
+                    <strong>{hoveredNoteLatency.fastReflexPercent}%</strong> (
+                    {hoveredNoteLatency.correctAttempts} aciertos de{' '}
+                    {hoveredNoteLatency.totalAttempts})
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Comparativa por Octava / Registro */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 font-mono text-xs">
+              {latencyAnalysis.octaves.map((oct) => {
+                const isFastest = latencyAnalysis.fastestOctave?.octave === oct.octave
+                return (
+                  <div
+                    key={oct.octave}
+                    className={`p-3 rounded-xl border flex justify-between items-center ${
+                      isFastest
+                        ? 'bg-emerald-950/30 border-emerald-500/60 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                        : 'bg-zinc-900/80 border-zinc-800 text-zinc-300'
+                    }`}
+                  >
+                    <div>
+                      <span className="font-bold block text-xs">{oct.octaveLabel}</span>
+                      <span className="text-[10px] text-zinc-500 font-sans mt-0.5 block">
+                        {oct.totalNotes} notas • {oct.totalAttempts} ensayos
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <strong className="text-sm block">
+                        {oct.avgLatencyMs > 0 ? `${(oct.avgLatencyMs / 1000).toFixed(2)}s` : '-'}
+                      </strong>
+                      {isFastest && (
+                        <span className="text-[9px] font-bold text-emerald-400 uppercase">
+                          ⚡ Más Rápida
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 5. HISTOGRAMA DE SESGOS Y CARGA CONTEXTUAL */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl">
           <div className="flex justify-between items-center text-xs">

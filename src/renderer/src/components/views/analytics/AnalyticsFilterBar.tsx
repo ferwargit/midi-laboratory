@@ -85,12 +85,14 @@ export function AnalyticsFilterBar({
       ? INTERVAL_PRESETS.map((p) => ({ id: p.id, name: p.name }))
       : modeFilter === 'sequences'
         ? SEQUENCE_PRESETS.map((p) => ({ id: p.id, name: p.name }))
-        : EXERCISE_PRESETS.map((p) => ({ id: p.id, name: p.name }))
+        : modeFilter === 'repertoire'
+          ? [{ id: 'partitura_1', name: 'Partitura 1 (Félix Dumont)' }]
+          : EXERCISE_PRESETS.map((p) => ({ id: p.id, name: p.name }))
 
   return (
     <>
-      <div className="bg-zinc-900/80 backdrop-blur-2xl p-3.5 rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl font-mono text-xs">
-        {/* FILA 1: MODALIDAD PRINCIPAL + GUÍA PSICOACÚSTICA + ESTADO GPU */}
+      <div className="bg-zinc-900/80 backdrop-blur-2xl p-3.5 rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl font-mono text-xs w-full">
+        {/* FILA 1: MODALIDAD PRINCIPAL (INCLUYE REPERTORIO) + GUÍA PSICOACÚSTICA + ESTADO GPU */}
         <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-zinc-500 text-xs uppercase font-bold px-1">Modalidad:</span>
@@ -99,7 +101,8 @@ export function AnalyticsFilterBar({
                 ['all', 'Global'],
                 ['single_note', 'Notas'],
                 ['intervals', 'Intervalos'],
-                ['sequences', 'Secuencias']
+                ['sequences', 'Secuencias'],
+                ['repertoire', 'Repertorio']
               ] as [AnalyticsModeFilter, string][]
             ).map(([val, label]) => (
               <button
@@ -161,9 +164,9 @@ export function AnalyticsFilterBar({
           <select
             value={selectedPreset}
             onChange={(e): void => onPresetChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
-            <option value="all">🎵 Todos los Presets</option>
+            <option value="all">🎵 Todos los Presets / Obras</option>
             {dynamicPresets.map((p) => (
               <option key={p.id} value={p.name}>
                 {p.name}
@@ -175,7 +178,7 @@ export function AnalyticsFilterBar({
           <select
             value={selectedInstrument}
             onChange={(e): void => onInstrumentChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
             <option value="all">🎹 Todos los Timbres</option>
             {INSTRUMENT_CATALOG.map((inst) => (
@@ -188,7 +191,7 @@ export function AnalyticsFilterBar({
           <select
             value={selectedStrategy}
             onChange={(e): void => onStrategyChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
           >
             <option value="all">🧠 Todos los Motores</option>
             {AVAILABLE_STRATEGIES.map((st) => (
@@ -199,9 +202,8 @@ export function AnalyticsFilterBar({
           </select>
         </div>
 
-        {/* FILA 3: FORMATO (<optgroup>), CARGA, MAESTRÍA, ENTRADA, SESGO, DESCANSO ISI Y LIMPIEZA */}
+        {/* FILA 3: FORMATO, CARGA, MAESTRÍA, ENTRADA, SESGO, DESCANSO ISI Y LIMPIEZA */}
         <div className="grid grid-cols-2 sm:grid-cols-7 gap-2 pt-1 text-xs">
-          {/* 1. Formato con subgrupos de tiempo */}
           <select
             value={selectedFormat}
             onChange={(e): void => onFormatChange(e.target.value)}
@@ -226,7 +228,6 @@ export function AnalyticsFilterBar({
             </optgroup>
           </select>
 
-          {/* 2. Carga Contextual / Tamaño de Pool */}
           <select
             value={selectedPoolSize}
             onChange={(e): void => onPoolSizeChange(e.target.value)}
@@ -242,7 +243,6 @@ export function AnalyticsFilterBar({
             <option value="13">13 notas (3.70 bits)</option>
           </select>
 
-          {/* 3. Nivel de Dominio */}
           <select
             value={selectedMastery}
             onChange={(e): void => onMasteryChange(e.target.value as AnalyticsMasteryFilter)}
@@ -256,7 +256,6 @@ export function AnalyticsFilterBar({
             <option value="critical">🔴 Críticas (&lt;{MASTERY_THRESHOLDS.CRITICAL_MAX}%)</option>
           </select>
 
-          {/* 4. Fuente de Entrada */}
           <select
             value={selectedInputSource}
             onChange={(e): void =>
@@ -269,7 +268,6 @@ export function AnalyticsFilterBar({
             <option value="virtual">🖱️ Ratón Virtual</option>
           </select>
 
-          {/* 5. Sesgo Tonal */}
           <select
             value={selectedBias}
             onChange={(e): void => onBiasChange(e.target.value as typeof selectedBias)}
@@ -281,7 +279,6 @@ export function AnalyticsFilterBar({
             <option value="balanced">● Neutro / Equilibrado</option>
           </select>
 
-          {/* 6. Descanso Inter-Sesión (ISI) */}
           <select
             value={selectedIsi}
             onChange={(e): void => onIsiChange(e.target.value as typeof selectedIsi)}
@@ -293,7 +290,6 @@ export function AnalyticsFilterBar({
             <option value="spaced">📅 Espaciada Larga (&gt; 48h)</option>
           </select>
 
-          {/* 7. Botón Limpiar */}
           <button
             type="button"
             disabled={!hasActiveFilters}

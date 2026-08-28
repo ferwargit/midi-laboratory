@@ -18,7 +18,7 @@ export const MASTERY_THRESHOLDS = {
   CRITICAL_MAX: 50
 } as const
 
-export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences'
+export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences' | 'repertoire'
 export type AnalyticsMasteryFilter = 'all' | 'mastered' | 'learning' | 'critical'
 
 export interface AnalyticsFilterOptions {
@@ -114,7 +114,6 @@ export interface SessionTimelineAnalysis {
   fatigueDetected: boolean
   fastReflexCount: number
   activeNotes: number[]
-  // 🔬 Nuevas variables de autorregulación y metacognición
   totalPreAnswerListens: number
   totalPostErrorListens: number
   firstListenConfidencePercent: number
@@ -153,6 +152,33 @@ export interface ConfusionMatrix2DData {
   grid: PitchClassConfusionCell[][]
   totalTestsPerPitchClass: number[]
   maxOffDiagonalCount: number
+}
+
+export interface PerNoteLatencyStat {
+  noteNumber: number
+  noteName: string
+  octave: number
+  totalAttempts: number
+  correctAttempts: number
+  accuracyPercentage: number
+  avgLatencyMs: number
+  fastReflexPercent: number
+}
+
+export interface OctaveLatencySummary {
+  octave: number
+  octaveLabel: string
+  avgLatencyMs: number
+  totalNotes: number
+  totalAttempts: number
+}
+
+export interface PerNoteLatencyAnalysis {
+  notes: PerNoteLatencyStat[]
+  octaves: OctaveLatencySummary[]
+  fastestNote: PerNoteLatencyStat | null
+  slowestNote: PerNoteLatencyStat | null
+  fastestOctave: OctaveLatencySummary | null
 }
 
 export interface LongitudinalComparison {
@@ -276,8 +302,20 @@ function resolveNominalPoolSize(session: DbSessionRecord, empiricalUniqueCount: 
   return Math.max(2, empiricalUniqueCount)
 }
 
+export function isRepertoireSession(s: DbSessionRecord): boolean {
+  if (s.targetMode) return s.targetMode === 'repertoire'
+  const name = (s.presetName || '').toLowerCase()
+  return (
+    s.strategyId.includes('repertoire') ||
+    s.instrumentId.includes('repertoire') ||
+    name.includes('partitura') ||
+    name.includes('repertorio')
+  )
+}
+
 export function isSequenceSession(s: DbSessionRecord): boolean {
   if (s.targetMode) return s.targetMode === 'sequences'
+  if (isRepertoireSession(s)) return false
   const name = (s.presetName || '').toLowerCase()
   return (
     s.strategyId.includes('sequences') ||
@@ -288,6 +326,7 @@ export function isSequenceSession(s: DbSessionRecord): boolean {
 
 export function isIntervalSession(s: DbSessionRecord): boolean {
   if (s.targetMode) return s.targetMode === 'intervals'
+  if (isRepertoireSession(s)) return false
   const name = (s.presetName || '').toLowerCase()
   return (
     s.strategyId.includes('intervals') ||
@@ -298,7 +337,7 @@ export function isIntervalSession(s: DbSessionRecord): boolean {
 
 export function isSingleNoteSession(s: DbSessionRecord): boolean {
   if (s.targetMode) return s.targetMode === 'single_note'
-  if (isSequenceSession(s) || isIntervalSession(s)) return false
+  if (isSequenceSession(s) || isIntervalSession(s) || isRepertoireSession(s)) return false
   const name = (s.presetName || '').toLowerCase()
   return (
     s.strategyId === 'random' ||
@@ -339,6 +378,120 @@ export function computeNotePerformancesFromAnswers(
   }
 
   return map
+}
+
+/**
+ * Computa la Cronometría de Latencia por Nota y el Desglose por Octava
+ */
+export function computePerNoteLatencyStats(answers: DbAnswerRecord[]): PerNoteLatencyAnalysis {
+  const noteMap = new Map<
+    number,
+    { latencies: number[]; correctCount: number; totalCount: number; fastCount: number }
+  >()
+
+  for (const ans of answers) {
+    if (ans.expectedNote < 0) continue
+
+    if (!noteMap.has(ans.expectedNote)) {
+      noteMap.set(ans.expectedNote, { latencies: [], correctCount: 0, totalCount: 0, fastCount: 0 })
+    }
+
+    const item = noteMap.get(ans.expectedNote)!
+    item.totalCount++
+    if (ans.isCorrect) {
+      item.correctCount++
+      item.latencies.push(ans.responseTimeMs)
+      if (ans.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) {
+        item.fastCount++
+      }
+    }
+  }
+
+  const notesList: PerNoteLatencyStat[] = Array.from(noteMap.entries())
+    .map(([noteNumber, stat]) => {
+      const avgLat =
+        stat.latencies.length > 0
+          ? Math.round(stat.latencies.reduce((a, b) => a + b, 0) / stat.latencies.length)
+          : 0
+      const acc = stat.totalCount > 0 ? Math.round((stat.correctCount / stat.totalCount) * 100) : 0
+      const fastPct =
+        stat.correctCount > 0 ? Math.round((stat.fastCount / stat.correctCount) * 100) : 0
+      const octave = Math.floor(noteNumber / 12) - 1
+
+      return {
+        noteNumber,
+        noteName: midiNoteToName(noteNumber),
+        octave,
+        totalAttempts: stat.totalCount,
+        correctAttempts: stat.correctCount,
+        accuracyPercentage: acc,
+        avgLatencyMs: avgLat,
+        fastReflexPercent: fastPct
+      }
+    })
+    .sort((a, b) => a.noteNumber - b.noteNumber)
+
+  // Resumen por Octava
+  const octaveMap = new Map<
+    number,
+    { sumLat: number; countLat: number; totalAttempts: number; noteCount: number }
+  >()
+
+  notesList.forEach((n) => {
+    if (!octaveMap.has(n.octave)) {
+      octaveMap.set(n.octave, { sumLat: 0, countLat: 0, totalAttempts: 0, noteCount: 0 })
+    }
+    const o = octaveMap.get(n.octave)!
+    o.noteCount++
+    o.totalAttempts += n.totalAttempts
+    if (n.avgLatencyMs > 0) {
+      o.sumLat += n.avgLatencyMs
+      o.countLat++
+    }
+  })
+
+  const octaves: OctaveLatencySummary[] = Array.from(octaveMap.entries())
+    .map(([octave, data]) => {
+      const label =
+        octave === 3
+          ? 'Octava 3 (Grave: C3-B3)'
+          : octave === 4
+            ? 'Octava 4 (Central: C4-B4)'
+            : `Octava ${octave} (Aguda)`
+      const avg = data.countLat > 0 ? Math.round(data.sumLat / data.countLat) : 0
+      return {
+        octave,
+        octaveLabel: label,
+        avgLatencyMs: avg,
+        totalNotes: data.noteCount,
+        totalAttempts: data.totalAttempts
+      }
+    })
+    .sort((a, b) => a.octave - b.octave)
+
+  const activeValidNotes = notesList.filter((n) => n.correctAttempts > 0 && n.avgLatencyMs > 0)
+  const fastestNote =
+    activeValidNotes.length > 0
+      ? [...activeValidNotes].sort((a, b) => a.avgLatencyMs - b.avgLatencyMs)[0]
+      : null
+  const slowestNote =
+    activeValidNotes.length > 0
+      ? [...activeValidNotes].sort((a, b) => b.avgLatencyMs - a.avgLatencyMs)[0]
+      : null
+
+  const activeValidOctaves = octaves.filter((o) => o.avgLatencyMs > 0)
+  const fastestOctave =
+    activeValidOctaves.length > 0
+      ? [...activeValidOctaves].sort((a, b) => a.avgLatencyMs - b.avgLatencyMs)[0]
+      : null
+
+  return {
+    notes: notesList,
+    octaves,
+    fastestNote,
+    slowestNote,
+    fastestOctave
+  }
 }
 
 export function analyzeSessionTimeline(
@@ -451,7 +604,6 @@ export function analyzeSessionTimeline(
     errorCount > 0 ? Math.round((repairedErrorsCount / errorCount) * 100) : 100
   const avgPostErrorDwellTimeMs = errorCount > 0 ? Math.round(postErrorDwellSum / errorCount) : 0
 
-  // Eficacia de la reparación: ¿acertó la siguiente vez que apareció esa misma nota?
   let subsequentCorrectAfterError = 0
   let subsequentTotalAfterError = 0
 
@@ -476,7 +628,7 @@ export function analyzeSessionTimeline(
     questions,
     totalQuestions: total,
     correctCount,
-    errorCount,
+    errorCount: total - correctCount,
     overallAccuracy: total > 0 ? Math.round((correctCount / total) * 100) : 0,
     avgLatencyMs: total > 0 ? Math.round(totalLatency / total) : 0,
     warmUpErrorsCount,
@@ -548,10 +700,11 @@ export function filterSessionsAdvanced(
   filters: AnalyticsFilterOptions
 ): DbSessionRecord[] {
   return sessions.filter((s) => {
-    // 1. Modalidad
+    // 1. Modalidad Estricta
     if (filters.mode === 'single_note' && !isSingleNoteSession(s)) return false
     if (filters.mode === 'intervals' && !isIntervalSession(s)) return false
     if (filters.mode === 'sequences' && !isSequenceSession(s)) return false
+    if (filters.mode === 'repertoire' && !isRepertoireSession(s)) return false
 
     // 2. Instrumento
     if (

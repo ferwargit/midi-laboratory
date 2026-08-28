@@ -43,7 +43,8 @@ describe('s3-store-segmentation - Segmentación de Responsabilidades en Stores',
         all: null,
         single_note: null,
         intervals: null,
-        sequences: null
+        sequences: null,
+        repertoire: null
       },
       isAiAnalyzing: false,
       isLmStudioOnline: false
