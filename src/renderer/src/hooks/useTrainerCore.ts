@@ -57,6 +57,8 @@ export interface UseTrainerCoreReturn<TResult> {
   saveError: string | null
   clearSaveError: () => void
   generateQuestionToken: (prefix?: string) => string
+  recordPreAnswerRepeat: () => void
+  recordPostErrorRepeat: () => void
   startCoreSession: (
     options?: CoreStartSessionOptions,
     onTriggerFirstStimulus?: () => void
@@ -114,6 +116,11 @@ export function useTrainerCore<TResult>({
   const questionTokenRef = useRef<string | null>(null)
   const isAdvancingRef = useRef<boolean>(false)
   const isWaitingAnswerRef = useRef<boolean>(false)
+
+  // 🔬 Tracking Metacognitivo
+  const preAnswerListensRef = useRef<number>(1)
+  const postErrorListensRef = useRef<number>(0)
+  const errorPauseStartTimeRef = useRef<number>(0)
 
   const sessionLimitTypeRef = useRef<SessionLimitType>(defaultLimitType)
   const sessionQuestionsCountRef = useRef<number>(defaultQuestionsCount)
@@ -174,6 +181,14 @@ export function useTrainerCore<TResult>({
     setSaveError(null)
   }, [])
 
+  const recordPreAnswerRepeat = useCallback((): void => {
+    preAnswerListensRef.current += 1
+  }, [])
+
+  const recordPostErrorRepeat = useCallback((): void => {
+    postErrorListensRef.current += 1
+  }, [])
+
   const cleanupTimers = useCallback((): void => {
     if (autoAdvanceTimerRef.current) {
       clearTimeout(autoAdvanceTimerRef.current)
@@ -194,6 +209,9 @@ export function useTrainerCore<TResult>({
   const generateQuestionToken = useCallback((prefix = 'token'): string => {
     const token = `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
     questionTokenRef.current = token
+    preAnswerListensRef.current = 1
+    postErrorListensRef.current = 0
+    errorPauseStartTimeRef.current = 0
     return token
   }, [])
 
@@ -203,6 +221,15 @@ export function useTrainerCore<TResult>({
 
     finalizingSessionsRef.current.add(currentSessionId)
     cleanupTimers()
+
+    // Consolidar tiempo de reflexión de la última respuesta si fue error
+    if (answersBufferRef.current.length > 0) {
+      const lastAns = answersBufferRef.current[answersBufferRef.current.length - 1]
+      if (!lastAns.isCorrect && errorPauseStartTimeRef.current > 0) {
+        lastAns.postErrorListens = postErrorListensRef.current
+        lastAns.postErrorDwellTimeMs = Math.round(Date.now() - errorPauseStartTimeRef.current)
+      }
+    }
 
     questionTokenRef.current = null
     isAdvancingRef.current = false
@@ -290,6 +317,10 @@ export function useTrainerCore<TResult>({
 
       answersBufferRef.current = []
       historyBufferRef.current = []
+      preAnswerListensRef.current = 1
+      postErrorListensRef.current = 0
+      errorPauseStartTimeRef.current = 0
+
       setSessionHistoryState([])
       setLastResultState(null)
       setSessionElapsedSecondsState(0)
@@ -358,6 +389,15 @@ export function useTrainerCore<TResult>({
         autoAdvanceTimerRef.current = null
       }
 
+      // Consolidar tiempo de reflexión y re-escuchas en la respuesta previa
+      if (answersBufferRef.current.length > 0) {
+        const lastAns = answersBufferRef.current[answersBufferRef.current.length - 1]
+        if (!lastAns.isCorrect && errorPauseStartTimeRef.current > 0) {
+          lastAns.postErrorListens = postErrorListensRef.current
+          lastAns.postErrorDwellTimeMs = Math.round(Date.now() - errorPauseStartTimeRef.current)
+        }
+      }
+
       const isMasteryCompleted =
         sessionLimitTypeRef.current === 'mastery' &&
         (onCustomCompletionCheck
@@ -375,6 +415,9 @@ export function useTrainerCore<TResult>({
       } else {
         currentQuestionIndexRef.current += 1
         setCurrentQuestionIndexState((prev) => prev + 1)
+        preAnswerListensRef.current = 1
+        postErrorListensRef.current = 0
+        errorPauseStartTimeRef.current = 0
         onTriggerNextStimulus()
         isAdvancingRef.current = false
       }
@@ -391,6 +434,11 @@ export function useTrainerCore<TResult>({
     ): void => {
       if (!isSessionActiveRef.current || !questionTokenRef.current) return
 
+      // Estampar telemetría de escuchas previas
+      answerRecord.preAnswerListens = preAnswerListensRef.current
+      answerRecord.postErrorListens = 0
+      answerRecord.postErrorDwellTimeMs = 0
+
       answersBufferRef.current.push(answerRecord)
       historyBufferRef.current.push(result)
 
@@ -403,6 +451,10 @@ export function useTrainerCore<TResult>({
 
       if (shouldWaitManual) {
         setIsWaitingManualAdvanceState(true)
+        if (!isCorrectForSmartAdvance) {
+          errorPauseStartTimeRef.current = Date.now()
+          postErrorListensRef.current = 0
+        }
       } else {
         const delay = mode === 'auto_slow' ? autoAdvanceSlowDelayMs : autoAdvanceFastDelayMs
         const currentId = sessionIdRef.current
@@ -481,6 +533,8 @@ export function useTrainerCore<TResult>({
     saveError,
     clearSaveError,
     generateQuestionToken,
+    recordPreAnswerRepeat,
+    recordPostErrorRepeat,
     startCoreSession,
     advanceToNextQuestion,
     recordAnswer,

@@ -327,9 +327,14 @@ export function useSingleNoteTrainer({
     const expected = currentExpectedNoteRef.current
     const decision = lastDecisionRef.current
     if (expected !== null && decision !== null) {
+      if (core.isWaitingAnswer) {
+        core.recordPreAnswerRepeat()
+      } else if (core.isWaitingManualAdvance) {
+        core.recordPostErrorRepeat()
+      }
       onPlayStimulus(expected, decision)
     }
-  }, [onPlayStimulus])
+  }, [core, onPlayStimulus])
 
   const handleUserNotePlayed = useCallback(
     (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {

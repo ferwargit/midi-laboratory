@@ -29,6 +29,10 @@ export interface DbAnswerRecord {
   reasonTelemetry: string
   createdAt: string
   inputSource?: 'midi_hardware' | 'virtual_ui'
+  // 🔬 Telemetría Metacognitiva de Escucha y Reparación Post-Error
+  preAnswerListens?: number
+  postErrorListens?: number
+  postErrorDwellTimeMs?: number
 }
 
 export interface DbAiReportRecord {
@@ -64,7 +68,6 @@ export interface DatabaseSummary {
   totalDurationSeconds: number
 }
 
-// NUEVO: Respaldo estructurado e importación
 export interface DatabaseBackupPayload {
   version: number
   exportedAt: string

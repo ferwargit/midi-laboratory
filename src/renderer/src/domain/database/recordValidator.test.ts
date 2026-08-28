@@ -147,4 +147,18 @@ describe('recordValidator - Validación Pura de Integridad de Registros', () => 
       isValidSessionRecord({ ...validSession, targetMode: 'invalido' as unknown as 'single_note' })
     ).toBe(false)
   })
+
+  it('isValidAnswerRecord debe validar las nuevas propiedades de telemetría metacognitiva', () => {
+    expect(
+      isValidAnswerRecord({
+        ...validAnswer,
+        preAnswerListens: 2,
+        postErrorListens: 1,
+        postErrorDwellTimeMs: 2500
+      })
+    ).toBe(true)
+    expect(isValidAnswerRecord({ ...validAnswer, preAnswerListens: -1 })).toBe(false)
+    expect(isValidAnswerRecord({ ...validAnswer, postErrorListens: -2 })).toBe(false)
+    expect(isValidAnswerRecord({ ...validAnswer, postErrorDwellTimeMs: -500 })).toBe(false)
+  })
 })

@@ -145,7 +145,7 @@ describe('SessionsTableTab - Interacciones CRUD, Detalle, Aislamiento y Zoom', (
     })
 
     expect(screen.getByText('Cerrar Inspector')).toBeDefined()
-    expect(screen.getByText(/Foco Inicial \(Warm-Up\)/i)).toBeDefined()
+    expect(screen.getByText(/Foco Inicial/i)).toBeDefined()
   })
 
   it('al marcar 2 casillas debe aparecer el botón de Aislar en Analítica y llamar a onIsolateSessions', async () => {

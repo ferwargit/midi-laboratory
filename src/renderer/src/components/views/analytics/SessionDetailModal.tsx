@@ -31,6 +31,9 @@ interface HoveredPointInfo {
   timeMs: number
   source?: string
   isCorrect: boolean
+  preListens: number
+  postListens: number
+  dwellTimeMs: number
 }
 
 export function SessionDetailModal({
@@ -58,7 +61,6 @@ export function SessionDetailModal({
 
   if (!isOpen || !session) return null
 
-  // Estado de respaldo si la sesión no contiene respuestas individuales registradas
   if (!analysis) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
@@ -94,7 +96,6 @@ export function SessionDetailModal({
     onClose()
   }
 
-  // Cálculo de paso inteligente en el eje X para evitar empaste de números
   const tickStep = totalQ <= 20 ? 1 : totalQ <= 40 ? 2 : totalQ <= 70 ? 5 : 10
 
   return (
@@ -157,7 +158,7 @@ export function SessionDetailModal({
 
         {/* 2. CUADRÍCULA PRINCIPAL: GRÁFICO PANORÁMICO (IZQ) + SIDEBAR DIAGNÓSTICO (DER) */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* LADO IZQUIERDO: LÍNEA DE TIEMPO PANORÁMICA CON MAPEO DE ZONAS 1, 2 Y 3 */}
+          {/* LADO IZQUIERDO: LÍNEA DE TIEMPO PANORÁMICA */}
           <div className="lg:col-span-3 p-4 md:p-5 bg-zinc-950/90 rounded-2xl border border-zinc-800 space-y-3 relative font-mono text-xs shadow-xl">
             <div className="flex justify-between items-center text-xs">
               <span className="font-bold text-sky-400 uppercase tracking-wider text-sm flex items-center gap-2">
@@ -176,6 +177,9 @@ export function SessionDetailModal({
                 </span>
                 <span className="flex items-center gap-1.5 text-amber-400 font-semibold">
                   <span className="w-3 h-3 rounded-full bg-amber-400 inline-block" /> -st (Grave)
+                </span>
+                <span className="flex items-center gap-1.5 text-sky-300 font-semibold">
+                  👂 Re-escucha Post-Error
                 </span>
               </div>
             </div>
@@ -271,7 +275,7 @@ export function SessionDetailModal({
                         x2={xEnd + 10}
                         y2={yTop}
                         stroke="#27272a"
-                        strokeWidth={1}
+                        strokeWidth="1"
                       />
                       <text x="5" y={yTop + 3} fill="#71717a" fontSize={9} fontFamily="monospace">
                         {(maxTime / 1000).toFixed(1)}s
@@ -286,7 +290,7 @@ export function SessionDetailModal({
                             x2={xEnd + 10}
                             y2={getY(COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS)}
                             stroke="#10b981"
-                            strokeWidth={1.5}
+                            strokeWidth="1.5"
                             strokeDasharray="4 4"
                             opacity="0.6"
                           />
@@ -309,7 +313,7 @@ export function SessionDetailModal({
                         x2={xEnd + 10}
                         y2={yBottom}
                         stroke="#3f3f46"
-                        strokeWidth={1}
+                        strokeWidth="1"
                       />
                       <text
                         x="18"
@@ -341,8 +345,8 @@ export function SessionDetailModal({
                               d={movingAvgPath}
                               fill="none"
                               stroke="#38bdf8"
-                              strokeWidth={2}
-                              opacity={0.55}
+                              strokeWidth="2"
+                              opacity="0.55"
                             />
 
                             {/* Puntos y Marcadores */}
@@ -353,10 +357,9 @@ export function SessionDetailModal({
                                   ? '#c084fc'
                                   : '#f59e0b'
 
-                              // Detección visual de Factor 3: Desaceleración Post-Error (PES)
                               const isPostErrorQuestion =
                                 p.idx > 0 && !questions[p.idx - 1].isCorrect
-
+                              const hasPostErrorListens = p.q.postErrorListens > 0
                               const showTick =
                                 p.q.questionIndex === 1 ||
                                 p.q.questionIndex === totalQ ||
@@ -370,12 +373,27 @@ export function SessionDetailModal({
                                     x2={p.x}
                                     y2={yBottom}
                                     stroke={color}
-                                    strokeWidth={1}
-                                    opacity={0.25}
+                                    strokeWidth="1"
+                                    opacity="0.25"
                                   />
 
+                                  {/* Marcador de Re-escucha Post-Error (👂 xN) */}
+                                  {hasPostErrorListens && (
+                                    <text
+                                      x={p.x}
+                                      y={p.y - 12}
+                                      fill="#38bdf8"
+                                      fontSize="9"
+                                      textAnchor="middle"
+                                      fontFamily="sans-serif"
+                                      fontWeight="bold"
+                                    >
+                                      👂x{p.q.postErrorListens}
+                                    </text>
+                                  )}
+
                                   {/* Marcador de Factor 3 (PES) */}
-                                  {isPostErrorQuestion && (
+                                  {isPostErrorQuestion && !hasPostErrorListens && (
                                     <circle
                                       cx={p.x}
                                       cy={p.y - 10}
@@ -405,19 +423,21 @@ export function SessionDetailModal({
                                         distance: p.q.semitoneDistance,
                                         timeMs: p.q.responseTimeMs,
                                         source: p.q.inputSource,
-                                        isCorrect: p.q.isCorrect
+                                        isCorrect: p.q.isCorrect,
+                                        preListens: p.q.preAnswerListens,
+                                        postListens: p.q.postErrorListens,
+                                        dwellTimeMs: p.q.postErrorDwellTimeMs
                                       })
                                     }
                                     onMouseLeave={(): void => setHoveredPoint(null)}
                                   />
 
-                                  {/* Ticks limpios sin empaste */}
                                   {showTick && (
                                     <text
                                       x={p.x}
                                       y={yBottom + 16}
                                       fill="#a1a1aa"
-                                      fontSize={10}
+                                      fontSize="10"
                                       textAnchor="middle"
                                       fontFamily="monospace"
                                       fontWeight="bold"
@@ -436,7 +456,7 @@ export function SessionDetailModal({
                 })()}
               </svg>
 
-              {/* TOOLTIP FLOTANTE */}
+              {/* TOOLTIP FLOTANTE CON TELEMETRÍA METACOGNITIVA */}
               {hoveredPoint && (
                 <div
                   style={{
@@ -477,74 +497,119 @@ export function SessionDetailModal({
                         : `${hoveredPoint.distance > 0 ? `+${hoveredPoint.distance}` : hoveredPoint.distance} st`}
                     </span>
                   </div>
+                  {/* Telemetría de Escuchas */}
+                  <div className="text-[10px] text-zinc-400 border-t border-zinc-800/80 pt-1 flex justify-between gap-3">
+                    <span>
+                      🎧 Escuchas previas: <strong>{hoveredPoint.preListens}</strong>
+                    </span>
+                    {!hoveredPoint.isCorrect && (
+                      <span className="text-sky-300">
+                        👂 Re-escuchas tras fallo: <strong>{hoveredPoint.postListens}</strong> (
+                        {(hoveredPoint.dwellTimeMs / 1000).toFixed(1)}s)
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* LADO DERECHO: SIDEBAR DE AUDITORÍA PSICOACÚSTICA (FACTORES 1, 2 Y 3) */}
-          <div className="space-y-3 font-mono text-xs">
+          {/* LADO DERECHO: SIDEBAR DE AUDITORÍA PSICOACÚSTICA (FACTORES 1, 2, 3 Y 4) */}
+          <div className="space-y-2.5 font-mono text-xs">
             {/* Factor 1 */}
             <div
-              className={`p-3.5 rounded-2xl border space-y-1.5 ${
+              className={`p-3 rounded-xl border space-y-1 ${
                 analysis.warmUpErrorsCount === 0
-                  ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                  ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300'
                   : 'bg-amber-950/30 border-amber-500/50 text-amber-300'
               }`}
             >
               <div className="flex justify-between items-center">
-                <strong className="text-xs uppercase font-bold tracking-wider">
+                <strong className="text-[11px] uppercase font-bold">
                   1. Foco Inicial (Warm-Up):
                 </strong>
-                <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-bold">
+                <span className="px-1.5 py-0.2 rounded bg-black/40 text-[9px] font-bold">
                   Q1 - Q3
                 </span>
               </div>
-              <p className="text-xs font-sans leading-relaxed m-0">
+              <p className="text-[11px] font-sans leading-snug m-0">
                 {analysis.warmUpErrorsCount === 0
-                  ? '✅ 0 fallos al inicio: El cerebro entró en foco de discriminación auditiva inmediato sin titubeos.'
-                  : `⚠️ ${analysis.warmUpErrorsCount} fallo(s) inicial(es): Evidencia aclimatación al timbre antes de entrar en ritmo.`}
+                  ? '✅ 0 fallos al inicio (Concentración auditiva inmediata).'
+                  : `⚠️ ${analysis.warmUpErrorsCount} fallo(s) inicial(es) por aclimatación tímbrica.`}
               </p>
             </div>
 
             {/* Factor 2 */}
             <div
-              className={`p-3.5 rounded-2xl border space-y-1.5 ${
+              className={`p-3 rounded-xl border space-y-1 ${
                 !analysis.fatigueDetected
-                  ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
-                  : 'bg-rose-950/30 border-rose-500/50 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
+                  ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300'
+                  : 'bg-rose-950/30 border-rose-500/50 text-rose-300'
               }`}
             >
               <div className="flex justify-between items-center">
-                <strong className="text-xs uppercase font-bold tracking-wider">
-                  2. Fatiga / Vigilancia:
-                </strong>
-                <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-bold">
+                <strong className="text-[11px] uppercase font-bold">2. Fatiga / Vigilancia:</strong>
+                <span className="px-1.5 py-0.2 rounded bg-black/40 text-[9px] font-bold">
                   2da Mitad
                 </span>
               </div>
-              <p className="text-xs font-sans leading-relaxed m-0">
+              <p className="text-[11px] font-sans leading-snug m-0">
                 {!analysis.fatigueDetected
-                  ? `⚡ Velocidad sostenida: ${(analysis.firstHalfAvgLatencyMs / 1000).toFixed(2)}s ➔ ${(analysis.secondHalfAvgLatencyMs / 1000).toFixed(2)}s sin saturación armónica.`
-                  : `⏳ Fatiga Detectada: La latencia subió a ${(analysis.secondHalfAvgLatencyMs / 1000).toFixed(2)}s (+${analysis.secondHalfAvgLatencyMs - analysis.firstHalfAvgLatencyMs}ms). El oído se saturó de armónicos hacia el final.`}
+                  ? `⚡ Velocidad sostenida (${(analysis.firstHalfAvgLatencyMs / 1000).toFixed(2)}s ➔ ${(analysis.secondHalfAvgLatencyMs / 1000).toFixed(2)}s).`
+                  : `⏳ Fatiga Detectada: Latencia subió +${analysis.secondHalfAvgLatencyMs - analysis.firstHalfAvgLatencyMs}ms en la 2da mitad.`}
               </p>
             </div>
 
             {/* Factor 3 */}
-            <div className="p-3.5 rounded-2xl border bg-purple-950/30 border-purple-500/50 text-purple-300 space-y-1.5">
+            <div className="p-3 rounded-xl border bg-purple-950/30 border-purple-500/50 text-purple-300 space-y-1">
               <div className="flex justify-between items-center">
-                <strong className="text-xs uppercase font-bold tracking-wider">
-                  3. Post-Error Slowing (PES):
+                <strong className="text-[11px] uppercase font-bold">3. Post-Error Slowing:</strong>
+                <span className="px-1.5 py-0.2 rounded bg-black/40 text-[9px] font-bold">PES</span>
+              </div>
+              <p className="text-[11px] font-sans leading-snug m-0">
+                {analysis.postErrorSlowingAvgDeltaMs !== null
+                  ? `${analysis.postErrorSlowingAvgDeltaMs > 0 ? `+${analysis.postErrorSlowingAvgDeltaMs}` : analysis.postErrorSlowingAvgDeltaMs}ms de pausa tras fallar (Impacto metacognitivo).`
+                  : '🌟 0 fallos en toda la sesión.'}
+              </p>
+            </div>
+
+            {/* Factor 4 (NUEVO): Conducta Metacognitiva de Reparación (ERI) */}
+            <div
+              className={`p-3 rounded-xl border space-y-1.5 ${
+                analysis.errorRepairRatePercent >= 75
+                  ? 'bg-sky-950/40 border-sky-500/60 text-sky-200'
+                  : analysis.errorRepairRatePercent >= 40
+                    ? 'bg-amber-950/30 border-amber-500/50 text-amber-300'
+                    : 'bg-rose-950/30 border-rose-500/50 text-rose-300'
+              }`}
+            >
+              <div className="flex justify-between items-center">
+                <strong className="text-[11px] uppercase font-bold">
+                  4. Reparación Post-Error:
                 </strong>
-                <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-bold">
-                  Impacto
+                <span className="px-1.5 py-0.2 rounded bg-sky-900/60 text-[9px] font-bold">
+                  ERI: {analysis.errorRepairRatePercent}%
                 </span>
               </div>
-              <p className="text-xs font-sans leading-relaxed m-0">
-                {analysis.postErrorSlowingAvgDeltaMs !== null
-                  ? `${analysis.postErrorSlowingAvgDeltaMs > 0 ? `+${analysis.postErrorSlowingAvgDeltaMs}` : analysis.postErrorSlowingAvgDeltaMs}ms de pausa tras fallar una nota. Refleja procesamiento metacognitivo para no repetir el error.`
-                  : '🌟 0 fallos: No hubo interrupciones de flujo en toda la sesión.'}
-              </p>
+              <div className="text-[11px] font-sans space-y-0.5 leading-snug">
+                <div>
+                  • Re-escuchaste: <strong>{analysis.totalPostErrorListens} veces</strong> en{' '}
+                  {analysis.errorCount} fallos.
+                </div>
+                <div>
+                  • Certeza 1ª Escucha: <strong>{analysis.firstListenConfidencePercent}%</strong>
+                </div>
+                <div>
+                  • Pausa media de análisis:{' '}
+                  <strong>{(analysis.avgPostErrorDwellTimeMs / 1000).toFixed(1)}s</strong>
+                </div>
+                {analysis.repairEffectivenessPercent !== null && (
+                  <div className="text-emerald-300 pt-0.5 font-semibold">
+                    💡 Efectividad de recuperación: {analysis.repairEffectivenessPercent}% acierto
+                    al reaparecer la nota.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -572,7 +637,7 @@ export function SessionDetailModal({
             />
           </div>
 
-          {/* Tabla Desglosada Pregunta por Pregunta */}
+          {/* Tabla Desglosada con Telemetría de Escuchas */}
           <div className="p-4 bg-zinc-950/90 rounded-2xl border border-zinc-800 space-y-2 font-mono text-xs">
             <div className="flex justify-between items-center">
               <span className="font-bold text-zinc-200 uppercase">
@@ -585,27 +650,28 @@ export function SessionDetailModal({
 
             <div className="max-h-48 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950/80">
               <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-900/90 text-zinc-400 border-b border-zinc-800 sticky top-0 font-bold">
+                <thead className="bg-zinc-900/90 text-zinc-400 border-b border-zinc-800 sticky top-0 font-bold text-[11px]">
                   <tr>
-                    <th className="py-2 px-3">#</th>
-                    <th className="py-2 px-3">Esperada</th>
-                    <th className="py-2 px-3">Tocaste</th>
-                    <th className="py-2 px-3 text-center">Desviación</th>
-                    <th className="py-2 px-3 text-center">Latencia</th>
-                    <th className="py-2 px-3 text-center">Resultado</th>
+                    <th className="py-2 px-2.5">#</th>
+                    <th className="py-2 px-2.5">Esperada</th>
+                    <th className="py-2 px-2.5">Tocaste</th>
+                    <th className="py-2 px-2 text-center">Desviación</th>
+                    <th className="py-2 px-2 text-center">Latencia</th>
+                    <th className="py-2 px-2 text-center">Escuchas</th>
+                    <th className="py-2 px-2 text-center">Resultado</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-900 text-zinc-300 font-mono">
+                <tbody className="divide-y divide-zinc-900 text-zinc-300 font-mono text-[11px]">
                   {questions.map((q) => (
                     <tr key={q.questionIndex} className="hover:bg-zinc-900/40">
-                      <td className="py-1.5 px-3 text-zinc-500 font-bold">{q.questionIndex}</td>
-                      <td className="py-1.5 px-3 text-sky-300 font-bold">
+                      <td className="py-1.5 px-2.5 text-zinc-500 font-bold">{q.questionIndex}</td>
+                      <td className="py-1.5 px-2.5 text-sky-300 font-bold">
                         {q.expectedName} ({q.expectedNote})
                       </td>
-                      <td className="py-1.5 px-3 text-zinc-200 font-semibold">
+                      <td className="py-1.5 px-2.5 text-zinc-200 font-semibold">
                         {q.playedName} ({q.playedNote})
                       </td>
-                      <td className="py-1.5 px-3 text-center">
+                      <td className="py-1.5 px-2 text-center">
                         <span
                           className={
                             q.semitoneDistance === 0
@@ -620,10 +686,19 @@ export function SessionDetailModal({
                             : `${q.semitoneDistance > 0 ? `+${q.semitoneDistance}` : q.semitoneDistance} st`}
                         </span>
                       </td>
-                      <td className="py-1.5 px-3 text-center font-bold">
+                      <td className="py-1.5 px-2 text-center font-bold">
                         {(q.responseTimeMs / 1000).toFixed(2)}s
                       </td>
-                      <td className="py-1.5 px-3 text-center">
+                      <td className="py-1.5 px-2 text-center">
+                        <span
+                          className="text-zinc-400"
+                          title={`Escuchas previas: ${q.preAnswerListens} | Re-escuchas post-error: ${q.postErrorListens}`}
+                        >
+                          {q.preAnswerListens > 1 ? `🎧x${q.preAnswerListens}` : '1x'}
+                          {q.postErrorListens > 0 ? ` / 👂x${q.postErrorListens}` : ''}
+                        </span>
+                      </td>
+                      <td className="py-1.5 px-2 text-center">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             q.isCorrect

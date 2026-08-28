@@ -92,6 +92,9 @@ export interface QuestionTelemetryPoint {
   velocity: number
   inputSource?: 'midi_hardware' | 'virtual_ui'
   movingAvgLatencyMs: number
+  preAnswerListens: number
+  postErrorListens: number
+  postErrorDwellTimeMs: number
 }
 
 export interface SessionTimelineAnalysis {
@@ -111,6 +114,13 @@ export interface SessionTimelineAnalysis {
   fatigueDetected: boolean
   fastReflexCount: number
   activeNotes: number[]
+  // 🔬 Nuevas variables de autorregulación y metacognición
+  totalPreAnswerListens: number
+  totalPostErrorListens: number
+  firstListenConfidencePercent: number
+  errorRepairRatePercent: number
+  avgPostErrorDwellTimeMs: number
+  repairEffectivenessPercent: number | null
 }
 
 export const PITCH_CLASSES = [
@@ -342,14 +352,33 @@ export function analyzeSessionTimeline(
   let correctCount = 0
   let totalLatency = 0
   let fastCount = 0
+  let totalPreListens = 0
+  let singleListenCount = 0
+  let totalPostErrorListens = 0
+  let postErrorDwellSum = 0
+  let errorCount = 0
+  let repairedErrorsCount = 0
 
   const questions: QuestionTelemetryPoint[] = []
 
   for (let i = 0; i < sorted.length; i++) {
     const a = sorted[i]
     if (a.isCorrect) correctCount++
+    else errorCount++
+
     totalLatency += a.responseTimeMs
     if (a.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) fastCount++
+
+    const preListens = a.preAnswerListens || 1
+    totalPreListens += preListens
+    if (preListens === 1) singleListenCount++
+
+    const postListens = a.postErrorListens || 0
+    totalPostErrorListens += postListens
+    if (!a.isCorrect && postListens > 0) repairedErrorsCount++
+
+    const dwellTime = a.postErrorDwellTimeMs || 0
+    postErrorDwellSum += dwellTime
 
     const windowSlice = sorted.slice(Math.max(0, i - 2), i + 1)
     const windowAvg = Math.round(
@@ -367,7 +396,10 @@ export function analyzeSessionTimeline(
       responseTimeMs: a.responseTimeMs,
       velocity: a.velocity,
       inputSource: a.inputSource,
-      movingAvgLatencyMs: windowAvg
+      movingAvgLatencyMs: windowAvg,
+      preAnswerListens: preListens,
+      postErrorListens: postListens,
+      postErrorDwellTimeMs: dwellTime
     })
   }
 
@@ -413,12 +445,38 @@ export function analyzeSessionTimeline(
   const fatigueDetected =
     total >= 10 && (secondHalfAvgLat > firstHalfAvgLat + 180 || secondHalfAcc < firstHalfAcc - 12)
 
+  const firstListenConfidencePercent =
+    total > 0 ? Math.round((singleListenCount / total) * 100) : 100
+  const errorRepairRatePercent =
+    errorCount > 0 ? Math.round((repairedErrorsCount / errorCount) * 100) : 100
+  const avgPostErrorDwellTimeMs = errorCount > 0 ? Math.round(postErrorDwellSum / errorCount) : 0
+
+  // Eficacia de la reparación: ¿acertó la siguiente vez que apareció esa misma nota?
+  let subsequentCorrectAfterError = 0
+  let subsequentTotalAfterError = 0
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (!sorted[i].isCorrect) {
+      const noteFailed = sorted[i].expectedNote
+      const nextOccurrence = sorted.slice(i + 1).find((a) => a.expectedNote === noteFailed)
+      if (nextOccurrence) {
+        subsequentTotalAfterError++
+        if (nextOccurrence.isCorrect) subsequentCorrectAfterError++
+      }
+    }
+  }
+
+  const repairEffectivenessPercent =
+    subsequentTotalAfterError > 0
+      ? Math.round((subsequentCorrectAfterError / subsequentTotalAfterError) * 100)
+      : null
+
   return {
     session,
     questions,
     totalQuestions: total,
     correctCount,
-    errorCount: total - correctCount,
+    errorCount,
     overallAccuracy: total > 0 ? Math.round((correctCount / total) * 100) : 0,
     avgLatencyMs: total > 0 ? Math.round(totalLatency / total) : 0,
     warmUpErrorsCount,
@@ -429,7 +487,13 @@ export function analyzeSessionTimeline(
     secondHalfAvgLatencyMs: secondHalfAvgLat,
     fatigueDetected,
     fastReflexCount: fastCount,
-    activeNotes
+    activeNotes,
+    totalPreAnswerListens: totalPreListens,
+    totalPostErrorListens: totalPostErrorListens,
+    firstListenConfidencePercent,
+    errorRepairRatePercent,
+    avgPostErrorDwellTimeMs,
+    repairEffectivenessPercent
   }
 }
 

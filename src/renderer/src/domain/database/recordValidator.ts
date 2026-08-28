@@ -96,6 +96,32 @@ export function isValidAnswerRecord(answer: unknown): answer is DbAnswerRecord {
     }
   }
 
+  if (a.preAnswerListens !== undefined) {
+    if (
+      typeof a.preAnswerListens !== 'number' ||
+      a.preAnswerListens < 0 ||
+      !Number.isInteger(a.preAnswerListens)
+    ) {
+      return false
+    }
+  }
+
+  if (a.postErrorListens !== undefined) {
+    if (
+      typeof a.postErrorListens !== 'number' ||
+      a.postErrorListens < 0 ||
+      !Number.isInteger(a.postErrorListens)
+    ) {
+      return false
+    }
+  }
+
+  if (a.postErrorDwellTimeMs !== undefined) {
+    if (typeof a.postErrorDwellTimeMs !== 'number' || a.postErrorDwellTimeMs < 0) {
+      return false
+    }
+  }
+
   return true
 }
 
