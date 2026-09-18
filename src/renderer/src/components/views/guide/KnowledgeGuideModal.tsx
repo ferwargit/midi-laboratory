@@ -40,7 +40,7 @@ export function KnowledgeGuideModal({
             </div>
             <div>
               <h2 className="text-base font-bold text-zinc-100 m-0">
-                Centro de Conocimiento Psicoacústico & Metacognición
+                Centro de Conocimiento Psicoacústico &amp; Metacognición
               </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
                 Diagramas interactivos de los modelos cognitivos y matemáticos que rigen el

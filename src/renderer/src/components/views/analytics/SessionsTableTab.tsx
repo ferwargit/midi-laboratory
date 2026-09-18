@@ -254,7 +254,7 @@ export function SessionsTableTab({
                     className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
                   >
                     <div className="flex items-center">
-                      <span>Fecha & ISI</span>
+                      <span>Fecha &amp; ISI</span>
                       {renderSortIndicator('date')}
                     </div>
                   </th>
@@ -264,7 +264,7 @@ export function SessionsTableTab({
                     className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
                   >
                     <div className="flex items-center">
-                      <span>Contenido & Timbre</span>
+                      <span>Contenido &amp; Timbre</span>
                       {renderSortIndicator('content')}
                     </div>
                   </th>

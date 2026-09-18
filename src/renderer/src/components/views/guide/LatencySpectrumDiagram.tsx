@@ -9,7 +9,7 @@ export function LatencySpectrumDiagram(): React.ReactElement {
     <div className="p-4 bg-zinc-950/90 rounded-2xl border border-zinc-800/80 space-y-3 font-mono">
       <div className="flex justify-between items-center text-xs">
         <span className="font-bold text-emerald-400">
-          ⚡ ESPECTRO DE LATENCIA COGNITIVA & FATIGA
+          ⚡ ESPECTRO DE LATENCIA COGNITIVA &amp; FATIGA
         </span>
         <span className="text-[10px] text-zinc-500">Tiempo de acceso a la memoria auditiva</span>
       </div>
