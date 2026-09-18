@@ -137,7 +137,7 @@ export function AiConsultationTab({
             onClick={(): void => {
               void handleSendQuery()
             }}
-            className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)] shrink-0"
+            className="bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)] shrink-0"
           >
             {isAnswering
               ? `Razonando (${formatReasoningTime(reasoningSeconds)})...`
@@ -179,7 +179,7 @@ export function AiConsultationTab({
             </span>
           </div>
           <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-purple-500 to-sky-400 animate-pulse" />
+            <div className="h-full bg-linear-to-r from-purple-500 to-sky-400 animate-pulse" />
           </div>
         </div>
       )}

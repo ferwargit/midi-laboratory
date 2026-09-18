@@ -8,6 +8,7 @@ import {
 import { evaluateSingleNoteAnswer, calculateSessionStats } from '../domain/exercise/evaluator'
 import { StrategyId, NotePerformance, SelectionDecision } from '../domain/adaptation/types'
 import { createStrategy } from '../domain/adaptation/adaptiveEngine'
+import { MASTERY_THRESHOLDS } from '../domain/analytics/historyAnalytics'
 import { InstrumentProfile, getInstrumentById } from '../domain/music/instruments'
 import { resolveNotePresetName } from '../domain/music/presets'
 import { TonalContextMode, getTotalContextDurationMs } from '../domain/music/tonalContext'
@@ -156,7 +157,9 @@ export function useSingleNoteTrainer({
       )
       return activeNotesBufferRef.current.every((note) => {
         const perf = currentPerformances.get(note)
-        return perf && perf.attempts >= 2 && perf.accuracyPercentage >= 85
+        return (
+          perf && perf.attempts >= 2 && perf.accuracyPercentage >= MASTERY_THRESHOLDS.MASTERED_MIN
+        )
       })
     },
     [strategy]
@@ -401,7 +404,7 @@ export function useSingleNoteTrainer({
   const trainWeakNotesOnly = useCallback((): void => {
     const weakNotes: number[] = []
     performances.forEach((perf, note) => {
-      if (perf.attempts > 0 && perf.accuracyPercentage < 85) {
+      if (perf.attempts > 0 && perf.accuracyPercentage < MASTERY_THRESHOLDS.MASTERED_MIN) {
         weakNotes.push(note)
       }
     })

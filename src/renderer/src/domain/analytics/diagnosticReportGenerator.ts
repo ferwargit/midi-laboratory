@@ -1,4 +1,8 @@
-import { AnalyticsMetrics, COGNITIVE_LATENCY_THRESHOLDS } from './historyAnalytics'
+import {
+  AnalyticsMetrics,
+  COGNITIVE_LATENCY_THRESHOLDS,
+  MASTERY_THRESHOLDS
+} from './historyAnalytics'
 
 export interface DiagnosticReport {
   title: string
@@ -105,7 +109,7 @@ export function generateDiagnosticReport(metrics: AnalyticsMetrics): DiagnosticR
   concreteActionPlan.push(
     'Realizar una sesión de 5 minutos cronometrada para reforzar la velocidad de reflejo auditivo sin sobrepensar.'
   )
-  if (metrics.overallAccuracy >= 80) {
+  if (metrics.overallAccuracy >= MASTERY_THRESHOLDS.MASTERED_MIN) {
     concreteActionPlan.push(
       'Avanzar a Modalidad 2 (Intervalos) con dirección mixta o a Modalidad 3 (Secuencias de 4 notas).'
     )

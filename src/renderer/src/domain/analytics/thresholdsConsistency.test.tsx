@@ -6,6 +6,8 @@ import {
   computeAnalyticsMetrics
 } from './historyAnalytics'
 import { ConfusionMatrixTab } from '../../components/views/analytics/ConfusionMatrixTab'
+import { AnalyticsKpiCards } from '../../components/views/analytics/AnalyticsKpiCards'
+import { AnalyticsMetrics } from './historyAnalytics'
 import { LatencySpectrumDiagram } from '../../components/views/guide/LatencySpectrumDiagram'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { buildUserPrompt } from '../ai/promptBuilder'
@@ -73,6 +75,8 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
     expect(COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL).toBe('< 1.4s')
     expect(COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL).toBe('1.4s - 2.8s')
     expect(MASTERY_THRESHOLDS.MASTERED_MIN).toBe(85)
+    expect(MASTERY_THRESHOLDS.LEARNING_MIN).toBe(60)
+    expect(MASTERY_THRESHOLDS.CRITICAL_MAX).toBe(60)
   })
 
   it('computeAnalyticsMetrics debe clasificar exactamente en base al umbral de 1400ms', () => {
@@ -107,6 +111,34 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
       screen.getByText(new RegExp(`Zona 1 \\(${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}\\)`, 'i'))
     ).toBeDefined()
     expect(screen.queryByText(/1.2s/i)).toBeNull()
+  })
+
+  it('AnalyticsKpiCards debe colorear el KPI de Oído Real según la SSOT (60% en ámbar)', () => {
+    const metrics: AnalyticsMetrics = {
+      modeFilter: 'all',
+      filteredSessionsCount: 1,
+      totalAnswers: 10,
+      totalCorrect: 6,
+      overallAccuracy: 60,
+      normalizedOverallAccuracy: 60,
+      avgEntropyBits: 1.58,
+      avgResponseTimeMs: 1200,
+      fastResponsesCount: 4,
+      mediumResponsesCount: 4,
+      slowResponsesCount: 2,
+      sharpBiasCount: 0,
+      flatBiasCount: 0,
+      topConfusions: [],
+      mostDifficultNotes: [],
+      strongestNotes: [],
+      sessionPsychometricsList: [],
+      longitudinalComparisons: []
+    }
+
+    render(<AnalyticsKpiCards metrics={metrics} totalFilteredSessions={1} />)
+
+    const kpiValue = screen.getByText('60%')
+    expect(kpiValue.className).toContain('text-amber-400')
   })
 
   it('diagnosticReportGenerator y promptBuilder deben derivar de la constante canónica', () => {

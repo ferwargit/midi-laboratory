@@ -4,7 +4,8 @@ import {
   analyzeSessionTimeline,
   computeNotePerformancesFromAnswers,
   reconstructSessionConfig,
-  COGNITIVE_LATENCY_THRESHOLDS
+  COGNITIVE_LATENCY_THRESHOLDS,
+  MASTERY_THRESHOLDS
 } from '../../../domain/analytics/historyAnalytics'
 import { PianoKeyboard } from '../../trainer/PianoKeyboard'
 import { generateMidiRange } from '../../../domain/music/noteUtils'
@@ -116,7 +117,10 @@ export function SessionDetailModal({
                   {session.strategyId}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-lg bg-purple-950/70 border border-purple-800 text-xs font-mono text-purple-300 font-bold">
-                  Score CPI: {analysis.session.accuracyPercentage >= 85 ? '🌟' : '🔥'}{' '}
+                  Score CPI:{' '}
+                  {analysis.session.accuracyPercentage >= MASTERY_THRESHOLDS.MASTERED_MIN
+                    ? '🌟'
+                    : '🔥'}{' '}
                   {analysis.session.correctAnswers * 12 + analysis.totalQuestions * 2} pts
                 </span>
               </div>
@@ -623,9 +627,15 @@ export function SessionDetailModal({
                 Mapa de Calor de esta Sesión ({analysis.activeNotes.length} notas activas):
               </span>
               <div className="flex gap-2.5 text-[10px]">
-                <span className="text-emerald-400">● &gt;85% Dominada</span>
-                <span className="text-amber-400">● 50-85% En progreso</span>
-                <span className="text-rose-400">● &lt;50% A reforzar</span>
+                <span className="text-emerald-400">
+                  ● &gt;{MASTERY_THRESHOLDS.MASTERED_MIN}% Dominada
+                </span>
+                <span className="text-amber-400">
+                  ● {MASTERY_THRESHOLDS.CRITICAL_MAX}-{MASTERY_THRESHOLDS.MASTERED_MIN}% En progreso
+                </span>
+                <span className="text-rose-400">
+                  ● &lt;{MASTERY_THRESHOLDS.CRITICAL_MAX}% A reforzar
+                </span>
               </div>
             </div>
             <PianoKeyboard

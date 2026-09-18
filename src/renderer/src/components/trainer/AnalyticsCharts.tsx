@@ -147,7 +147,7 @@ function AnalyticsChartsComponent({
       </div>
 
       {/* 2. BANNER DE CONTEXTO EDUCATIVO */}
-      <div className="p-4 bg-gradient-to-r from-sky-950/40 via-purple-950/40 to-zinc-900 rounded-2xl border border-sky-500/30 space-y-2.5 shadow-xl">
+      <div className="p-4 bg-linear-to-r from-sky-950/40 via-purple-950/40 to-zinc-900 rounded-2xl border border-sky-500/30 space-y-2.5 shadow-xl">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-base">📊</span>

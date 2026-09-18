@@ -412,6 +412,38 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
     })
   })
 
+  describe('filterSessionsAdvanced - Umbral de maestría 60', () => {
+    const sCritical = { ...sNotePiano, id: 's_59', accuracyPercentage: 59 }
+    const sLearningLow = { ...sNotePiano, id: 's_60', accuracyPercentage: 60 }
+    const sLearningHigh = { ...sNotePiano, id: 's_84', accuracyPercentage: 84 }
+    const sMastered = { ...sNotePiano, id: 's_85', accuracyPercentage: 85 }
+    const boundarySessions = [sCritical, sLearningLow, sLearningHigh, sMastered]
+
+    it('critical incluye solo precisión estrictamente menor a 60', () => {
+      const critical = filterSessionsAdvanced(boundarySessions, {
+        mode: 'all',
+        mastery: 'critical'
+      })
+      expect(critical.map((s) => s.id)).toEqual(['s_59'])
+    })
+
+    it('learning abarca exactamente el rango 60..84', () => {
+      const learning = filterSessionsAdvanced(boundarySessions, {
+        mode: 'all',
+        mastery: 'learning'
+      })
+      expect(learning.map((s) => s.id)).toEqual(['s_60', 's_84'])
+    })
+
+    it('mastered incluye solo precisión mayor o igual a 85', () => {
+      const mastered = filterSessionsAdvanced(boundarySessions, {
+        mode: 'all',
+        mastery: 'mastered'
+      })
+      expect(mastered.map((s) => s.id)).toEqual(['s_85'])
+    })
+  })
+
   describe('reconstructSessionConfig - Clonación de Sesiones', () => {
     it('reconstruye sesiones de nota individual', () => {
       const conf = reconstructSessionConfig(sNotePiano, mockAnswers)

@@ -14,8 +14,8 @@ export const COGNITIVE_LATENCY_THRESHOLDS = {
 
 export const MASTERY_THRESHOLDS = {
   MASTERED_MIN: 85,
-  LEARNING_MIN: 50,
-  CRITICAL_MAX: 50
+  LEARNING_MIN: 60,
+  CRITICAL_MAX: 60
 } as const
 
 export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences' | 'repertoire'
@@ -791,10 +791,16 @@ export function filterSessionsAdvanced(
     }
 
     // 7. Nivel de Dominio
-    if (filters.mastery === 'mastered' && s.accuracyPercentage < 85) return false
-    if (filters.mastery === 'learning' && (s.accuracyPercentage < 50 || s.accuracyPercentage >= 85))
+    if (filters.mastery === 'mastered' && s.accuracyPercentage < MASTERY_THRESHOLDS.MASTERED_MIN)
       return false
-    if (filters.mastery === 'critical' && s.accuracyPercentage >= 50) return false
+    if (
+      filters.mastery === 'learning' &&
+      (s.accuracyPercentage < MASTERY_THRESHOLDS.LEARNING_MIN ||
+        s.accuracyPercentage >= MASTERY_THRESHOLDS.MASTERED_MIN)
+    )
+      return false
+    if (filters.mastery === 'critical' && s.accuracyPercentage >= MASTERY_THRESHOLDS.CRITICAL_MAX)
+      return false
 
     // 8. Búsqueda por texto
     if (filters.searchQuery && filters.searchQuery.trim().length > 0) {

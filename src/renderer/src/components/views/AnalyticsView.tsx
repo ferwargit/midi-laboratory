@@ -330,7 +330,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     <div className="space-y-4 font-sans w-full">
       {/* BANNER DE MODO AISLADO ACTIVO */}
       {isolatedSessionIds && (
-        <div className="p-3 bg-gradient-to-r from-sky-950 via-purple-950 to-zinc-950 border border-sky-400 rounded-2xl flex justify-between items-center font-mono text-xs shadow-2xl animate-in fade-in">
+        <div className="p-3 bg-linear-to-r from-sky-950 via-purple-950 to-zinc-950 border border-sky-400 rounded-2xl flex justify-between items-center font-mono text-xs shadow-2xl animate-in fade-in">
           <div className="flex items-center gap-2.5">
             <span className="w-3 h-3 rounded-full bg-sky-400 animate-ping" />
             <span className="text-zinc-100 font-bold">

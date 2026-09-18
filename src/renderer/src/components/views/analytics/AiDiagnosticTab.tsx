@@ -60,7 +60,7 @@ export function AiDiagnosticTab({
           variant="primary"
           disabled={isAiAnalyzing}
           onClick={onRunDiagnostic}
-          className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-[0_0_20px_rgba(168,85,247,0.3)] border border-purple-400/30 shrink-0"
+          className="bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-[0_0_20px_rgba(168,85,247,0.3)] border border-purple-400/30 shrink-0"
         >
           {isAiAnalyzing ? (
             <div className="flex items-center gap-2">
@@ -93,7 +93,7 @@ export function AiDiagnosticTab({
             </div>
           </div>
           <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-purple-500 to-sky-400 animate-pulse" />
+            <div className="h-full bg-linear-to-r from-purple-500 to-sky-400 animate-pulse" />
           </div>
         </div>
       )}
