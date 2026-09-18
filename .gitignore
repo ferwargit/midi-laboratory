@@ -8,3 +8,4 @@ coverage
 .claude
 repomix-output.xml
 .engram/
+.codebase-memory/
