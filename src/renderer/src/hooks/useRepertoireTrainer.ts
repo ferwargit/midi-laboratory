@@ -619,7 +619,7 @@ export function useRepertoireTrainer({
         )
       }
 
-      if (!core.isSessionActive || slice.length === 0) return
+      if (!core.isSessionActive || slice.length === 0 || !core.questionToken) return
 
       let now = Date.now()
       const lastNote = playedNotesBufferRef.current[playedNotesBufferRef.current.length - 1]
@@ -701,7 +701,7 @@ export function useRepertoireTrainer({
                 )
               }
               stimulusScheduler.cancelAll()
-              core.recordAnswer(result, answerRecord, true, () => {})
+              core.recordAnswer(result, answerRecord, true, () => {}, core.questionToken)
               void core.finalizeAndSaveSession()
               return
             }
@@ -733,9 +733,15 @@ export function useRepertoireTrainer({
           }
         }
 
-        core.recordAnswer(result, answerRecord, result.isCompleteSuccess, () => {
-          advanceToNextStep()
-        })
+        core.recordAnswer(
+          result,
+          answerRecord,
+          result.isCompleteSuccess,
+          () => {
+            advanceToNextStep()
+          },
+          core.questionToken
+        )
       }
     },
     [

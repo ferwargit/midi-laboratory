@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
+import { StrictMode, createElement } from 'react'
 import { useSequenceTrainer } from './useSequenceTrainer'
 
 describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () => {
@@ -293,6 +294,71 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
       })
 
       expect(onPlaySequence).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('F02: pureza del updater y evaluación única', () => {
+    it('la evaluación se dispara exactamente una vez por frase completada', () => {
+      const onPlaySequence = vi.fn()
+      const onTelemetryLog = vi.fn()
+
+      const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence, onTelemetryLog }))
+
+      act(() => {
+        result.current.startSession([60, 62, 64], 3)
+      })
+
+      const seq = result.current.currentSequence
+
+      act(() => {
+        result.current.handleUserNotePlayed(seq[0], 'virtual_ui')
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(seq[1], 'virtual_ui')
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(seq[2], 'virtual_ui')
+      })
+
+      expect(result.current.lastResult).not.toBeNull()
+      expect(result.current.sessionHistory.length).toBe(1)
+
+      const evalFeedback = onTelemetryLog.mock.calls.filter(
+        ([type, msg]) => type === 'EVAL' && !msg.startsWith('Nota ')
+      )
+      expect(evalFeedback.length).toBe(1)
+    })
+
+    it('bajo StrictMode (doble invocación de updaters) la evaluación se persiste una sola vez', () => {
+      const onPlaySequence = vi.fn()
+      const onTelemetryLog = vi.fn()
+
+      const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence, onTelemetryLog }), {
+        wrapper: ({ children }) => createElement(StrictMode, null, children)
+      })
+
+      act(() => {
+        result.current.startSession([60, 62, 64], 3)
+      })
+
+      const seq = result.current.currentSequence
+
+      act(() => {
+        result.current.handleUserNotePlayed(seq[0], 'virtual_ui')
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(seq[1], 'virtual_ui')
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(seq[2], 'virtual_ui')
+      })
+
+      expect(result.current.sessionHistory.length).toBe(1)
+
+      const evalFeedback = onTelemetryLog.mock.calls.filter(
+        ([type, msg]) => type === 'EVAL' && !msg.startsWith('Nota ')
+      )
+      expect(evalFeedback.length).toBe(1)
     })
   })
 })

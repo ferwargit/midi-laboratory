@@ -356,9 +356,15 @@ export function useIntervalTrainer({
           onTelemetryLog('EVAL', result.feedbackMessage)
         }
 
-        core.recordAnswer(result, answerRecord, result.isIntervalCorrect, () => {
-          advanceToNextInterval()
-        })
+        core.recordAnswer(
+          result,
+          answerRecord,
+          result.isIntervalCorrect,
+          () => {
+            advanceToNextInterval()
+          },
+          core.questionToken
+        )
       }
     },
     [core, waitingNoteStep, firstNotePlayed, onTelemetryLog, advanceToNextInterval]

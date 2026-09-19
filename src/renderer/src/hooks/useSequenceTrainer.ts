@@ -81,6 +81,7 @@ export function useSequenceTrainer({
   const currentSequenceRef = useRef<number[]>([])
   const [capturedNotes, setCapturedNotes] = useState<number[]>([])
   const stimulusStartTimeRef = useRef<number>(0)
+  const playedNotesBufferRef = useRef<number[]>([])
 
   const onBuildSessionRecord = useCallback(
     ({
@@ -187,6 +188,7 @@ export function useSequenceTrainer({
 
       currentSequenceRef.current = sequence
       setCurrentSequence(sequence)
+      playedNotesBufferRef.current = []
       setCapturedNotes([])
       stimulusStartTimeRef.current = Date.now()
 
@@ -226,6 +228,7 @@ export function useSequenceTrainer({
 
       setCustomCandidateNotes(notesToUse)
       setSequenceLength(lengthToUse)
+      playedNotesBufferRef.current = []
       setCapturedNotes([])
 
       core.startCoreSession(coreOptions, () => {
@@ -251,6 +254,7 @@ export function useSequenceTrainer({
   const stopSession = useCallback((): void => {
     setCurrentSequence([])
     currentSequenceRef.current = []
+    playedNotesBufferRef.current = []
     setCapturedNotes([])
     core.stopCoreSession()
   }, [core])
@@ -258,6 +262,7 @@ export function useSequenceTrainer({
   const resetToConfig = useCallback((): void => {
     setCurrentSequence([])
     currentSequenceRef.current = []
+    playedNotesBufferRef.current = []
     setCapturedNotes([])
     core.resetCoreToConfig()
   }, [core])
@@ -272,45 +277,53 @@ export function useSequenceTrainer({
   const handleUserNotePlayed = useCallback(
     (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {
       const seq = currentSequenceRef.current
-      if (!core.isSessionActive || seq.length === 0 || !core.questionToken) return
+      const currentToken = core.questionToken
+      if (!core.isSessionActive || seq.length === 0 || !currentToken) return
 
-      setCapturedNotes((prev) => {
-        const updated = [...prev, playedNoteNumber]
+      playedNotesBufferRef.current.push(playedNoteNumber)
+      const updated = [...playedNotesBufferRef.current]
 
-        if (onTelemetryLog) {
-          onTelemetryLog('EVAL', `Nota ${updated.length}/${seq.length}: ${playedNoteNumber}`)
-        }
+      setCapturedNotes(updated)
 
-        if (updated.length >= seq.length) {
-          const responseTimeMs = Date.now() - stimulusStartTimeRef.current
-          const result = evaluateSequenceAnswer(seq, updated, responseTimeMs)
+      if (onTelemetryLog) {
+        onTelemetryLog('EVAL', `Nota ${updated.length}/${seq.length}: ${playedNoteNumber}`)
+      }
 
-          const answerRecord: DbAnswerRecord = {
-            id: `ans_seq_${crypto.randomUUID()}`,
-            sessionId: core.sessionId,
-            questionIndex: core.currentQuestionIndex,
-            expectedNote: seq[0],
-            playedNote: playedNoteNumber,
-            isCorrect: result.isExactMatch,
-            semitoneDistance: result.levenshteinDistance,
-            responseTimeMs,
-            velocity: 90,
-            reasonTelemetry: `Secuencia: [${seq.join(', ')}] | Tocadas: [${updated.join(', ')}]`,
-            createdAt: new Date().toISOString(),
-            inputSource: source
-          }
+      if (updated.length < seq.length) return
 
-          if (onTelemetryLog) {
-            onTelemetryLog('EVAL', result.feedbackMessage)
-          }
+      const responseTimeMs = Date.now() - stimulusStartTimeRef.current
+      const result = evaluateSequenceAnswer(seq, updated, responseTimeMs)
 
-          core.recordAnswer(result, answerRecord, result.isExactMatch, () => {
-            advanceToNextSequence()
-          })
-        }
+      const answerRecord: DbAnswerRecord = {
+        id: `ans_seq_${crypto.randomUUID()}`,
+        sessionId: core.sessionId,
+        questionIndex: core.currentQuestionIndex,
+        expectedNote: seq[0],
+        playedNote: playedNoteNumber,
+        isCorrect: result.isExactMatch,
+        semitoneDistance: result.levenshteinDistance,
+        responseTimeMs,
+        velocity: 90,
+        reasonTelemetry: `Secuencia: [${seq.join(', ')}] | Tocadas: [${updated.join(', ')}]`,
+        createdAt: new Date().toISOString(),
+        inputSource: source
+      }
 
-        return updated
-      })
+      if (onTelemetryLog) {
+        onTelemetryLog('EVAL', result.feedbackMessage)
+      }
+
+      playedNotesBufferRef.current = []
+
+      core.recordAnswer(
+        result,
+        answerRecord,
+        result.isExactMatch,
+        () => {
+          advanceToNextSequence()
+        },
+        currentToken
+      )
     },
     [core, onTelemetryLog, advanceToNextSequence]
   )

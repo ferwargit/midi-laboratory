@@ -203,6 +203,8 @@ export function useSingleNoteTrainer({
 
   const triggerNextQuestion = useCallback(
     (notesPool?: number[]): void => {
+      if (!core.isSessionActive) return
+
       const pool = notesPool || activeNotesBufferRef.current
       if (pool.length < 2) return
 
@@ -376,9 +378,15 @@ export function useSingleNoteTrainer({
         onTelemetryLog('EVAL', evalMsg)
       }
 
-      core.recordAnswer(result, answerRecord, result.correct, () => {
-        advanceToNextQuestion()
-      })
+      core.recordAnswer(
+        result,
+        answerRecord,
+        result.correct,
+        () => {
+          advanceToNextQuestion()
+        },
+        core.questionToken
+      )
     },
     [core, onTelemetryLog, advanceToNextQuestion]
   )

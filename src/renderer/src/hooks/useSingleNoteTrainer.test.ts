@@ -392,5 +392,86 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
       expect(onPlayStimulus).toHaveBeenCalledTimes(1)
       vi.useRealTimers()
     })
+
+    it('F03: un pre-roll pendiente no emite notas si la sesión se detiene antes de su vencimiento', () => {
+      vi.useFakeTimers()
+      const onPlayStimulus = vi.fn()
+      const onPlayTonalContext = vi.fn()
+
+      const { result } = renderHook(() =>
+        useSingleNoteTrainer({
+          onPlayStimulus,
+          onInstrumentChanged: vi.fn(),
+          onPlayTonalContext
+        })
+      )
+
+      act(() => {
+        result.current.setTonalContextMode('cadence')
+      })
+
+      act(() => {
+        result.current.startSession([62, 64, 66])
+      })
+
+      expect(onPlayStimulus).toHaveBeenCalledTimes(0)
+
+      act(() => {
+        result.current.stopSession()
+      })
+
+      act(() => {
+        vi.advanceTimersByTime(3500)
+      })
+
+      expect(onPlayStimulus).toHaveBeenCalledTimes(0)
+      expect(result.current.currentExpectedNote).toBeNull()
+      expect(result.current.isSessionActive).toBe(false)
+
+      vi.useRealTimers()
+    })
+
+    it('F03: un pre-roll pendiente no emite notas si la sesión expira por tiempo antes del vencimiento', async () => {
+      vi.useFakeTimers()
+      const onPlayStimulus = vi.fn()
+      const onPlayTonalContext = vi.fn()
+
+      const { result } = renderHook(() =>
+        useSingleNoteTrainer({
+          onPlayStimulus,
+          onInstrumentChanged: vi.fn(),
+          onPlayTonalContext
+        })
+      )
+
+      act(() => {
+        result.current.setTonalContextMode('cadence')
+      })
+
+      act(() => {
+        result.current.startSession({
+          notes: [62, 64, 66],
+          limitType: 'time',
+          durationMinutes: 0.01
+        })
+      })
+
+      expect(onPlayStimulus).toHaveBeenCalledTimes(0)
+
+      await act(async () => {
+        vi.advanceTimersByTime(1500)
+      })
+
+      expect(result.current.isSessionActive).toBe(false)
+      expect(result.current.isSessionFinished).toBe(true)
+
+      act(() => {
+        vi.advanceTimersByTime(3500)
+      })
+
+      expect(onPlayStimulus).toHaveBeenCalledTimes(0)
+
+      vi.useRealTimers()
+    })
   })
 })
