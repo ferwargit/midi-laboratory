@@ -39,6 +39,8 @@ export interface UseMidiReturn {
   sendAllNotesOff: (channel?: number) => void
 }
 
+const ACTIVE_MIDI_CHANNELS = [1, 10] as const
+
 export function useMidi({
   onNoteOn,
   onNoteOff,
@@ -96,7 +98,7 @@ export function useMidi({
   }, [])
 
   const sendAllNotesOff = useCallback(
-    (channel = 1): void => {
+    (channel?: number): void => {
       stimulusTimersRef.current.forEach((t) => clearTimeout(t))
       stimulusTimersRef.current.clear()
 
@@ -111,16 +113,22 @@ export function useMidi({
       const outputPort = midiAccess.outputs.get(selectedOutputId)
       if (!outputPort) return
 
-      const chByte = (channel - 1) & 0x0f
-      const ccStatus = 0xb0 | chByte
+      const channels = channel === undefined ? ACTIVE_MIDI_CHANNELS : [channel]
 
       try {
-        outputPort.send([ccStatus, 120, 0])
-        outputPort.send([ccStatus, 123, 0])
-        outputPort.send([ccStatus, 64, 0])
+        for (const ch of channels) {
+          const chByte = (ch - 1) & 0x0f
+          const ccStatus = 0xb0 | chByte
 
-        for (let note = 21; note <= 108; note++) {
-          outputPort.send([0x80 | chByte, note, 0])
+          outputPort.send([ccStatus, 120, 0])
+          outputPort.send([ccStatus, 123, 0])
+          outputPort.send([ccStatus, 64, 0])
+          outputPort.send([ccStatus, 121, 0])
+          outputPort.send([0xe0 | chByte, 0x00, 0x40])
+
+          for (let note = 21; note <= 108; note++) {
+            outputPort.send([0x80 | chByte, note, 0])
+          }
         }
       } catch (err) {
         console.warn('[useMidi] Error al emitir MIDI Panic:', err)
