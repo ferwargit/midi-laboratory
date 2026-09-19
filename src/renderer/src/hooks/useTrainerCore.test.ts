@@ -206,6 +206,164 @@ describe('useTrainerCore - Kernel Unificado del Ciclo de Vida de Sesión', () =>
     vi.useRealTimers()
   })
 
+  it('recordAnswer en modo smart con delay por defecto programa el avance a los 1500ms', () => {
+    vi.useFakeTimers()
+    const onAdvance = vi.fn()
+
+    const { result } = renderHook(() =>
+      useTrainerCore({
+        defaultAdvanceMode: 'smart',
+        onBuildSessionRecord: vi.fn()
+      })
+    )
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken()
+    })
+
+    act(() => {
+      result.current.recordAnswer(
+        { correct: true },
+        {
+          id: 'a1',
+          sessionId: result.current.sessionId,
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 900,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: new Date().toISOString()
+        },
+        true,
+        onAdvance
+      )
+    })
+
+    expect(onAdvance).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(1400)
+    })
+    expect(onAdvance).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    expect(onAdvance).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
+  })
+
+  it('recordAnswer en modo smart respeta el override de autoAdvanceSmartDelayMs (1200ms)', () => {
+    vi.useFakeTimers()
+    const onAdvance = vi.fn()
+
+    const { result } = renderHook(() =>
+      useTrainerCore({
+        defaultAdvanceMode: 'smart',
+        autoAdvanceSmartDelayMs: 1200,
+        onBuildSessionRecord: vi.fn()
+      })
+    )
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken()
+    })
+
+    act(() => {
+      result.current.recordAnswer(
+        { correct: true },
+        {
+          id: 'a1',
+          sessionId: result.current.sessionId,
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 900,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: new Date().toISOString()
+        },
+        true,
+        onAdvance
+      )
+    })
+
+    expect(onAdvance).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(1100)
+    })
+    expect(onAdvance).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    expect(onAdvance).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
+  })
+
+  it('el override de autoAdvanceSmartDelayMs no altera el retardo del modo auto_fast', () => {
+    vi.useFakeTimers()
+    const onAdvance = vi.fn()
+
+    const { result } = renderHook(() =>
+      useTrainerCore({
+        defaultAdvanceMode: 'auto_fast',
+        autoAdvanceSmartDelayMs: 1200,
+        onBuildSessionRecord: vi.fn()
+      })
+    )
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken()
+    })
+
+    act(() => {
+      result.current.recordAnswer(
+        { correct: true },
+        {
+          id: 'a1',
+          sessionId: result.current.sessionId,
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 900,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: new Date().toISOString()
+        },
+        true,
+        onAdvance
+      )
+    })
+
+    expect(onAdvance).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(1300)
+    })
+    expect(onAdvance).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+    expect(onAdvance).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
+  })
+
   it('stopCoreSession y resetCoreToConfig invalidan el token y limpian los temporizadores', () => {
     const { result } = renderHook(() =>
       useTrainerCore({

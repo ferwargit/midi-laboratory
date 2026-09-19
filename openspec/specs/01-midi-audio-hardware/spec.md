@@ -15,13 +15,14 @@ El subsistema se compone de cuatro capas cooperantes:
 
 **Configuración single-source-of-truth (SSOT):** todas las constantes temporales del subsistema DEBEN residir en `domain/ai/appConfig.ts` (`DEFAULT_APP_CONFIG.midi`) y no DEBEN codificarse de forma rígida en los consumidores:
 
-| Constante                | Valor  | Semántica                          |
-| ------------------------ | ------ | ---------------------------------- |
-| `debounceWindowMs`       | `35`   | Ventana anti-rebote mecánico       |
-| `hungNoteWatchdogMs`     | `6000` | Watchdog de nota colgada           |
-| `defaultVelocity`        | `90`   | Velocity por defecto del scheduler |
-| `autoAdvanceFastDelayMs` | `1500` | Auto-avance rápido                 |
-| `autoAdvanceSlowDelayMs` | `3500` | Auto-avance lento                  |
+| Constante                 | Valor  | Semántica                          |
+| ------------------------- | ------ | ---------------------------------- |
+| `debounceWindowMs`        | `35`   | Ventana anti-rebote mecánico       |
+| `hungNoteWatchdogMs`      | `6000` | Watchdog de nota colgada           |
+| `defaultVelocity`         | `90`   | Velocity por defecto del scheduler |
+| `autoAdvanceFastDelayMs`  | `1500` | Auto-avance rápido                 |
+| `autoAdvanceSlowDelayMs`  | `3500` | Auto-avance lento                  |
+| `autoAdvanceSmartDelayMs` | `1500` | Auto-avance del modo smart         |
 
 **Alcance (in-scope):** parseo binario, filtrado de entrada, gestión de puertos y reconexión, Pánico MIDI, watchdog, canales GM (1 = Piano Acústico, 10 = Metrónomo), reloj maestro, alineación al downbeat y metrónomo libre.
 

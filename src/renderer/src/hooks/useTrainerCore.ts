@@ -11,6 +11,7 @@ export interface TrainerCoreOptions<TResult> {
   defaultAdvanceMode?: AdvanceMode
   autoAdvanceFastDelayMs?: number
   autoAdvanceSlowDelayMs?: number
+  autoAdvanceSmartDelayMs?: number
   onBuildSessionRecord: (ctx: {
     sessionId: string
     totalSeconds: number
@@ -86,6 +87,7 @@ export function useTrainerCore<TResult>({
   defaultAdvanceMode = 'smart',
   autoAdvanceFastDelayMs = DEFAULT_APP_CONFIG.midi.autoAdvanceFastDelayMs,
   autoAdvanceSlowDelayMs = DEFAULT_APP_CONFIG.midi.autoAdvanceSlowDelayMs,
+  autoAdvanceSmartDelayMs = DEFAULT_APP_CONFIG.midi.autoAdvanceSmartDelayMs,
   onBuildSessionRecord,
   checkIsMasteryCompleted
 }: TrainerCoreOptions<TResult>): UseTrainerCoreReturn<TResult> {
@@ -456,7 +458,12 @@ export function useTrainerCore<TResult>({
           postErrorListensRef.current = 0
         }
       } else {
-        const delay = mode === 'auto_slow' ? autoAdvanceSlowDelayMs : autoAdvanceFastDelayMs
+        const delay =
+          mode === 'auto_slow'
+            ? autoAdvanceSlowDelayMs
+            : mode === 'auto_fast'
+              ? autoAdvanceFastDelayMs
+              : autoAdvanceSmartDelayMs
         const currentId = sessionIdRef.current
 
         autoAdvanceTimerRef.current = setTimeout(() => {
@@ -465,7 +472,7 @@ export function useTrainerCore<TResult>({
         }, delay)
       }
     },
-    [autoAdvanceFastDelayMs, autoAdvanceSlowDelayMs, setIsWaitingAnswer]
+    [autoAdvanceFastDelayMs, autoAdvanceSlowDelayMs, autoAdvanceSmartDelayMs, setIsWaitingAnswer]
   )
 
   const stopCoreSession = useCallback((): void => {
