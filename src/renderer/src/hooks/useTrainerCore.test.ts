@@ -360,4 +360,48 @@ describe('useTrainerCore - Kernel Unificado del Ciclo de Vida de Sesión', () =>
     saveSpy.mockRestore()
     consoleSpy.mockRestore()
   })
+
+  it('genera sessionId y questionToken con entropía UUIDv4 (crypto.randomUUID)', () => {
+    const { result } = renderHook(() =>
+      useTrainerCore({
+        onBuildSessionRecord: vi.fn()
+      })
+    )
+
+    const uuidV4 = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken('token')
+    })
+
+    expect(result.current.sessionId).toMatch(new RegExp(`^session_${uuidV4}$`))
+    expect(result.current.questionToken).toMatch(new RegExp(`^token_${uuidV4}$`))
+  })
+
+  it('invocaciones consecutivas producen identificadores distintos (unicidad)', () => {
+    const { result } = renderHook(() =>
+      useTrainerCore({
+        onBuildSessionRecord: vi.fn()
+      })
+    )
+
+    act(() => {
+      result.current.startCoreSession()
+    })
+    const firstSessionId = result.current.sessionId
+
+    act(() => {
+      result.current.generateQuestionToken('token')
+    })
+    const firstToken = result.current.questionToken
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken('token')
+    })
+
+    expect(result.current.sessionId).not.toBe(firstSessionId)
+    expect(result.current.questionToken).not.toBe(firstToken)
+  })
 })

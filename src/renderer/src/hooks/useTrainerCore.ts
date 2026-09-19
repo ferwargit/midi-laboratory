@@ -207,7 +207,7 @@ export function useTrainerCore<TResult>({
   }, [cleanupTimers])
 
   const generateQuestionToken = useCallback((prefix = 'token'): string => {
-    const token = `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    const token = `${prefix}_${crypto.randomUUID()}`
     questionTokenRef.current = token
     preAnswerListensRef.current = 1
     postErrorListensRef.current = 0
@@ -311,7 +311,7 @@ export function useTrainerCore<TResult>({
         }
       }
 
-      const newSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+      const newSessionId = `session_${crypto.randomUUID()}`
       sessionIdRef.current = newSessionId
       sessionStartTimeRef.current = Date.now()
 
