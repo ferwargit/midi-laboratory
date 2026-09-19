@@ -1,12 +1,64 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import 'fake-indexeddb/auto'
-import { DatabaseEngine, DB_VERSION } from './databaseEngine'
+import {
+  DatabaseEngine,
+  DB_VERSION,
+  DB_NAME,
+  AI_REPORTS_STORE,
+  AI_CONSULTATIONS_STORE
+} from './databaseEngine'
 import {
   DbSessionRecord,
   DbAiReportRecord,
   DbAiConsultationRecord,
   DatabaseBackupPayload
 } from './types'
+
+function openRawDatabase(
+  name: string,
+  version: number,
+  onUpgrade: (db: IDBDatabase) => void
+): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(name, version)
+    request.onupgradeneeded = (): void => onUpgrade(request.result)
+    request.onsuccess = (): void => resolve(request.result)
+    request.onerror = (): void => reject(request.error)
+  })
+}
+
+function deleteRawDatabase(name: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(name)
+    request.onsuccess = (): void => resolve()
+    request.onerror = (): void => reject(request.error)
+  })
+}
+
+function putRawRecords<T>(db: IDBDatabase, storeName: string, records: T[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite')
+    const store = tx.objectStore(storeName)
+    records.forEach((record) => store.put(record))
+    tx.oncomplete = (): void => resolve()
+    tx.onerror = (): void => reject(tx.error)
+  })
+}
+
+async function probeStoreIndexes(storeNames: string[]): Promise<Record<string, string[]>> {
+  const db = await openRawDatabase(DB_NAME, DB_VERSION, (): void => {})
+  const indexes: Record<string, string[]> = {}
+  storeNames.forEach((name) => {
+    const names = db.transaction(name, 'readonly').objectStore(name).indexNames
+    const list: string[] = []
+    for (let i = 0; i < names.length; i++) {
+      list.push(names.item(i) as string)
+    }
+    indexes[name] = list
+  })
+  db.close()
+  return indexes
+}
 
 describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
   let engine: DatabaseEngine
@@ -23,7 +75,7 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
 
   it('debe inicializarse con la versión canónica y resumen en 0', async () => {
     expect(engine.getVersion()).toBe(DB_VERSION)
-    expect(DB_VERSION).toBe(5)
+    expect(DB_VERSION).toBe(6)
     const summary = await engine.getSummary()
     expect(summary.totalSessions).toBe(0)
     expect(summary.totalExercises).toBe(0)
@@ -195,6 +247,7 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
     await engine.saveSession(session, [])
     const backup = await engine.exportDatabase()
     expect(backup.sessions.length).toBe(1)
+    expect(backup.version).toBe(6)
 
     // Rechazar payloads corruptos
     await expect(engine.importDatabase(null as unknown as DatabaseBackupPayload)).rejects.toThrow(
@@ -216,5 +269,96 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
     await expect(engine.saveAiConsultation({ id: '' } as DbAiConsultationRecord)).rejects.toThrow(
       /inválido/i
     )
+  })
+
+  it('debe crear los índices secundarios de IA en el esquema v6', async () => {
+    const indexes = await probeStoreIndexes([AI_REPORTS_STORE, AI_CONSULTATIONS_STORE])
+
+    expect(indexes[AI_REPORTS_STORE]).toContain('createdAt')
+    expect(indexes[AI_REPORTS_STORE]).toContain('modeFilter')
+    expect(indexes[AI_CONSULTATIONS_STORE]).toContain('createdAt')
+    expect(indexes[AI_CONSULTATIONS_STORE]).toContain('modeFilter')
+  })
+
+  it('debe migrar bases v5 existentes sin pérdida de datos', async () => {
+    const legacyReport: DbAiReportRecord = {
+      id: 'report_v5_legacy',
+      createdAt: new Date().toISOString(),
+      modelName: 'qwen3.5',
+      modeFilter: 'intervals',
+      analysisText: 'Informe heredado de la versión 5.',
+      prescription: {
+        title: 'Ejercicio Heredado',
+        rationale: 'Refuerzo histórico',
+        targetMode: 'intervals',
+        instrumentId: 'acoustic_grand_piano',
+        recommendedNotes: [60, 65],
+        limitType: 'questions',
+        questionsCount: 8,
+        durationMinutes: 4,
+        advanceMode: 'smart'
+      }
+    }
+
+    const legacyConsultation: DbAiConsultationRecord = {
+      id: 'consultation_v5_legacy',
+      createdAt: new Date().toISOString(),
+      modelName: 'qwen3.5-9b',
+      modeFilter: 'sequences',
+      userQuery: '¿Cómo mejoro mi precisión en secuencias largas?',
+      aiResponse: 'Respuesta heredada de la versión 5.'
+    }
+
+    engine.close()
+    await deleteRawDatabase(DB_NAME)
+
+    // Simular una base v5 existente: almacenes de IA sin índices secundarios
+    const v5Db = await openRawDatabase(DB_NAME, 5, (db) => {
+      db.createObjectStore(AI_REPORTS_STORE, { keyPath: 'id' })
+      db.createObjectStore(AI_CONSULTATIONS_STORE, { keyPath: 'id' })
+    })
+    await putRawRecords(v5Db, AI_REPORTS_STORE, [legacyReport])
+    await putRawRecords(v5Db, AI_CONSULTATIONS_STORE, [legacyConsultation])
+    v5Db.close()
+
+    // Reapertura con el motor v6: onupgradeneeded crea los índices sobre los stores
+    await engine.initialize()
+    expect(engine.getVersion()).toBe(6)
+
+    const migratedReports = await engine.getAllAiReports()
+    const migratedConsultations = await engine.getAllAiConsultations()
+    expect(migratedReports.length).toBe(1)
+    expect(migratedReports[0].id).toBe('report_v5_legacy')
+    expect(migratedConsultations.length).toBe(1)
+    expect(migratedConsultations[0].id).toBe('consultation_v5_legacy')
+
+    const indexes = await probeStoreIndexes([AI_REPORTS_STORE, AI_CONSULTATIONS_STORE])
+    expect(indexes[AI_REPORTS_STORE]).toContain('createdAt')
+    expect(indexes[AI_REPORTS_STORE]).toContain('modeFilter')
+    expect(indexes[AI_CONSULTATIONS_STORE]).toContain('createdAt')
+    expect(indexes[AI_CONSULTATIONS_STORE]).toContain('modeFilter')
+  })
+
+  it('la creación de índices de IA es idempotente y no falla si ya existen', async () => {
+    engine.close()
+    await deleteRawDatabase(DB_NAME)
+
+    // Base v5 que ya contiene los índices (p. ej., migración parcial previa)
+    const partialDb = await openRawDatabase(DB_NAME, 5, (db) => {
+      const reports = db.createObjectStore(AI_REPORTS_STORE, { keyPath: 'id' })
+      reports.createIndex('createdAt', 'createdAt', { unique: false })
+      reports.createIndex('modeFilter', 'modeFilter', { unique: false })
+      const consultations = db.createObjectStore(AI_CONSULTATIONS_STORE, { keyPath: 'id' })
+      consultations.createIndex('createdAt', 'createdAt', { unique: false })
+      consultations.createIndex('modeFilter', 'modeFilter', { unique: false })
+    })
+    partialDb.close()
+
+    await expect(engine.initialize()).resolves.toBeUndefined()
+    expect(engine.getVersion()).toBe(6)
+
+    const indexes = await probeStoreIndexes([AI_REPORTS_STORE, AI_CONSULTATIONS_STORE])
+    expect(indexes[AI_REPORTS_STORE]).toContain('createdAt')
+    expect(indexes[AI_CONSULTATIONS_STORE]).toContain('modeFilter')
   })
 })
