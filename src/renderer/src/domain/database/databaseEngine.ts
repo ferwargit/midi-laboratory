@@ -344,10 +344,6 @@ export class DatabaseEngine {
       throw new Error('El respaldo no contiene colecciones válidas de sesiones o respuestas.')
     }
 
-    if (mode === 'replace') {
-      await this.clearDatabase()
-    }
-
     const validSessions = backup.sessions.filter((s) => isValidSessionRecord(s))
     const validAnswers = backup.answers.filter((a) => isValidAnswerRecord(a))
     const validReports = (backup.aiReports || []).filter((r) => isValidAiReportRecord(r))
@@ -364,6 +360,13 @@ export class DatabaseEngine {
       const answersStore = tx.objectStore(ANSWERS_STORE)
       const reportsStore = tx.objectStore(AI_REPORTS_STORE)
       const consultationsStore = tx.objectStore(AI_CONSULTATIONS_STORE)
+
+      if (mode === 'replace') {
+        sessionsStore.clear()
+        answersStore.clear()
+        reportsStore.clear()
+        consultationsStore.clear()
+      }
 
       validSessions.forEach((s) => sessionsStore.put(s))
       validAnswers.forEach((a) => answersStore.put(a))

@@ -9,6 +9,7 @@ import {
 } from './databaseEngine'
 import {
   DbSessionRecord,
+  DbAnswerRecord,
   DbAiReportRecord,
   DbAiConsultationRecord,
   DatabaseBackupPayload
@@ -249,6 +250,21 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
     expect(backup.sessions.length).toBe(1)
     expect(backup.version).toBe(6)
 
+    // Sesión previa ajena al backup: debe desaparecer tras un replace exitoso
+    const sesionPrevia: DbSessionRecord = {
+      id: 'session_previa_a_borrar',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Sesión Prevía',
+      totalQuestions: 3,
+      correctAnswers: 1,
+      accuracyPercentage: 33,
+      avgResponseTimeMs: 800,
+      durationSeconds: 10
+    }
+    await engine.saveSession(sesionPrevia, [])
+
     // Rechazar payloads corruptos
     await expect(engine.importDatabase(null as unknown as DatabaseBackupPayload)).rejects.toThrow(
       /inválido/i
@@ -261,6 +277,137 @@ describe('databaseEngine - Persistencia IndexedDB Nativa y Multistore', () => {
     const result = await engine.importDatabase(backup, 'replace')
     expect(result.success).toBe(true)
     expect(result.sessionsImported).toBe(1)
+
+    // El vaciado (.clear()) previo a la inserción debe haber eliminado la sesión ajena al backup
+    const sesionesTrasReplace = await engine.getAllSessions()
+    expect(sesionesTrasReplace.map((s) => s.id)).not.toContain('session_previa_a_borrar')
+    expect(sesionesTrasReplace.map((s) => s.id)).toContain('sess_export_test')
+  })
+
+  it('replace: un aborto en la fase de inserción preserva los datos previos (rollback atómico)', async () => {
+    // Siembra de datos previos: sesión con respuesta hija y reporte de IA
+    const session: DbSessionRecord = {
+      id: 'session_previa_rollback',
+      createdAt: new Date().toISOString(),
+      strategyId: 'adaptive_v1',
+      instrumentId: 'piano',
+      presetName: 'Datos Previos',
+      totalQuestions: 4,
+      correctAnswers: 3,
+      accuracyPercentage: 75,
+      avgResponseTimeMs: 1200,
+      durationSeconds: 40
+    }
+
+    const answer: DbAnswerRecord = {
+      id: 'answer_previa_rollback',
+      sessionId: session.id,
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 62,
+      isCorrect: true,
+      semitoneDistance: 2,
+      responseTimeMs: 900,
+      velocity: 80,
+      reasonTelemetry: 'stable_recall',
+      createdAt: new Date().toISOString()
+    }
+
+    const report: DbAiReportRecord = {
+      id: 'report_previo_rollback',
+      createdAt: new Date().toISOString(),
+      modelName: 'qwen3.5',
+      modeFilter: 'single_note',
+      analysisText: 'Informe previo a la importación fallida.',
+      prescription: {
+        title: 'Ejercicio Previo',
+        rationale: 'Refuerzo histórico',
+        targetMode: 'single_note',
+        instrumentId: 'acoustic_grand_piano',
+        recommendedNotes: [60, 62],
+        limitType: 'questions',
+        questionsCount: 10,
+        durationMinutes: 5,
+        advanceMode: 'smart'
+      }
+    }
+
+    await engine.saveSession(session, [answer])
+    await engine.saveAiReport(report)
+
+    expect((await engine.getAllSessions()).length).toBe(1)
+    expect((await engine.getAllAnswers()).length).toBe(1)
+    expect((await engine.getAllAiReports()).length).toBe(1)
+    const summaryPrevio = await engine.getSummary()
+
+    // Intercepción del handle interno: abortar la primera transacción readwrite
+    // que emita un put (la fase de inserción), simulando un QuotaExceededError.
+    const engineWithDb = engine as unknown as { db: IDBDatabase }
+    const db = engineWithDb.db
+    const realTransaction = db.transaction.bind(db)
+    let importTxAbortada = false
+
+    db.transaction = ((
+      storeNames: string | string[],
+      mode?: IDBTransactionMode
+    ): IDBTransaction => {
+      const tx = realTransaction(storeNames, mode)
+      if (mode === 'readwrite' && !importTxAbortada) {
+        const realObjectStore = tx.objectStore.bind(tx)
+        tx.objectStore = ((name: string): IDBObjectStore => {
+          const store = realObjectStore(name)
+          if (!importTxAbortada) {
+            const realPut = store.put.bind(store)
+            store.put = ((value: unknown): IDBRequest => {
+              importTxAbortada = true
+              queueMicrotask(() => tx.abort())
+              return realPut(value)
+            }) as typeof store.put
+          }
+          return store
+        }) as typeof tx.objectStore
+      }
+      return tx
+    }) as typeof db.transaction
+
+    const backup: DatabaseBackupPayload = {
+      version: DB_VERSION,
+      exportedAt: new Date().toISOString(),
+      summary: summaryPrevio,
+      sessions: [
+        {
+          id: 'session_nueva_reemplazo',
+          createdAt: new Date().toISOString(),
+          strategyId: 'adaptive_v1',
+          instrumentId: 'violin',
+          presetName: 'Reemplazo Fallido',
+          totalQuestions: 10,
+          correctAnswers: 10,
+          accuracyPercentage: 100,
+          avgResponseTimeMs: 500,
+          durationSeconds: 60
+        }
+      ],
+      answers: [],
+      aiReports: [],
+      aiConsultations: []
+    }
+
+    // La importación abortada debe rechazarse...
+    await expect(engine.importDatabase(backup, 'replace')).rejects.toThrow()
+
+    // ...y los datos previos deben seguir íntegros: el vaciado se revirtió atómicamente
+    const sessionsTrasFallo = await engine.getAllSessions()
+    const answersTrasFallo = await engine.getAllAnswers()
+    const reportsTrasFallo = await engine.getAllAiReports()
+
+    expect(sessionsTrasFallo.length).toBe(1)
+    expect(sessionsTrasFallo[0].id).toBe(session.id)
+    expect(answersTrasFallo.length).toBe(1)
+    expect(answersTrasFallo[0].id).toBe(answer.id)
+    expect(reportsTrasFallo.length).toBe(1)
+    expect(reportsTrasFallo[0].id).toBe(report.id)
+    expect(await engine.getSummary()).toEqual(summaryPrevio)
   })
 
   it('debe rechazar guardar sesiones o respuestas inválidas', async () => {
