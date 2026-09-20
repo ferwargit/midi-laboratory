@@ -15,7 +15,8 @@ import {
   isSingleNoteSession,
   isSequenceSession,
   BIAS_DOMINANCE_RATIO,
-  ISI_THRESHOLDS
+  ISI_THRESHOLDS,
+  DetailedSessionAnalysis
 } from './historyAnalytics'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
@@ -769,6 +770,92 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
       const report = generateDiagnosticReport(metrics)
       expect(report.title).toBeDefined()
       expect(report.concreteActionPlan.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('Casos Borde de la Auditoría Frente 3 (F-06/F-09/F-13)', () => {
+    it('F-13: analyzeSessionTimeline con sesión vacía no reporta 100% de confianza ni reparación', () => {
+      const timeline = analyzeSessionTimeline(sNotePiano, [])
+      expect(timeline.totalQuestions).toBe(0)
+      expect(timeline.overallAccuracy).toBe(0)
+      expect(timeline.avgLatencyMs).toBe(0)
+      expect(timeline.firstHalfAccuracy).toBe(0)
+      expect(timeline.secondHalfAccuracy).toBe(0)
+      expect(timeline.firstListenConfidencePercent).toBe(0)
+      expect(timeline.errorRepairRatePercent).toBe(0)
+    })
+
+    it('F-06/F-14: resolveNominalPoolSize respeta niveles de dos dígitos y aplica piso >= 2', () => {
+      const answerFor = (sessionId: string): DbAnswerRecord => ({
+        id: `ans_${sessionId}`,
+        sessionId,
+        questionIndex: 1,
+        expectedNote: 60,
+        playedNote: 60,
+        isCorrect: true,
+        semitoneDistance: 0,
+        responseTimeMs: 1000,
+        velocity: 90,
+        reasonTelemetry: '',
+        createdAt: new Date().toISOString()
+      })
+
+      // "Nivel 10" contiene la subcadena "nivel 1": el bug F-14 devolvía poolSize 3.
+      const sLevel10: DbSessionRecord = {
+        ...sNotePiano,
+        id: 's_level10',
+        presetName: 'Nivel 10 (Custom) • Notas personalizadas (11)'
+      }
+      const metrics10 = computeAnalyticsMetrics([sLevel10], [answerFor('s_level10')], 'all')
+      expect(metrics10.sessionPsychometricsList[0].poolSize).toBe(11)
+
+      // Pool personalizado de 1 nota debe pisarse a 2 (F-06).
+      const sPool1: DbSessionRecord = {
+        ...sNotePiano,
+        id: 's_pool1',
+        presetName: 'Notas Personalizadas (1)'
+      }
+      const metricsPool1 = computeAnalyticsMetrics([sPool1], [answerFor('s_pool1')], 'all')
+      expect(metricsPool1.sessionPsychometricsList[0].poolSize).toBe(2)
+    })
+
+    it('F-09: computeLongitudinalComparisons acumula el total de preguntas evaluadas en totalAttempts', () => {
+      const s1: DbSessionRecord = {
+        ...sNotePiano,
+        id: 'long_base',
+        createdAt: '2026-08-10T10:00:00Z'
+      }
+      const s2: DbSessionRecord = {
+        ...sNotePiano,
+        id: 'long_retest',
+        createdAt: '2026-08-20T10:00:00Z'
+      }
+
+      const buildDetail = (session: DbSessionRecord): DetailedSessionAnalysis => ({
+        session,
+        poolSize: 3,
+        entropyBits: 1.58,
+        chanceBaseline: 33,
+        normalizedAccuracy: 70,
+        responsesPerMinute: 12,
+        fastPercent: 50,
+        mediumPercent: 40,
+        slowPercent: 10,
+        sharpBiasCount: 0,
+        flatBiasCount: 0,
+        dominantBias: 'balanced' as const,
+        formatType: 'questions' as const,
+        formatLabel: '🔢 Serie 10',
+        inputMethod: 'hardware' as const,
+        interSessionGapMs: null,
+        interSessionGapLabel: 'Inicio',
+        cpiScore: 500
+      })
+
+      const comps = computeLongitudinalComparisons([buildDetail(s1), buildDetail(s2)])
+      expect(comps.length).toBe(1)
+      // El bug F-09 asignaba sorted.length (2) en lugar del total de preguntas (10 + 10).
+      expect(comps[0].totalAttempts).toBe(20)
     })
   })
 })
