@@ -370,4 +370,154 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
 
     saveSpy.mockRestore()
   })
+
+  describe('F12: Telemetría Metacognitiva en repeatCurrentSlice', () => {
+    it('las re-escuchas previas a la respuesta deben contar en preAnswerListens', async () => {
+      const saveSpy = vi
+        .spyOn(useDatabaseStore.getState(), 'saveSession')
+        .mockResolvedValue(undefined)
+      const { result } = renderHook(() =>
+        useRepertoireTrainer({
+          onPlaySlice: vi.fn()
+        })
+      )
+
+      act(() => {
+        result.current.startSession({
+          score: MOCK_SCORE_DATA,
+          hand: 'RH',
+          startMeasure: 1,
+          endMeasure: 1,
+          streakTarget: 3
+        })
+      })
+
+      act(() => {
+        result.current.repeatCurrentSlice()
+        result.current.repeatCurrentSlice()
+      })
+
+      act(() => {
+        result.current.handleUserNotePlayed(67)
+      })
+
+      await act(async () => {
+        result.current.stopSession()
+      })
+
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      const savedAnswers = saveSpy.mock.calls[0][1]
+      // 2 re-escuchas registradas + el valor base del kernel (1)
+      expect(savedAnswers[0].preAnswerListens).toBe(3)
+
+      saveSpy.mockRestore()
+    })
+
+    it('las re-escuchas durante la pausa de error manual deben contar en postErrorListens', async () => {
+      const saveSpy = vi
+        .spyOn(useDatabaseStore.getState(), 'saveSession')
+        .mockResolvedValue(undefined)
+      const { result } = renderHook(() =>
+        useRepertoireTrainer({
+          onPlaySlice: vi.fn()
+        })
+      )
+
+      act(() => {
+        result.current.setAdvanceMode('manual')
+        result.current.startSession({
+          score: MOCK_SCORE_DATA,
+          hand: 'RH',
+          startMeasure: 1,
+          endMeasure: 1,
+          streakTarget: 3
+        })
+      })
+
+      act(() => {
+        result.current.handleUserNotePlayed(65) // Nota errónea
+      })
+
+      expect(result.current.isWaitingManualAdvance).toBe(true)
+
+      act(() => {
+        result.current.repeatCurrentSlice()
+      })
+
+      await act(async () => {
+        result.current.stopSession()
+      })
+
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      const savedAnswers = saveSpy.mock.calls[0][1]
+      expect(savedAnswers[0].postErrorListens).toBe(1)
+
+      saveSpy.mockRestore()
+    })
+  })
+
+  describe('F15: responseTimeMs dinámico en el registro de respuesta', () => {
+    it('debe reflejar el tiempo real entre notas y no el literal 1000', async () => {
+      vi.useFakeTimers()
+      const saveSpy = vi
+        .spyOn(useDatabaseStore.getState(), 'saveSession')
+        .mockResolvedValue(undefined)
+      const { result } = renderHook(() =>
+        useRepertoireTrainer({
+          onPlaySlice: vi.fn()
+        })
+      )
+
+      act(() => {
+        result.current.setAdvanceMode('manual')
+        result.current.startSession({
+          score: MOCK_SCORE_DATA,
+          hand: 'RH',
+          startMeasure: 1,
+          endMeasure: 1,
+          includeResolutionNote: false,
+          streakTarget: 1 // Cada acierto expande la rebanada
+        })
+      })
+
+      const t0 = Date.now()
+
+      // Rebanada de 1 evento (67): acierto → la frase se expande a 2 eventos
+      act(() => {
+        result.current.handleUserNotePlayed(67)
+      })
+      act(() => {
+        result.current.advanceToNextStep()
+      })
+
+      // Rebanada de 2 eventos (67, 67): el tiempo entre notas es 1500 ms
+      act(() => {
+        vi.setSystemTime(t0 + 800)
+        result.current.handleUserNotePlayed(67)
+      })
+      act(() => {
+        vi.setSystemTime(t0 + 2300)
+        result.current.handleUserNotePlayed(67)
+      })
+
+      await act(async () => {
+        result.current.stopSession()
+        await Promise.resolve()
+      })
+
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      const savedAnswers = saveSpy.mock.calls[0][1]
+
+      // El primer registro (rebanada de 1 sola nota) se clampa a minMs
+      expect(savedAnswers[0].responseTimeMs).toBe(50)
+      // El segundo registro lleva el delta real entre la primera y la última nota
+      expect(savedAnswers[1].responseTimeMs).toBe(1500)
+      expect(savedAnswers[1].responseTimeMs).not.toBe(1000)
+      expect(savedAnswers[1].responseTimeMs).toBeGreaterThanOrEqual(50)
+      expect(savedAnswers[1].responseTimeMs).toBeLessThanOrEqual(30000)
+
+      saveSpy.mockRestore()
+      vi.useRealTimers()
+    })
+  })
 })

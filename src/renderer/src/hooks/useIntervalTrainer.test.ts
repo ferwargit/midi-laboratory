@@ -336,4 +336,81 @@ describe('useIntervalTrainer - Suite Completa y Acumulativa de Intervalos', () =
       saveSpy.mockRestore()
     })
   })
+
+  describe('F12: Telemetría Metacognitiva en repeatCurrentInterval', () => {
+    it('las re-escuchas previas a la respuesta deben contar en preAnswerListens', async () => {
+      const saveSpy = vi
+        .spyOn(useDatabaseStore.getState(), 'saveSession')
+        .mockResolvedValue(undefined)
+      const onPlayInterval = vi.fn()
+      const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
+
+      act(() => {
+        result.current.setSessionLimitType('questions')
+        result.current.setSessionQuestionsCount(1)
+        result.current.startSession([4], [60])
+      })
+
+      act(() => {
+        result.current.repeatCurrentInterval()
+        result.current.repeatCurrentInterval()
+      })
+
+      act(() => {
+        result.current.handleUserNotePlayed(60)
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(64)
+      })
+
+      await act(async () => {
+        result.current.stopSession()
+      })
+
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      const savedAnswers = saveSpy.mock.calls[0][1]
+      // 2 re-escuchas registradas + el valor base del kernel (1)
+      expect(savedAnswers[0].preAnswerListens).toBe(3)
+
+      saveSpy.mockRestore()
+    })
+
+    it('las re-escuchas durante la pausa de error manual deben contar en postErrorListens', async () => {
+      const saveSpy = vi
+        .spyOn(useDatabaseStore.getState(), 'saveSession')
+        .mockResolvedValue(undefined)
+      const onPlayInterval = vi.fn()
+      const { result } = renderHook(() => useIntervalTrainer({ onPlayInterval }))
+
+      act(() => {
+        result.current.setSessionLimitType('questions')
+        result.current.setSessionQuestionsCount(1)
+        result.current.setAdvanceMode('manual')
+        result.current.startSession([4], [60])
+      })
+
+      act(() => {
+        result.current.handleUserNotePlayed(60)
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(61) // Intervalo incorrecto
+      })
+
+      expect(result.current.isWaitingManualAdvance).toBe(true)
+
+      act(() => {
+        result.current.repeatCurrentInterval()
+      })
+
+      await act(async () => {
+        result.current.stopSession()
+      })
+
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      const savedAnswers = saveSpy.mock.calls[0][1]
+      expect(savedAnswers[0].postErrorListens).toBe(1)
+
+      saveSpy.mockRestore()
+    })
+  })
 })

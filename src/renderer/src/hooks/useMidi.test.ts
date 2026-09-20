@@ -253,6 +253,10 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
 
     expect(result.current.pressedNotes).toEqual([])
     expect(result.current.activeStimulusNotes).toEqual([])
+
+    // Restablecer el mock para que el unmount pasivo del hook no lance
+    // (el cleanup de useMidi vuelve a invocar sendAllNotesOff al desmontar)
+    mockOutput.send = vi.fn()
   })
 
   it('clearAllPressedNotes debe invocar sendAllNotesOff y limpiar el buffer', async () => {

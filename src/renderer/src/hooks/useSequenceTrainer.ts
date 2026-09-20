@@ -270,9 +270,14 @@ export function useSequenceTrainer({
   const repeatCurrentSequence = useCallback((): void => {
     const seq = currentSequenceRef.current
     if (seq.length > 0) {
+      if (core.isWaitingAnswer) {
+        core.recordPreAnswerRepeat()
+      } else if (core.isWaitingManualAdvance) {
+        core.recordPostErrorRepeat()
+      }
       onPlaySequence(seq)
     }
-  }, [onPlaySequence])
+  }, [core, onPlaySequence])
 
   const handleUserNotePlayed = useCallback(
     (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {

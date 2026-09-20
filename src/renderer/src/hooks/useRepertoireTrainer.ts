@@ -13,6 +13,7 @@ import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useTrainerCore, CoreStartSessionOptions } from './useTrainerCore'
 import { stimulusScheduler } from '../services/audio/stimulusScheduler'
 import { midiNoteToName } from '../domain/music/noteUtils'
+import { sanitizeResponseTime } from '../domain/exercise/evalPolicy'
 
 export type ChainingDirection = 'forward' | 'backward'
 export type ChainingStepGranularity = '1_event' | '2_events' | '1_measure'
@@ -457,11 +458,16 @@ export function useRepertoireTrainer({
   }, [])
 
   const triggerPlayCurrentSlice = useCallback(
-    (sliceOverride?: ScorePlaybackEvent[]): void => {
+    (sliceOverride?: ScorePlaybackEvent[], regenerateToken = true): void => {
       const slice = sliceOverride || getActiveSlice()
       if (slice.length === 0) return
 
-      core.generateQuestionToken('token_rep')
+      // Solo las preguntas NUEVAS (inicio/avance) rotan el token: hacerlo en una
+      // re-escucha resetearía los contadores de telemetría del kernel
+      // (generateQuestionToken reinicia preAnswerListens/postErrorListens).
+      if (regenerateToken) {
+        core.generateQuestionToken('token_rep')
+      }
       playedNotesBufferRef.current = []
 
       core.setLastResult(null)
@@ -603,8 +609,13 @@ export function useRepertoireTrainer({
   }, [core, setActiveSliceLength, setStreak])
 
   const repeatCurrentSlice = useCallback((): void => {
-    triggerPlayCurrentSlice()
-  }, [triggerPlayCurrentSlice])
+    if (core.isWaitingAnswer) {
+      core.recordPreAnswerRepeat()
+    } else if (core.isWaitingManualAdvance) {
+      core.recordPostErrorRepeat()
+    }
+    triggerPlayCurrentSlice(undefined, false)
+  }, [core, triggerPlayCurrentSlice])
 
   const handleUserNotePlayed = useCallback(
     (
@@ -654,6 +665,11 @@ export function useRepertoireTrainer({
 
         const result = evaluateRepertoireAttempt(slice, playedNotesToEvaluate, evalConfig)
 
+        const firstPlayedNote = playedNotesToEvaluate[0]
+        const lastPlayedNote = playedNotesToEvaluate[playedNotesToEvaluate.length - 1]
+        const rawResponseTimeMs = lastPlayedNote.timestampMs - firstPlayedNote.timestampMs
+        const responseTimeMs = sanitizeResponseTime(rawResponseTimeMs)
+
         const firstExpectedNote = slice[0]?.midiNotes[0] ?? 60
         const answerRecord: DbAnswerRecord = {
           id: `ans_rep_${crypto.randomUUID()}`,
@@ -663,7 +679,7 @@ export function useRepertoireTrainer({
           playedNote: noteNumber,
           isCorrect: result.isCompleteSuccess,
           semitoneDistance: result.pitchAccuracyPercent === 100 ? 0 : 1,
-          responseTimeMs: 1000,
+          responseTimeMs,
           velocity,
           reasonTelemetry: `Rebanada: ${slice.length} evento(s) | Afinación: ${result.pitchAccuracyPercent}% | Ritmo: ${result.rhythmAccuracyPercent}%`,
           createdAt: new Date().toISOString(),

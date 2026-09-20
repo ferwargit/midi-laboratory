@@ -311,9 +311,14 @@ export function useIntervalTrainer({
   const repeatCurrentInterval = useCallback((): void => {
     const stim = currentStimulusRef.current
     if (stim) {
+      if (core.isWaitingAnswer) {
+        core.recordPreAnswerRepeat()
+      } else if (core.isWaitingManualAdvance) {
+        core.recordPostErrorRepeat()
+      }
       onPlayInterval(stim.rootNote, stim.targetNote, stim.direction)
     }
-  }, [onPlayInterval])
+  }, [core, onPlayInterval])
 
   const handleUserNotePlayed = useCallback(
     (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {

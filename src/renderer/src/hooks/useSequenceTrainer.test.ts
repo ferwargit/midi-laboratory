@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { StrictMode, createElement } from 'react'
 import { useSequenceTrainer } from './useSequenceTrainer'
+import { useDatabaseStore } from '../stores/useDatabaseStore'
 
 describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () => {
   beforeEach(() => {
@@ -359,6 +360,87 @@ describe('useSequenceTrainer - Suite Completa y Acumulativa de Secuencias', () =
         ([type, msg]) => type === 'EVAL' && !msg.startsWith('Nota ')
       )
       expect(evalFeedback.length).toBe(1)
+    })
+  })
+
+  describe('F12: Telemetría Metacognitiva en repeatCurrentSequence', () => {
+    it('las re-escuchas previas a la respuesta deben contar en preAnswerListens', async () => {
+      const saveSpy = vi
+        .spyOn(useDatabaseStore.getState(), 'saveSession')
+        .mockResolvedValue(undefined)
+      const onPlaySequence = vi.fn()
+      const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence }))
+
+      act(() => {
+        result.current.setSessionLimitType('questions')
+        result.current.setSessionQuestionsCount(1)
+        result.current.startSession([60, 62, 64], 3)
+      })
+
+      const seq = result.current.currentSequence
+
+      act(() => {
+        result.current.repeatCurrentSequence()
+        result.current.repeatCurrentSequence()
+      })
+
+      seq.forEach((note) => {
+        act(() => {
+          result.current.handleUserNotePlayed(note)
+        })
+      })
+
+      await act(async () => {
+        result.current.stopSession()
+      })
+
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      const savedAnswers = saveSpy.mock.calls[0][1]
+      // 2 re-escuchas registradas + el valor base del kernel (1)
+      expect(savedAnswers[0].preAnswerListens).toBe(3)
+
+      saveSpy.mockRestore()
+    })
+
+    it('las re-escuchas durante la pausa de error manual deben contar en postErrorListens', async () => {
+      const saveSpy = vi
+        .spyOn(useDatabaseStore.getState(), 'saveSession')
+        .mockResolvedValue(undefined)
+      const onPlaySequence = vi.fn()
+      const { result } = renderHook(() => useSequenceTrainer({ onPlaySequence }))
+
+      act(() => {
+        result.current.setSessionLimitType('questions')
+        result.current.setSessionQuestionsCount(1)
+        result.current.setAdvanceMode('manual')
+        result.current.startSession([60, 62, 64], 3)
+      })
+
+      act(() => {
+        result.current.handleUserNotePlayed(71)
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(72)
+      })
+      act(() => {
+        result.current.handleUserNotePlayed(74) // Frase incorrecta
+      })
+
+      expect(result.current.isWaitingManualAdvance).toBe(true)
+
+      act(() => {
+        result.current.repeatCurrentSequence()
+      })
+
+      await act(async () => {
+        result.current.stopSession()
+      })
+
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      const savedAnswers = saveSpy.mock.calls[0][1]
+      expect(savedAnswers[0].postErrorListens).toBe(1)
+
+      saveSpy.mockRestore()
     })
   })
 })
