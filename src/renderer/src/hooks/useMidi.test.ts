@@ -236,11 +236,20 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
       await Promise.resolve()
     })
 
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
     expect(() =>
       act(() => {
         result.current.sendAllNotesOff()
       })
     ).not.toThrow()
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[useMidi] Error al emitir MIDI Panic:',
+      expect.any(Error)
+    )
+    expect(consoleSpy).toHaveBeenCalledTimes(1)
+    consoleSpy.mockRestore()
 
     expect(result.current.pressedNotes).toEqual([])
     expect(result.current.activeStimulusNotes).toEqual([])

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { LmStudioService } from '../domain/ai/lmStudioService'
+import { aiService } from '../domain/ai/lmStudioService'
 import { AiAnalysisResponse } from '../domain/ai/types'
 import { AnalyticsMetrics, AnalyticsModeFilter } from '../domain/analytics/historyAnalytics'
 import { generateAlgorithmicFallback } from '../domain/ai/fallbackGenerator'
@@ -18,8 +18,6 @@ interface AiState {
   setAiResponseForMode: (mode: AnalyticsModeFilter, response: AiAnalysisResponse) => void
   resetAiMemory: () => void
 }
-
-const aiService = new LmStudioService()
 
 const initialResponses: Record<AnalyticsModeFilter, AiAnalysisResponse | null> = {
   all: null,

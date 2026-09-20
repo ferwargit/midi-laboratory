@@ -3,7 +3,7 @@ import { AnalyticsMetrics, AnalyticsModeFilter } from '../../../domain/analytics
 import { DbAiConsultationRecord, DbAiReportRecord } from '../../../domain/database/types'
 import { Card } from '../../ui/Card'
 import { Button } from '../../ui/Button'
-import { LmStudioService } from '../../../domain/ai/lmStudioService'
+import { aiService } from '../../../domain/ai/lmStudioService'
 import { MarkdownRenderer } from '../../ui/MarkdownRenderer'
 
 interface AiConsultationTabProps {
@@ -13,8 +13,6 @@ interface AiConsultationTabProps {
   aiReports?: DbAiReportRecord[]
   onSaveConsultation: (c: DbAiConsultationRecord) => Promise<void>
 }
-
-const aiService = new LmStudioService()
 
 function formatReasoningTime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`

@@ -8,7 +8,7 @@ import {
   computeAnalyticsMetrics,
   DetailedSessionAnalysis
 } from '../../domain/analytics/historyAnalytics'
-import { LmStudioService } from '../../domain/ai/lmStudioService'
+import { aiService } from '../../domain/ai/lmStudioService'
 import { AnalyticsCharts } from '../trainer/AnalyticsCharts'
 import { AiExercisePrescription } from '../../domain/ai/types'
 import { DbAiConsultationRecord } from '../../domain/database/types'
@@ -28,8 +28,6 @@ import { ConfusionMatrixTab } from './analytics/ConfusionMatrixTab'
 interface AnalyticsViewProps {
   onLoadPrescription: (prescription: AiExercisePrescription) => void
 }
-
-const aiService = new LmStudioService()
 
 export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React.ReactElement {
   const sessions = useDatabaseStore((state) => state.sessions)

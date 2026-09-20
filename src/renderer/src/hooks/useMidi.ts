@@ -67,8 +67,8 @@ export function useMidi({
   const filterRef = useRef<MidiInputFilter>(
     new MidiInputFilter(DEFAULT_APP_CONFIG.midi.debounceWindowMs)
   )
-  const hungNotesTimersRef = useRef<Map<number, NodeJS.Timeout>>(new Map())
-  const stimulusTimersRef = useRef<Map<number, NodeJS.Timeout>>(new Map())
+  const hungNotesTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
+  const stimulusTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const lastKnownInputNameRef = useRef<string>('UM-ONE')
   const previousConnectionStateRef = useRef<boolean | null>(null)
 
@@ -311,8 +311,8 @@ export function useMidi({
       const chByte = (channel - 1) & 0x0f
       const timerKey = `${channel}_${noteNumber}` // 👈 Clave única por canal y nota
 
-      if (stimulusTimersRef.current.has(timerKey as unknown as number)) {
-        clearTimeout(stimulusTimersRef.current.get(timerKey as unknown as number)!)
+      if (stimulusTimersRef.current.has(timerKey)) {
+        clearTimeout(stimulusTimersRef.current.get(timerKey)!)
         try {
           outputPort.send([0x80 | chByte, noteNumber, 0])
         } catch {
@@ -332,10 +332,10 @@ export function useMidi({
           // No-op
         }
         setActiveStimulusNotes((prev) => prev.filter((n) => n !== noteNumber))
-        stimulusTimersRef.current.delete(timerKey as unknown as number)
+        stimulusTimersRef.current.delete(timerKey)
       }, durationMs)
 
-      stimulusTimersRef.current.set(timerKey as unknown as number, timer)
+      stimulusTimersRef.current.set(timerKey, timer)
     },
     [midiAccess, selectedOutputId, isDeviceDisconnected]
   )
