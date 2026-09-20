@@ -1,7 +1,8 @@
 import {
   AnalyticsMetrics,
   COGNITIVE_LATENCY_THRESHOLDS,
-  MASTERY_THRESHOLDS
+  MASTERY_THRESHOLDS,
+  BIAS_DOMINANCE_RATIO
 } from './historyAnalytics'
 
 export interface DiagnosticReport {
@@ -81,9 +82,9 @@ export function generateDiagnosticReport(metrics: AnalyticsMetrics): DiagnosticR
   let directionalBiasAnalysis = ''
   const totalErrors = metrics.sharpBiasCount + metrics.flatBiasCount
   if (totalErrors > 0) {
-    if (metrics.sharpBiasCount > metrics.flatBiasCount * 1.5) {
+    if (metrics.sharpBiasCount > metrics.flatBiasCount * BIAS_DOMINANCE_RATIO) {
       directionalBiasAnalysis = `Se detecta un SESGO HACIA LO AGUDO (+semitonos): en el ${Math.round((metrics.sharpBiasCount / totalErrors) * 100)}% de tus errores tiendes a percibir la nota más alta de lo que realmente suena.`
-    } else if (metrics.flatBiasCount > metrics.sharpBiasCount * 1.5) {
+    } else if (metrics.flatBiasCount > metrics.sharpBiasCount * BIAS_DOMINANCE_RATIO) {
       directionalBiasAnalysis = `Se detecta un SESGO HACIA LO GRAVE (-semitonos): en el ${Math.round((metrics.flatBiasCount / totalErrors) * 100)}% de tus errores tiendes a percibir la nota por debajo de su tono real.`
     } else {
       directionalBiasAnalysis =

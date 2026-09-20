@@ -18,6 +18,14 @@ export const MASTERY_THRESHOLDS = {
   CRITICAL_MAX: 60
 } as const
 
+export const ISI_THRESHOLDS = {
+  MASSED_MAX_MS: 900000,
+  OPTIMAL_MIN_MS: 43200000,
+  OPTIMAL_MAX_MS: 172800000
+} as const
+
+export const BIAS_DOMINANCE_RATIO = 1.4 as const
+
 export type AnalyticsModeFilter = 'all' | 'single_note' | 'intervals' | 'sequences' | 'repertoire'
 export type AnalyticsMasteryFilter = 'all' | 'mastered' | 'learning' | 'critical'
 
@@ -283,6 +291,85 @@ export function formatInterSessionGap(gapMs: number | null): string {
   if (hours < 24) return `${hours} h`
   const days = Math.round(hours / 24)
   return `${days} d`
+}
+
+export interface InterSessionGapInfo {
+  gapMs: number | null
+  label: string
+}
+
+/**
+ * Construye el mapa de intervalos entre sesiones (ISI) sobre la cronología
+ * del conjunto recibido. La primera sesión cronológica recibe `gapMs === null`.
+ */
+export function computeInterSessionGapMap(
+  sessions: DbSessionRecord[]
+): Map<string, InterSessionGapInfo> {
+  const gapMap = new Map<string, InterSessionGapInfo>()
+  const chronological = [...sessions].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  )
+
+  for (let i = 0; i < chronological.length; i++) {
+    const current = chronological[i]
+    if (i === 0) {
+      gapMap.set(current.id, { gapMs: null, label: 'Inicio' })
+    } else {
+      const prev = chronological[i - 1]
+      const diffMs = Math.max(
+        0,
+        new Date(current.createdAt).getTime() - new Date(prev.createdAt).getTime()
+      )
+      gapMap.set(current.id, { gapMs: diffMs, label: formatInterSessionGap(diffMs) })
+    }
+  }
+
+  return gapMap
+}
+
+/**
+ * Resuelve el método de entrada efectivo de una sesión a partir de sus respuestas.
+ */
+export function resolveSessionInputMethod(
+  session: DbSessionRecord,
+  answers: DbAnswerRecord[]
+): 'hardware' | 'virtual' | 'mixed' {
+  let hardwareCount = 0
+  let virtualCount = 0
+
+  for (const ans of answers) {
+    if (ans.sessionId !== session.id) continue
+    if (ans.inputSource === 'virtual_ui') {
+      virtualCount++
+    } else {
+      hardwareCount++
+    }
+  }
+
+  return virtualCount === 0 ? 'hardware' : hardwareCount === 0 ? 'virtual' : 'mixed'
+}
+
+/**
+ * Resuelve el sesgo direccional dominante de una sesión según `BIAS_DOMINANCE_RATIO`.
+ */
+export function resolveSessionDominantBias(
+  session: DbSessionRecord,
+  answers: DbAnswerRecord[]
+): 'sharp' | 'flat' | 'balanced' {
+  let sharp = 0
+  let flat = 0
+
+  for (const ans of answers) {
+    if (ans.sessionId !== session.id || ans.isCorrect) continue
+    if (ans.semitoneDistance > 0) sharp++
+    else if (ans.semitoneDistance < 0) flat++
+  }
+
+  return sharp > flat * BIAS_DOMINANCE_RATIO
+    ? 'sharp'
+    : flat > sharp * BIAS_DOMINANCE_RATIO
+      ? 'flat'
+      : 'balanced'
 }
 
 function resolveNominalPoolSize(session: DbSessionRecord, empiricalUniqueCount: number): number {
@@ -697,8 +784,18 @@ export function computePitchClassConfusionMatrix(answers: DbAnswerRecord[]): Con
 
 export function filterSessionsAdvanced(
   sessions: DbSessionRecord[],
-  filters: AnalyticsFilterOptions
+  filters: AnalyticsFilterOptions,
+  answers: DbAnswerRecord[] = []
 ): DbSessionRecord[] {
+  // El mapa de intervalos se construye sobre la cronología del input completo,
+  // antes de filtrar, de modo que gap === null identifique solo a la primera
+  // sesión de la historia recibida.
+  const needsIsiFilter = !!filters.isiFilter && filters.isiFilter !== 'all'
+  const gapMap = needsIsiFilter ? computeInterSessionGapMap(sessions) : null
+  // Los filtros que requieren respuestas (inputSource / biasFilter) son no-op
+  // cuando estas no se proporcionan, según la Decisión 2 de design.md.
+  const hasAnswers = answers.length > 0
+
   return sessions.filter((s) => {
     // 1. Modalidad Estricta
     if (filters.mode === 'single_note' && !isSingleNoteSession(s)) return false
@@ -809,6 +906,33 @@ export function filterSessionsAdvanced(
       const matchInst = (s.instrumentId || '').toLowerCase().includes(q)
       const matchStrat = (s.strategyId || '').toLowerCase().includes(q)
       if (!matchName && !matchInst && !matchStrat) return false
+    }
+
+    // 9. Fuente de Entrada (hardware / virtual / mixed)
+    // Sin respuestas no hay forma de derivar el método de entrada: no-op seguro.
+    if (hasAnswers && filters.inputSource && filters.inputSource !== 'all') {
+      if (resolveSessionInputMethod(s, answers) !== filters.inputSource) return false
+    }
+
+    // 10. Sesgo Direccional Dominante
+    // Sin respuestas no hay forma de derivar el sesgo: no-op seguro.
+    if (hasAnswers && filters.biasFilter && filters.biasFilter !== 'all') {
+      if (resolveSessionDominantBias(s, answers) !== filters.biasFilter) return false
+    }
+
+    // 11. Banda de Intervalo Entre Sesiones (ISI)
+    if (needsIsiFilter && gapMap) {
+      const gap = gapMap.get(s.id)?.gapMs ?? null
+      // La primera sesión de la cronología (gap === null) no pertenece a
+      // ninguna banda de intervalo; solo coincide con isiFilter === 'all'.
+      if (gap === null) return false
+      if (filters.isiFilter === 'massed' && !(gap < ISI_THRESHOLDS.MASSED_MAX_MS)) return false
+      if (
+        filters.isiFilter === 'optimal' &&
+        !(gap >= ISI_THRESHOLDS.OPTIMAL_MIN_MS && gap <= ISI_THRESHOLDS.OPTIMAL_MAX_MS)
+      )
+        return false
+      if (filters.isiFilter === 'spaced' && !(gap > ISI_THRESHOLDS.OPTIMAL_MAX_MS)) return false
     }
 
     return true
@@ -1004,7 +1128,7 @@ export function computeAnalyticsMetrics(
   advancedFilters?: Omit<AnalyticsFilterOptions, 'mode'>
 ): AnalyticsMetrics {
   const filteredSessions = advancedFilters
-    ? filterSessionsAdvanced(sessions, { mode: modeFilter, ...advancedFilters })
+    ? filterSessionsAdvanced(sessions, { mode: modeFilter, ...advancedFilters }, answers)
     : filterSessionsByMode(sessions, modeFilter)
 
   const validSessionIds = new Set(filteredSessions.map((s) => s.id))
@@ -1034,24 +1158,7 @@ export function computeAnalyticsMetrics(
     }
   }
 
-  const chronologicalSessions = [...filteredSessions].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  )
-
-  const gapMap = new Map<string, { gapMs: number | null; label: string }>()
-  for (let i = 0; i < chronologicalSessions.length; i++) {
-    const current = chronologicalSessions[i]
-    if (i === 0) {
-      gapMap.set(current.id, { gapMs: null, label: 'Inicio' })
-    } else {
-      const prev = chronologicalSessions[i - 1]
-      const diffMs = Math.max(
-        0,
-        new Date(current.createdAt).getTime() - new Date(prev.createdAt).getTime()
-      )
-      gapMap.set(current.id, { gapMs: diffMs, label: formatInterSessionGap(diffMs) })
-    }
-  }
+  const gapMap = computeInterSessionGapMap(filteredSessions)
 
   let totalCorrect = 0
   let totalTime = 0
@@ -1087,8 +1194,6 @@ export function computeAnalyticsMetrics(
     let sSlow = 0
     let sSharp = 0
     let sFlat = 0
-    let hardwareCount = 0
-    let virtualCount = 0
 
     sAnswers.forEach((ans) => {
       if (ans.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) sFast++
@@ -1099,12 +1204,6 @@ export function computeAnalyticsMetrics(
         if (ans.semitoneDistance > 0) sSharp++
         else if (ans.semitoneDistance < 0) sFlat++
       }
-
-      if (ans.inputSource === 'virtual_ui') {
-        virtualCount++
-      } else {
-        hardwareCount++
-      }
     })
 
     const totalAns = Math.max(1, sAnswers.length)
@@ -1112,12 +1211,11 @@ export function computeAnalyticsMetrics(
     const mediumPercent = Math.round((sMed / totalAns) * 100)
     const slowPercent = Math.round((sSlow / totalAns) * 100)
 
-    const dominantBias = sSharp > sFlat * 1.4 ? 'sharp' : sFlat > sSharp * 1.4 ? 'flat' : 'balanced'
+    const dominantBias = resolveSessionDominantBias(session, sAnswers)
 
     const formatInfo = resolveSessionFormat(session)
 
-    const inputMethod: 'hardware' | 'virtual' | 'mixed' =
-      virtualCount === 0 ? 'hardware' : hardwareCount === 0 ? 'virtual' : 'mixed'
+    const inputMethod = resolveSessionInputMethod(session, sAnswers)
 
     const gapInfo = gapMap.get(session.id) || { gapMs: null, label: 'Inicio' }
 

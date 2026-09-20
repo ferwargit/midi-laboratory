@@ -141,39 +141,27 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
 
   // 1. Filtrado Reactivo de Sesiones
   const displayedAnalysisList: DetailedSessionAnalysis[] = useMemo(() => {
-    const filteredRaw = filterSessionsAdvanced(sessions, {
-      mode: modeFilter,
-      instrumentId: selectedInstrument,
-      strategyId: selectedStrategy,
-      presetFilter: selectedPreset,
-      format: selectedFormat,
-      mastery: selectedMastery,
-      poolSizeFilter: selectedPoolSize,
-      searchQuery
-    })
+    const filteredRaw = filterSessionsAdvanced(
+      sessions,
+      {
+        mode: modeFilter,
+        instrumentId: selectedInstrument,
+        strategyId: selectedStrategy,
+        presetFilter: selectedPreset,
+        format: selectedFormat,
+        mastery: selectedMastery,
+        inputSource: selectedInputSource,
+        biasFilter: selectedBias,
+        poolSizeFilter: selectedPoolSize,
+        isiFilter: selectedIsi,
+        searchQuery
+      },
+      answers
+    )
     const validIds = new Set(filteredRaw.map((s) => s.id))
     let list = (metrics.sessionPsychometricsList || []).filter((item) =>
       validIds.has(item.session.id)
     )
-
-    if (selectedInputSource !== 'all') {
-      list = list.filter((item) => item.inputMethod === selectedInputSource)
-    }
-
-    if (selectedBias !== 'all') {
-      list = list.filter((item) => item.dominantBias === selectedBias)
-    }
-
-    if (selectedIsi !== 'all') {
-      list = list.filter((item) => {
-        const gap = item.interSessionGapMs
-        if (gap === null) return selectedIsi === 'spaced'
-        if (selectedIsi === 'massed') return gap < 900000
-        if (selectedIsi === 'optimal') return gap >= 43200000 && gap <= 172800000
-        if (selectedIsi === 'spaced') return gap > 172800000
-        return true
-      })
-    }
 
     // Si está activo el modo aislamiento por casillas
     if (isolatedSessionIds && isolatedSessionIds.size > 0) {
@@ -244,6 +232,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     })
   }, [
     sessions,
+    answers,
     modeFilter,
     selectedInstrument,
     selectedStrategy,

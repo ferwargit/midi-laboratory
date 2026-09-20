@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import {
   COGNITIVE_LATENCY_THRESHOLDS,
   MASTERY_THRESHOLDS,
@@ -149,5 +151,35 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
     const prompt = buildUserPrompt(metrics)
     // Validación usando la constante central
     expect(prompt).toContain(`Respuestas Rápidas (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})`)
+  })
+})
+
+describe('AnalyticsView - Pipeline de Dominio Puro (F-01, spec 05)', () => {
+  // Regresión arquitectónica estática (patrón de index-csp.test.ts): la spec 05
+  // prohíbe que la vista reimplemente con .filter() propios los filtros que ya
+  // declara AnalyticsFilterOptions. Una regresión silenciosa en este punto
+  // reintroduciría la lógica fugada F-01 sin que los tests funcionales lo
+  // detectaran, por lo que se fija el contrato sobre el propio código fuente.
+  const viewSource = readFileSync(
+    resolve(__dirname, '../../components/views/AnalyticsView.tsx'),
+    'utf-8'
+  )
+
+  it('no reimplementa el filtrado de inputSource, bias ni ISI con .filter() manuales', () => {
+    // La forma histórica del bug (OLA 2.3, F-01) era `if (x !== 'all') { list = list.filter(...) }`,
+    // por lo que la regex admite la llave de apertura opcional y el salto de línea.
+    expect(viewSource).not.toMatch(
+      /selectedInputSource\s*!==\s*'all'\s*\)\s*\{?\s*list\s*=\s*list\.filter/
+    )
+    expect(viewSource).not.toMatch(
+      /selectedBias\s*!==\s*'all'\s*\)\s*\{?\s*list\s*=\s*list\.filter/
+    )
+    expect(viewSource).not.toMatch(/selectedIsi\s*!==\s*'all'\s*\)\s*\{?\s*list\s*=\s*list\.filter/)
+  })
+
+  it('delega los tres filtros al dominio mediante filterSessionsAdvanced', () => {
+    expect(viewSource).toMatch(/inputSource:\s*selectedInputSource/)
+    expect(viewSource).toMatch(/biasFilter:\s*selectedBias/)
+    expect(viewSource).toMatch(/isiFilter:\s*selectedIsi/)
   })
 })

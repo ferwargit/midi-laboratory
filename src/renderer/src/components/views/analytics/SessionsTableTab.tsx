@@ -3,7 +3,8 @@ import {
   DetailedSessionAnalysis,
   reconstructSessionConfig,
   COGNITIVE_LATENCY_THRESHOLDS,
-  MASTERY_THRESHOLDS
+  MASTERY_THRESHOLDS,
+  ISI_THRESHOLDS
 } from '../../../domain/analytics/historyAnalytics'
 import { DbAnswerRecord, DbSessionRecord } from '../../../domain/database/types'
 import { INSTRUMENT_CATALOG } from '../../../domain/music/instruments'
@@ -428,11 +429,12 @@ export function SessionsTableTab({
                             className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold whitespace-nowrap ${
                               item.interSessionGapLabel === 'Inicio'
                                 ? 'bg-zinc-900 text-zinc-500 border border-zinc-800'
-                                : item.interSessionGapMs !== null && item.interSessionGapMs < 900000
+                                : item.interSessionGapMs !== null &&
+                                    item.interSessionGapMs < ISI_THRESHOLDS.MASSED_MAX_MS
                                   ? 'bg-amber-950/80 text-amber-300 border border-amber-800/80'
                                   : item.interSessionGapMs !== null &&
-                                      item.interSessionGapMs >= 43200000 &&
-                                      item.interSessionGapMs <= 172800000
+                                      item.interSessionGapMs >= ISI_THRESHOLDS.OPTIMAL_MIN_MS &&
+                                      item.interSessionGapMs <= ISI_THRESHOLDS.OPTIMAL_MAX_MS
                                     ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80'
                                     : 'bg-zinc-900 text-sky-400 border border-zinc-800'
                             }`}
