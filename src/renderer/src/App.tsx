@@ -23,6 +23,9 @@ import { ConfirmModal } from './components/ui/ConfirmModal'
 import { AiExercisePrescription } from './domain/ai/types'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
+// Referencia inmutable para el modo blind: evita generar una nueva identidad de
+// arreglo en cada render y preserva el React.memo de PianoKeyboard (OLA 3.1 / F5-01).
+const EMPTY_STIMULUS_NOTES: number[] = []
 type AppMode = 'single_note' | 'intervals' | 'sequences' | 'repertoire' | 'analytics'
 
 const DEFAULT_PARTITURA_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -623,7 +626,8 @@ export default function App(): React.ReactElement {
     setIsResetModalOpen(false)
   }
 
-  const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
+  const liveStimulusNotes =
+    visualCueMode === 'assisted' ? midi.activeStimulusNotes : EMPTY_STIMULUS_NOTES
 
   return (
     <div className="min-h-screen flex flex-col justify-between p-3 md:p-5 max-w-[1800px] w-full mx-auto space-y-3 font-sans">
