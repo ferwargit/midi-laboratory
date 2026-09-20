@@ -210,54 +210,7 @@ export function AiConsultationTab({
         ) : (
           <div className="space-y-3.5 max-h-[500px] overflow-y-auto pr-1.5">
             {filteredConsultations.map((c) => (
-              <div
-                key={c.id}
-                className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-800 space-y-2.5 text-sm shadow-md"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="font-bold text-purple-300 font-sans text-sm md:text-base">
-                    ❓ {c.userQuery}
-                  </div>
-                  <div className="text-right shrink-0 ml-2">
-                    <span className="text-[11px] text-zinc-400 font-mono block">
-                      {new Date(c.createdAt).toLocaleDateString('es-AR', {
-                        day: '2-digit',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </span>
-                    <span className="text-[10px] text-purple-400 font-mono">🏷️ {c.modelName}</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-zinc-900">
-                  <MarkdownRenderer content={c.aiResponse} />
-                </div>
-
-                {c.associatedMetricsSnapshot && (
-                  <div className="pt-2 border-t border-zinc-900/60 flex gap-4 text-xs font-mono text-zinc-400">
-                    <span>
-                      Precisión:{' '}
-                      <strong className="text-zinc-200">
-                        {c.associatedMetricsSnapshot.overallAccuracy}%
-                      </strong>
-                    </span>
-                    <span>
-                      Oído Real:{' '}
-                      <strong className="text-emerald-400">
-                        {c.associatedMetricsSnapshot.normalizedAccuracy}%
-                      </strong>
-                    </span>
-                    <span>
-                      Latencia:{' '}
-                      <strong className="text-sky-400">
-                        {(c.associatedMetricsSnapshot.avgLatencyMs / 1000).toFixed(2)}s
-                      </strong>
-                    </span>
-                  </div>
-                )}
-              </div>
+              <ConsultationHistoryItem key={c.id} consultation={c} />
             ))}
           </div>
         )}
@@ -265,3 +218,67 @@ export function AiConsultationTab({
     </Card>
   )
 }
+
+// -------------------------------------------------------------
+// ITEM DE HISTORIAL MEMOIZADO (OLA 3.2 / F5-03)
+// -------------------------------------------------------------
+// Cada consulta previa se aísla en un subcomponente envuelto en React.memo
+// cuya única prop es el objeto `consultation` (identidad estable entre ticks).
+// Así, las actualizaciones de `reasoningSeconds` en el HUD activo re-renderizan
+// AiConsultationTab pero NO los items del historial, evitando el re-parseo del
+// markdown de cada respuesta histórica una vez por segundo.
+const ConsultationHistoryItem = React.memo(function ConsultationHistoryItem({
+  consultation
+}: {
+  consultation: DbAiConsultationRecord
+}): React.ReactElement {
+  const c = consultation
+
+  return (
+    <div className="p-4 bg-zinc-950/80 rounded-2xl border border-zinc-800 space-y-2.5 text-sm shadow-md">
+      <div className="flex justify-between items-start">
+        <div className="font-bold text-purple-300 font-sans text-sm md:text-base">
+          ❓ {c.userQuery}
+        </div>
+        <div className="text-right shrink-0 ml-2">
+          <span className="text-[11px] text-zinc-400 font-mono block">
+            {new Date(c.createdAt).toLocaleDateString('es-AR', {
+              day: '2-digit',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </span>
+          <span className="text-[10px] text-purple-400 font-mono">🏷️ {c.modelName}</span>
+        </div>
+      </div>
+
+      <div className="pt-2 border-t border-zinc-900">
+        <MarkdownRenderer content={c.aiResponse} />
+      </div>
+
+      {c.associatedMetricsSnapshot && (
+        <div className="pt-2 border-t border-zinc-900/60 flex gap-4 text-xs font-mono text-zinc-400">
+          <span>
+            Precisión:{' '}
+            <strong className="text-zinc-200">
+              {c.associatedMetricsSnapshot.overallAccuracy}%
+            </strong>
+          </span>
+          <span>
+            Oído Real:{' '}
+            <strong className="text-emerald-400">
+              {c.associatedMetricsSnapshot.normalizedAccuracy}%
+            </strong>
+          </span>
+          <span>
+            Latencia:{' '}
+            <strong className="text-sky-400">
+              {(c.associatedMetricsSnapshot.avgLatencyMs / 1000).toFixed(2)}s
+            </strong>
+          </span>
+        </div>
+      )}
+    </div>
+  )
+})

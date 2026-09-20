@@ -21,12 +21,18 @@ import { RepertoireView } from './components/views/RepertoireView'
 import { AnalyticsView } from './components/views/AnalyticsView'
 import { ConfirmModal } from './components/ui/ConfirmModal'
 import { AiExercisePrescription } from './domain/ai/types'
+import {
+  resolveShortcutDecision,
+  ShortcutContext,
+  AppMode
+} from './services/keyboard/shortcutDecision'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
 // Referencia inmutable para el modo blind: evita generar una nueva identidad de
 // arreglo en cada render y preserva el React.memo de PianoKeyboard (OLA 3.1 / F5-01).
 const EMPTY_STIMULUS_NOTES: number[] = []
-type AppMode = 'single_note' | 'intervals' | 'sequences' | 'repertoire' | 'analytics'
+// AppMode proviene de ./services/keyboard/shortcutDecision (fuente única de
+// verdad compartida con el decisor de atajos).
 
 const DEFAULT_PARTITURA_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
@@ -478,25 +484,42 @@ export default function App(): React.ReactElement {
 
       if (isTyping) return
 
-      if (e.code === 'Space') {
+      const shortcutContext: ShortcutContext = {
+        appMode,
+        singleNoteWaiting,
+        singleNoteActive,
+        intervalWaiting,
+        intervalActive,
+        sequenceWaiting,
+        sequenceActive,
+        repertoireWaiting,
+        repertoireActive
+      }
+
+      const decision = resolveShortcutDecision(e, shortcutContext)
+
+      if (decision.shouldPreventDefault) {
         e.preventDefault()
-        if (appMode === 'single_note' && singleNoteWaiting) {
+      }
+
+      if (decision.action === 'advance') {
+        if (appMode === 'single_note') {
           singleNoteAdvance()
-        } else if (appMode === 'intervals' && intervalWaiting) {
+        } else if (appMode === 'intervals') {
           intervalAdvance()
-        } else if (appMode === 'sequences' && sequenceWaiting) {
+        } else if (appMode === 'sequences') {
           sequenceAdvance()
-        } else if (appMode === 'repertoire' && repertoireWaiting) {
+        } else if (appMode === 'repertoire') {
           repertoireAdvance()
         }
-      } else if (e.key === 'r' || e.key === 'R') {
-        if (appMode === 'single_note' && singleNoteActive) {
+      } else if (decision.action === 'repeat') {
+        if (appMode === 'single_note') {
           singleNoteRepeat()
-        } else if (appMode === 'intervals' && intervalActive) {
+        } else if (appMode === 'intervals') {
           intervalRepeat()
-        } else if (appMode === 'sequences' && sequenceActive) {
+        } else if (appMode === 'sequences') {
           sequenceRepeat()
-        } else if (appMode === 'repertoire' && repertoireActive) {
+        } else if (appMode === 'repertoire') {
           repertoireRepeat()
         }
       }
