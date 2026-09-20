@@ -19,6 +19,7 @@ export interface RepertoireEvaluationConfig {
   rhythmTolerancePercent: number // Ej: 20 para ±20%
   chordClusterWindowMs: number // Ventana de cluster (default 45ms)
   baseBpm: number
+  beatsPerMeasure?: number // Tiempos por compás (default 2, piso 2) — para cruzar fronteras de compás
 }
 
 export const DEFAULT_REPERTOIRE_CONFIG: RepertoireEvaluationConfig = {
@@ -26,6 +27,30 @@ export const DEFAULT_REPERTOIRE_CONFIG: RepertoireEvaluationConfig = {
   rhythmTolerancePercent: 35,
   chordClusterWindowMs: 45,
   baseBpm: 86
+}
+
+/**
+ * Piso mínimo para el IOI esperado (H-06). Por debajo de ~60 ms el jitter motor
+ * inter-dedos supera la ventana de tolerancia incluso con timing perfecto, de modo
+ * que las notas hiper-cortas (fusas/semifusas) exigirían precisión inalcanzable.
+ */
+export const MIN_EXPECTED_IOI_MS = 60
+
+/**
+ * Distancia métrica real (en tiempos de compás) entre dos eventos sonoros de la
+ * línea temporal, soportando el cruce de fronteras de compás. Es la fuente de
+ * verdad para los tiempos esperados: los silencios intermedios quedan implícitamente
+ * incluidos, pues la posición métrica refleja la partitura real.
+ */
+function metricDistanceBeats(
+  prev: ScorePlaybackEvent,
+  curr: ScorePlaybackEvent,
+  beatsPerMeasure: number
+): number {
+  return (
+    (curr.measureNumber - prev.measureNumber) * beatsPerMeasure +
+    (curr.beatPosition - prev.beatPosition)
+  )
 }
 
 export interface SingleEventEvaluation {
@@ -111,7 +136,27 @@ export function evaluateRepertoireAttempt(
 
   const activeBpm = config.baseBpm || 86
   const beatDurationMs = Math.round(60000 / activeBpm)
+  const beatsPerMeasure = Math.max(2, config.beatsPerMeasure ?? 2)
   const firstPlayedTime = clusteredPlayed[0]?.timestampMs ?? 0
+
+  // Pre-cómputo de los tiempos esperados derivados de la distancia métrica real
+  // (silencios intermedios y fronteras de compás incluidos), con el piso de
+  // MIN_EXPECTED_IOI_MS y la exención rítmica para eventos de altura pura.
+  const expectedDurations: number[] = new Array(targetEvents.length).fill(0)
+  const expectedTimeOffsets: number[] = new Array(targetEvents.length).fill(0)
+
+  for (let i = 1; i < targetEvents.length; i++) {
+    const rawDistanceBeats = metricDistanceBeats(
+      targetEvents[i - 1],
+      targetEvents[i],
+      beatsPerMeasure
+    )
+    if (rawDistanceBeats <= 0) continue // evento de altura pura: exento de penalización
+
+    const expectedIoi = Math.max(MIN_EXPECTED_IOI_MS, Math.round(rawDistanceBeats * beatDurationMs))
+    expectedDurations[i] = expectedIoi
+    expectedTimeOffsets[i] = expectedTimeOffsets[i - 1] + expectedIoi
+  }
 
   for (let i = 0; i < targetEvents.length; i++) {
     const expected = targetEvents[i]
@@ -154,15 +199,21 @@ export function evaluateRepertoireAttempt(
     } else if (config.rhythmMode === 'strict_metronome') {
       if (i === 0) {
         isRhythmCorrect = true
+      } else if (expectedDurations[i] === 0) {
+        // Evento de altura pura (nota de adorno/gracia fusionada en la misma
+        // posición métrica): exento de penalización rítmica. Evita división por
+        // cero que generaría Infinity/NaN en timeDeviationPercent.
+        isRhythmCorrect = true
+        timeDeviationMs = 0
+        timeDeviationPercent = 0
       } else {
-        const expectedTimeOffsetMs = targetEvents
-          .slice(0, i)
-          .reduce((acc, evt) => acc + Math.round((evt.durationBeats || 0.5) * beatDurationMs), 0)
+        // Offset absoluto esperado = suma acumulada de los IOI esperados de los
+        // eventos precedentes, derivada de la distancia métrica real.
+        const expectedTimeOffsetMs = expectedTimeOffsets[i]
         const actualTimeOffsetMs = played.timestampMs - firstPlayedTime
 
         timeDeviationMs = actualTimeOffsetMs - expectedTimeOffsetMs
-        const currentExpectedDuration =
-          Math.round((expected.durationBeats || 0.5) * beatDurationMs) || 500
+        const currentExpectedDuration = expectedDurations[i]
         timeDeviationPercent = Math.round(
           (Math.abs(timeDeviationMs) / currentExpectedDuration) * 100
         )
@@ -172,9 +223,17 @@ export function evaluateRepertoireAttempt(
     } else if (config.rhythmMode === 'relative_proportional') {
       if (i === 0) {
         isRhythmCorrect = true
+      } else if (expectedDurations[i] === 0) {
+        // Evento de altura pura (nota de adorno/gracia fusionada en la misma
+        // posición métrica): exento de penalización rítmica. Evita división por
+        // cero que generaría Infinity/NaN en timeDeviationPercent.
+        isRhythmCorrect = true
+        timeDeviationMs = 0
+        timeDeviationPercent = 0
       } else {
-        // Cálculo del IOI esperado según el BPM de estudio activo
-        const expectedIoi = Math.round((targetEvents[i - 1].durationBeats || 0.5) * beatDurationMs)
+        // Cálculo del IOI esperado según el BPM de estudio activo y la distancia
+        // métrica real entre este evento y el anterior (silencios incluidos).
+        const expectedIoi = expectedDurations[i]
         const actualIoi = played.timestampMs - clusteredPlayed[i - 1].timestampMs
 
         timeDeviationMs = actualIoi - expectedIoi

@@ -288,7 +288,10 @@ export function useRepertoireTrainer({
       studyBpmRef.current = bpm
       setStudyBpmState(bpm)
 
-      if (isFreeMetronomeActiveRef.current && stimulusScheduler.isContinuousMetronomeActive()) {
+      // Propagar el tempo al scheduler siempre que el reloj maestro esté activo,
+      // cubriendo tanto el metrónomo libre como el metrónomo continuo de sesión
+      // (H-04): el scheduler decide si el cambio exige reiniciar el intervalo.
+      if (stimulusScheduler.isContinuousMetronomeActive()) {
         const beats = currentScoreRef.current?.timeSignature.beats || 2
         const beatMs = Math.round(60000 / bpm)
         stimulusScheduler.startContinuousMetronome(beatMs, beats, (note, dur, vel, ch) => {
@@ -645,7 +648,8 @@ export function useRepertoireTrainer({
           ...DEFAULT_REPERTOIRE_CONFIG,
           rhythmMode,
           rhythmTolerancePercent,
-          baseBpm: studyBpmRef.current
+          baseBpm: studyBpmRef.current,
+          beatsPerMeasure: currentScoreRef.current?.timeSignature.beats || 2
         }
 
         const result = evaluateRepertoireAttempt(slice, playedNotesToEvaluate, evalConfig)

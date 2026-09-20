@@ -326,14 +326,14 @@ export default function App(): React.ReactElement {
       })
 
       if (isContinuousMetro) {
-        if (!stimulusScheduler.isContinuousMetronomeActive()) {
-          stimulusScheduler.startContinuousMetronome(
-            beatDurationMs,
-            beats,
-            (note, dur, vel, ch) => {
-              midi.sendNote(note, dur, vel, ch)
-            }
-          )
+        // Se invoca siempre con el tempo vigente: el scheduler es idempotente ante
+        // un tempo sin cambios y reinicia limpiamente la cuadrícula si cambió (H-04,
+        // ej. autoSpeedRamp), de modo que la frase nunca se desplaza del downbeat.
+        const wasMetroActive = stimulusScheduler.isContinuousMetronomeActive()
+        stimulusScheduler.startContinuousMetronome(beatDurationMs, beats, (note, dur, vel, ch) => {
+          midi.sendNote(note, dur, vel, ch)
+        })
+        if (!wasMetroActive) {
           midi.addLog({
             type: 'OUT',
             message: `⏱️ Metrónomo Continuo activo en Canal 10 (${bpm} BPM)`
