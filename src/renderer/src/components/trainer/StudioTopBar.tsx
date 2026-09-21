@@ -1,5 +1,17 @@
 import React, { useState } from 'react'
 import { VisualCueMode } from '../../domain/exercise/visualAudioSync'
+import {
+  Music,
+  ArrowLeftRight,
+  AudioLines,
+  BookOpen,
+  Activity,
+  Ear,
+  Eye,
+  SlidersHorizontal,
+  Cable,
+  X
+} from 'lucide-react'
 
 type AppMode = 'single_note' | 'intervals' | 'sequences' | 'repertoire' | 'analytics'
 
@@ -44,7 +56,7 @@ export function StudioTopBar({
       <div className="flex items-center gap-3 pl-2 shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center font-bold text-zinc-950 shadow-[0_0_15px_rgba(56,189,248,0.3)] text-sm">
-            🎹
+            <Music className="w-4 h-4" />
           </div>
           <div>
             <h1 className="text-xs font-bold text-zinc-100 uppercase tracking-wider font-mono m-0 leading-none">
@@ -69,11 +81,11 @@ export function StudioTopBar({
       {/* 2. SELECTOR DE MODOS (PILL SEGMENTADA CENTRAL) */}
       <nav className="flex items-center bg-zinc-900/90 p-1 rounded-xl border border-zinc-800/80 gap-1">
         {[
-          { id: 'single_note', label: 'Notas', code: '01' },
-          { id: 'intervals', label: 'Intervalos', code: '02' },
-          { id: 'sequences', label: 'Secuencias', code: '03' },
-          { id: 'repertoire', label: 'Repertorio', code: '04' },
-          { id: 'analytics', label: 'Diagnóstico IA', code: 'AI' }
+          { id: 'single_note', label: 'Notas', code: '01', icon: Music },
+          { id: 'intervals', label: 'Intervalos', code: '02', icon: ArrowLeftRight },
+          { id: 'sequences', label: 'Secuencias', code: '03', icon: AudioLines },
+          { id: 'repertoire', label: 'Repertorio', code: '04', icon: BookOpen },
+          { id: 'analytics', label: 'Diagnóstico IA', code: 'AI', icon: Activity }
         ].map((tab) => {
           const active = appMode === tab.id
           return (
@@ -90,6 +102,7 @@ export function StudioTopBar({
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
               }`}
             >
+              <tab.icon className="w-4 h-4 mr-1.5" />
               <span
                 className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded ${
                   active ? 'bg-black/30 text-white' : 'text-zinc-500 bg-zinc-950'
@@ -110,26 +123,28 @@ export function StudioTopBar({
           <button
             type="button"
             onClick={(): void => onToggleVisualCue('blind')}
-            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
               visualCueMode === 'blind'
                 ? 'bg-amber-400/15 border border-amber-400/40 text-amber-300 font-bold shadow-sm'
                 : 'text-zinc-500 hover:text-zinc-300'
             }`}
             title="Modo a ciegas: el piano no ilumina la nota al sonar"
           >
-            👂 Oído
+            <Ear className="w-4 h-4 mr-1.5 text-amber-400" />
+            <span>Oído</span>
           </button>
           <button
             type="button"
             onClick={(): void => onToggleVisualCue('assisted')}
-            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1.5 ${
               visualCueMode === 'assisted'
                 ? 'bg-cyan-400/15 border border-cyan-400/40 text-cyan-300 font-bold shadow-sm'
                 : 'text-zinc-500 hover:text-zinc-300'
             }`}
             title="Modo asistido: ilumina la tecla al sonar"
           >
-            👁️ LED
+            <Eye className="w-4 h-4 mr-1.5 text-cyan-400" />
+            <span>LED</span>
           </button>
         </div>
 
@@ -141,11 +156,11 @@ export function StudioTopBar({
             title={`IN: ${currentInName} | OUT: ${currentOutName}`}
             className="flex items-center gap-2 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800/80 px-2.5 py-1.5 rounded-xl text-xs font-mono text-zinc-300 transition-all cursor-pointer"
           >
-            <span className="text-sky-400 font-bold">DIN-5</span>
+            <SlidersHorizontal className="w-4 h-4 mr-1.5 text-sky-400" />
             <span className="text-[11px] text-zinc-400 max-w-[110px] truncate">
               {currentInName}
             </span>
-            <span className="text-[9px] text-zinc-500">⚙️</span>
+            <Cable className="w-4 h-4 mr-1.5 text-zinc-500" />
           </button>
 
           {isMidiMenuOpen && (
@@ -155,9 +170,9 @@ export function StudioTopBar({
                 <button
                   type="button"
                   onClick={(): void => setIsMidiMenuOpen(false)}
-                  className="text-zinc-500 hover:text-zinc-300 text-xs"
+                  className="text-zinc-500 hover:text-zinc-300 text-xs p-1"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

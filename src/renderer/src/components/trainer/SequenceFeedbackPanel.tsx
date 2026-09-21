@@ -2,6 +2,7 @@ import React from 'react'
 import { SequenceExerciseResult } from '../../domain/exercise/sequenceEvaluator'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Button } from '../ui/Button'
+import { Play, SkipForward } from 'lucide-react'
 
 interface SequenceFeedbackPanelProps {
   isSessionActive: boolean
@@ -27,8 +28,8 @@ export function SequenceFeedbackPanel({
       {!lastResult ? (
         <div className="text-center space-y-2">
           <div className="text-amber-400 text-xs md:text-sm font-semibold tracking-wide flex items-center justify-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-            Escuchá la melodía de {expectedLength} notas y tocalas en orden:
+            <Play className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span>Escuchá la melodía de {expectedLength} notas y tocalas en orden:</span>
           </div>
           <div className="flex justify-center gap-2">
             {Array.from({ length: expectedLength }).map((_, idx) => {
@@ -87,12 +88,16 @@ export function SequenceFeedbackPanel({
                 variant="primary"
                 size="sm"
                 onClick={onAdvanceNext}
-                className="font-bold shadow-lg text-xs"
+                className="font-bold shadow-lg text-xs flex items-center gap-1.5"
               >
-                Siguiente ➔ (Espacio)
+                <Play className="w-4 h-4 mr-1.5 fill-current" />
+                <span>Siguiente ➔ (Espacio)</span>
               </Button>
             ) : (
-              <span className="text-[10px] text-zinc-500 italic">Avanzando automáticamente...</span>
+              <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
+                <SkipForward className="w-4 h-4 mr-1.5" />
+                <span>Avanzando automáticamente...</span>
+              </div>
             )}
           </div>
         </div>

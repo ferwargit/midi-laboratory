@@ -8,6 +8,7 @@ import { Button } from '../ui/Button'
 import { PianoKeyboard, KeyboardVisualTheme } from '../trainer/PianoKeyboard'
 import { IntervalFeedbackPanel } from '../trainer/IntervalFeedbackPanel'
 import { IntervalSummaryCard } from '../trainer/IntervalSummaryCard'
+import { Ghost, Sparkles, Palette } from 'lucide-react'
 
 interface IntervalsViewProps {
   trainer: UseIntervalTrainerReturn
@@ -124,9 +125,9 @@ export function IntervalsView({
           <div className="flex items-center gap-1 bg-zinc-950/90 p-1 rounded-xl border border-zinc-800/80 text-[10px] select-none">
             <span className="text-zinc-500 px-1 uppercase font-semibold">Estilo:</span>
             {[
-              ['ghost_neon', '👻 Silueta'],
-              ['ambient_glow', '✨ Aura'],
-              ['pool_heatmap', '🎨 Pool']
+              ['ghost_neon', 'Silueta'],
+              ['ambient_glow', 'Aura'],
+              ['pool_heatmap', 'Pool']
             ].map(([mode, label]) => (
               <button
                 key={mode}
@@ -138,7 +139,12 @@ export function IntervalsView({
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                {label}
+                <div className="flex items-center gap-1">
+                  {mode === 'ghost_neon' && <Ghost className="w-3.5 h-3.5" />}
+                  {mode === 'ambient_glow' && <Sparkles className="w-3.5 h-3.5" />}
+                  {mode === 'pool_heatmap' && <Palette className="w-3.5 h-3.5" />}
+                  <span>{label}</span>
+                </div>
               </button>
             ))}
           </div>

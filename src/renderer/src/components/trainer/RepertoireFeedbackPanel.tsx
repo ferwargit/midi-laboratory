@@ -3,6 +3,7 @@ import { RepertoireExerciseResult } from '../../domain/exercise/repertoireEvalua
 import { ScorePlaybackEvent } from '../../domain/music/scoreTypes'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Button } from '../ui/Button'
+import { Play, SkipForward, RotateCcw } from 'lucide-react'
 
 interface RepertoireFeedbackPanelProps {
   isSessionActive: boolean
@@ -41,7 +42,8 @@ export function RepertoireFeedbackPanel({
             </div>
             <div>
               <div className="text-sm font-bold text-zinc-100 flex items-center gap-2">
-                <span>👂 Escuchá la frase ({totalNotesInSlice} notas/acordes) y tocala:</span>
+                <Play className="w-3.5 h-3.5 mr-1.5 text-purple-400" />
+                <span>Escuchá la frase ({totalNotesInSlice} notas/acordes) y tocala:</span>
                 <span className="px-2 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-[11px] text-purple-300 font-bold">
                   Compás {currentMeasure}
                 </span>
@@ -66,9 +68,10 @@ export function RepertoireFeedbackPanel({
             variant="secondary"
             size="sm"
             onClick={onRepeatSlice}
-            className="text-xs shrink-0 cursor-pointer"
+            className="text-xs shrink-0 cursor-pointer flex items-center gap-1"
           >
-            🔊 Escuchar (R)
+            <RotateCcw className="w-3.5 h-3.5 mr-1" />
+            <span>Escuchar (R)</span>
           </Button>
         </div>
       ) : (
@@ -129,12 +132,16 @@ export function RepertoireFeedbackPanel({
                 variant="primary"
                 size="sm"
                 onClick={onAdvanceNext}
-                className="font-bold shadow-lg text-xs cursor-pointer"
+                className="font-bold shadow-lg text-xs cursor-pointer flex items-center gap-1.5"
               >
-                Siguiente Paso ➔ (Espacio)
+                <Play className="w-4 h-4 mr-1.5 fill-current" />
+                <span>Siguiente Paso ➔ (Espacio)</span>
               </Button>
             ) : (
-              <span className="text-[11px] text-zinc-500 italic">Avanzando automáticamente...</span>
+              <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
+                <SkipForward className="w-4 h-4 mr-1.5" />
+                <span>Avanzando automáticamente...</span>
+              </div>
             )}
           </div>
         </>

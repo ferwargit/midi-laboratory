@@ -3,6 +3,16 @@ import { useDatabaseStore } from '../../stores/useDatabaseStore'
 import { MASTERY_THRESHOLDS } from '../../domain/analytics/historyAnalytics'
 import { MidiLogEntry } from '../../hooks/useMidi'
 import { MidiMonitor } from './MidiMonitor'
+import {
+  Download,
+  Upload,
+  Terminal,
+  RotateCcw,
+  ChevronUp,
+  ChevronDown,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react'
 
 interface StudioBottomDockProps {
   logs: MidiLogEntry[]
@@ -19,7 +29,7 @@ export function StudioBottomDock({
   const importBackupJson = useDatabaseStore((state) => state.importBackupJson)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [backupStatus, setBackupStatus] = useState<string | null>(null)
+  const [backupStatus, setBackupStatus] = useState<React.ReactNode | null>(null)
 
   const handleExport = async (): Promise<void> => {
     try {
@@ -35,10 +45,20 @@ export function StudioBottomDock({
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
-      setBackupStatus('✅ Backup exportado')
+      setBackupStatus(
+        <span className="flex items-center gap-1">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Backup exportado</span>
+        </span>
+      )
       setTimeout(() => setBackupStatus(null), 3000)
     } catch (err) {
-      setBackupStatus(`❌ Error: ${err instanceof Error ? err.message : String(err)}`)
+      setBackupStatus(
+        <span className="flex items-center gap-1">
+          <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+          <span>Error: {err instanceof Error ? err.message : String(err)}</span>
+        </span>
+      )
       setTimeout(() => setBackupStatus(null), 4000)
     }
   }
@@ -54,9 +74,19 @@ export function StudioBottomDock({
 
       const result = await importBackupJson(content, 'merge')
       if (result.success) {
-        setBackupStatus(`✅ Importadas ${result.sessionsImported} sesiones`)
+        setBackupStatus(
+          <span className="flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Importadas {result.sessionsImported} sesiones</span>
+          </span>
+        )
       } else {
-        setBackupStatus(`❌ Error: ${result.error || 'Archivo corrupto'}`)
+        setBackupStatus(
+          <span className="flex items-center gap-1">
+            <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+            <span>Error: {result.error || 'Archivo corrupto'}</span>
+          </span>
+        )
       }
       setTimeout(() => setBackupStatus(null), 4000)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -115,7 +145,7 @@ export function StudioBottomDock({
             className="flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 px-2.5 py-1 rounded-lg text-zinc-300 hover:text-white text-[11px] cursor-pointer transition-colors shadow-sm"
             title="Descargar copia de seguridad completa en formato JSON"
           >
-            <span>📥</span>
+            <Download className="w-3.5 h-3.5 mr-1" />
             <span>Exportar Backup</span>
           </button>
 
@@ -126,7 +156,7 @@ export function StudioBottomDock({
             className="flex items-center gap-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 px-2.5 py-1 rounded-lg text-zinc-300 hover:text-white text-[11px] cursor-pointer transition-colors shadow-sm"
             title="Restaurar sesiones desde un archivo JSON previo"
           >
-            <span>📤</span>
+            <Upload className="w-3.5 h-3.5 mr-1" />
             <span>Importar Backup</span>
           </button>
           <input
@@ -140,10 +170,11 @@ export function StudioBottomDock({
           <button
             type="button"
             onClick={onOpenResetModal}
-            className="text-[11px] text-zinc-500 hover:text-rose-400 px-2 py-1 transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-rose-400 px-2 py-1 transition-colors cursor-pointer"
             title="Borrar base de datos"
           >
-            Reset DB
+            <RotateCcw className="w-3.5 h-3.5 mr-1" />
+            <span>Reset DB</span>
           </button>
 
           <button
@@ -151,8 +182,13 @@ export function StudioBottomDock({
             onClick={(): void => setIsOpen(!isOpen)}
             className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 px-2.5 py-1 rounded-lg text-zinc-300 text-[11px] cursor-pointer transition-colors"
           >
-            <span>📡 Telemetría ({logs.length})</span>
-            <span className="text-[10px] text-zinc-500">{isOpen ? '▼' : '▲'}</span>
+            <Terminal className="w-3.5 h-3.5 mr-1" />
+            <span>Telemetría ({logs.length})</span>
+            {isOpen ? (
+              <ChevronUp className="w-3.5 h-3.5 text-zinc-500" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+            )}
           </button>
         </div>
       </div>

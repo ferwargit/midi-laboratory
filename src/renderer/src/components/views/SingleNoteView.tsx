@@ -12,6 +12,7 @@ import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { PianoKeyboard, KeyboardVisualTheme } from '../trainer/PianoKeyboard'
 import { FeedbackPanel } from '../trainer/FeedbackPanel'
+import { Play, Square, RotateCcw, Ghost, Sparkles, Palette, Clock, Target } from 'lucide-react'
 
 interface SingleNoteViewProps {
   trainer: UseSingleNoteTrainerReturn
@@ -44,12 +45,23 @@ export function SingleNoteView({
       attempts: p.attempts
     }))
 
-  const getSessionProgressLabel = (): string => {
+  const getSessionProgressLabel = () => {
     if (trainer.sessionLimitType === 'time') {
-      return `⏳ Tiempo: ${formatTime(trainer.timeRemainingSeconds)} (Pregunta ${trainer.currentQuestionIndex})`
+      return (
+        <span className="flex items-center gap-1">
+          <Clock className="w-3.5 h-3.5" />
+          Tiempo: {formatTime(trainer.timeRemainingSeconds)} (Pregunta{' '}
+          {trainer.currentQuestionIndex})
+        </span>
+      )
     }
     if (trainer.sessionLimitType === 'mastery') {
-      return `🎯 Modo Maestría (Pregunta ${trainer.currentQuestionIndex})`
+      return (
+        <span className="flex items-center gap-1">
+          <Target className="w-3.5 h-3.5" />
+          Modo Maestría (Pregunta {trainer.currentQuestionIndex})
+        </span>
+      )
     }
     if (trainer.sessionLimitType === 'infinite') {
       return `∞ Pregunta ${trainer.currentQuestionIndex}`
@@ -150,17 +162,30 @@ export function SingleNoteView({
               variant="success"
               size="md"
               onClick={(): void => trainer.startSession()}
-              className="px-5 py-2 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+              className="px-5 py-2 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center gap-1.5"
             >
-              ▶ COMENZAR SESIÓN
+              <Play className="w-4 h-4 mr-1.5 fill-current" />
+              <span>COMENZAR SESIÓN</span>
             </Button>
           ) : (
             <>
-              <Button variant="primary" size="sm" onClick={trainer.repeatCurrentNote}>
-                🔊 Repetir (R)
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={trainer.repeatCurrentNote}
+                className="flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-4 h-4 mr-1.5 fill-current" />
+                <span>Repetir (R)</span>
               </Button>
-              <Button variant="danger" size="sm" onClick={trainer.stopSession}>
-                ⏹ Detener y Guardar
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={trainer.stopSession}
+                className="flex items-center gap-1.5"
+              >
+                <Square className="w-4 h-4 mr-1.5 fill-current" />
+                <span>Detener y Guardar</span>
               </Button>
             </>
           )}
@@ -190,9 +215,9 @@ export function SingleNoteView({
           <div className="flex items-center gap-1 bg-zinc-950/90 p-1 rounded-xl border border-zinc-800/80 text-[10px] select-none">
             <span className="text-zinc-500 px-1 uppercase font-semibold">Estilo:</span>
             {[
-              ['ghost_neon', '👻 Silueta'],
-              ['ambient_glow', '✨ Aura'],
-              ['pool_heatmap', '🎨 Pool']
+              ['ghost_neon', 'Silueta'],
+              ['ambient_glow', 'Aura'],
+              ['pool_heatmap', 'Pool']
             ].map(([mode, label]) => (
               <button
                 key={mode}
@@ -204,7 +229,12 @@ export function SingleNoteView({
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                {label}
+                <div className="flex items-center gap-1">
+                  {mode === 'ghost_neon' && <Ghost className="w-3.5 h-3.5" />}
+                  {mode === 'ambient_glow' && <Sparkles className="w-3.5 h-3.5" />}
+                  {mode === 'pool_heatmap' && <Palette className="w-3.5 h-3.5" />}
+                  <span>{label}</span>
+                </div>
               </button>
             ))}
           </div>

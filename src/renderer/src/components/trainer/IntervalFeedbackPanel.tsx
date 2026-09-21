@@ -6,6 +6,7 @@ import {
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { getIntervalDefinition } from '../../domain/music/intervals'
 import { Button } from '../ui/Button'
+import { Play, SkipForward } from 'lucide-react'
 
 interface IntervalFeedbackPanelProps {
   isSessionActive: boolean
@@ -34,10 +35,20 @@ export function IntervalFeedbackPanel({
         <div className="w-full flex items-center justify-center gap-3">
           <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping shrink-0" />
           <div className="text-center">
-            <span className="text-amber-300 text-sm md:text-base font-bold block">
-              {waitingNoteStep === 1
-                ? '👂 Escuchá las 2 notas y tocá la PRIMERA nota en el piano'
-                : `🎹 1ª Nota (${midiNoteToName(firstNotePlayed!)}) fijada. ¡Tocá la SEGUNDA nota!`}
+            <span className="text-amber-300 text-sm md:text-base font-bold block flex items-center justify-center gap-2">
+              {waitingNoteStep === 1 ? (
+                <>
+                  <Play className="w-4 h-4 text-amber-400" />
+                  <span>Escuchá las 2 notas y tocá la PRIMERA nota en el piano</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 text-amber-400" />
+                  <span>
+                    1ª Nota ({midiNoteToName(firstNotePlayed!)}) fijada. ¡Tocá la SEGUNDA nota!
+                  </span>
+                </>
+              )}
             </span>
             <span className="text-[11px] text-zinc-400 font-mono">
               Dirección:{' '}
@@ -100,16 +111,20 @@ export function IntervalFeedbackPanel({
                   variant="primary"
                   size="sm"
                   onClick={onAdvanceNext}
-                  className="font-bold shadow-lg text-xs"
+                  className="font-bold shadow-lg text-xs flex items-center gap-1.5"
                 >
-                  Siguiente Intervalo ➔
+                  <Play className="w-4 h-4 mr-1.5 fill-current" />
+                  <span>Siguiente Intervalo ➔</span>
                 </Button>
                 <span className="block text-[10px] text-zinc-400 font-mono">
                   o presiona <strong className="text-sky-400 font-bold">Espacio</strong>
                 </span>
               </div>
             ) : (
-              <span className="text-[11px] text-zinc-500 italic">Avanzando automáticamente...</span>
+              <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
+                <SkipForward className="w-4 h-4 mr-1.5" />
+                <span>Avanzando automáticamente...</span>
+              </div>
             )}
           </div>
         </>

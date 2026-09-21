@@ -2,6 +2,7 @@ import React, { memo, useRef, useState } from 'react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { useDatabaseStore } from '../../stores/useDatabaseStore'
+import { Download, Upload, RotateCcw, Database, CheckCircle2, AlertCircle } from 'lucide-react'
 
 interface DatabaseCardProps {
   onOpenResetModal: () => void
@@ -13,7 +14,7 @@ function DatabaseCardComponent({ onOpenResetModal }: DatabaseCardProps): React.R
   const importBackupJson = useDatabaseStore((state) => state.importBackupJson)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [backupStatusMessage, setBackupStatusMessage] = useState<string | null>(null)
+  const [backupStatusMessage, setBackupStatusMessage] = useState<React.ReactNode | null>(null)
 
   const handleExport = async (): Promise<void> => {
     try {
@@ -29,11 +30,19 @@ function DatabaseCardComponent({ onOpenResetModal }: DatabaseCardProps): React.R
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
-      setBackupStatusMessage('✅ Respaldo JSON exportado exitosamente.')
+      setBackupStatusMessage(
+        <span className="flex items-center gap-1">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Respaldo JSON exportado exitosamente.</span>
+        </span>
+      )
       setTimeout(() => setBackupStatusMessage(null), 4000)
     } catch (err) {
       setBackupStatusMessage(
-        `❌ Error al exportar: ${err instanceof Error ? err.message : String(err)}`
+        <span className="flex items-center gap-1">
+          <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+          <span>Error al exportar: {err instanceof Error ? err.message : String(err)}</span>
+        </span>
       )
       setTimeout(() => setBackupStatusMessage(null), 5000)
     }
@@ -51,10 +60,20 @@ function DatabaseCardComponent({ onOpenResetModal }: DatabaseCardProps): React.R
       const result = await importBackupJson(content, 'merge')
       if (result.success) {
         setBackupStatusMessage(
-          `✅ Importadas ${result.sessionsImported} sesiones y ${result.answersImported} respuestas.`
+          <span className="flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>
+              Importadas {result.sessionsImported} sesiones y {result.answersImported} respuestas.
+            </span>
+          </span>
         )
       } else {
-        setBackupStatusMessage(`❌ Fallo en importación: ${result.error || 'Archivo inválido'}`)
+        setBackupStatusMessage(
+          <span className="flex items-center gap-1">
+            <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+            <span>Fallo en importación: {result.error || 'Archivo inválido'}</span>
+          </span>
+        )
       }
       setTimeout(() => setBackupStatusMessage(null), 5000)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -64,9 +83,10 @@ function DatabaseCardComponent({ onOpenResetModal }: DatabaseCardProps): React.R
 
   return (
     <Card className="bg-zinc-900/60 border-zinc-800/80 select-none space-y-3">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-        <span className="text-xs text-zinc-400 font-medium font-mono">
-          💾 Memoria a Largo Plazo (IndexedDB v5):
+      <div className="flex justify-between items-start sm:items-center gap-2">
+        <span className="text-xs text-zinc-400 font-medium font-mono flex items-center gap-1">
+          <Database className="w-4 h-4 mr-1.5 text-cyan-400" />
+          Memoria a Largo Plazo (IndexedDB v5):
         </span>
         <div className="flex items-center gap-2">
           <Button
@@ -76,7 +96,8 @@ function DatabaseCardComponent({ onOpenResetModal }: DatabaseCardProps): React.R
             onClick={handleExport}
             title="Exportar archivo de respaldo JSON con todas las sesiones y diagnósticos"
           >
-            📥 Exportar Backup
+            <Download className="w-3.5 h-3.5 mr-1" />
+            <span>Exportar Backup</span>
           </Button>
 
           <Button
@@ -86,7 +107,8 @@ function DatabaseCardComponent({ onOpenResetModal }: DatabaseCardProps): React.R
             onClick={() => fileInputRef.current?.click()}
             title="Importar un archivo de respaldo previo"
           >
-            📤 Importar Backup
+            <Upload className="w-3.5 h-3.5 mr-1" />
+            <span>Importar Backup</span>
           </Button>
           <input
             ref={fileInputRef}
@@ -102,7 +124,8 @@ function DatabaseCardComponent({ onOpenResetModal }: DatabaseCardProps): React.R
             className="text-red-400 hover:text-red-300 text-xs flex items-center gap-1 cursor-pointer font-mono"
             onClick={onOpenResetModal}
           >
-            🗑️ Resetear DB
+            <RotateCcw className="w-3.5 h-3.5 mr-1" />
+            <span>Resetear DB</span>
           </Button>
         </div>
       </div>

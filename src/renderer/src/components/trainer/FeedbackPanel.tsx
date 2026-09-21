@@ -2,6 +2,7 @@ import React from 'react'
 import { ExerciseResult } from '../../domain/exercise/types'
 import { midiNoteToName } from '../../domain/music/noteUtils'
 import { Button } from '../ui/Button'
+import { Play, SkipForward } from 'lucide-react'
 
 interface FeedbackPanelProps {
   isWaitingAnswer: boolean
@@ -96,9 +97,10 @@ export function FeedbackPanel({
                   variant="primary"
                   size="sm"
                   onClick={onAdvanceNext}
-                  className="font-bold text-xs shadow-lg"
+                  className="font-bold text-xs shadow-lg flex items-center gap-1.5"
                 >
-                  Siguiente Pregunta ➔
+                  <Play className="w-4 h-4 mr-1.5 fill-current" />
+                  <span>Siguiente Pregunta ➔</span>
                 </Button>
                 <span className="block text-[10px] text-zinc-400 font-mono">
                   o presiona{' '}
@@ -109,8 +111,8 @@ export function FeedbackPanel({
               </div>
             ) : (
               <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-                Avanzando automáticamente...
+                <SkipForward className="w-4 h-4 mr-1.5" />
+                <span>Avanzando automáticamente...</span>
               </div>
             )}
           </div>
