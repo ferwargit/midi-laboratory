@@ -5,5 +5,7 @@ coverage
 .DS_Store
 .eslintcache
 *.log*
-
+.claude
 repomix-output.xml
+.engram/
+.codebase-memory/
