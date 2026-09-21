@@ -79,6 +79,7 @@ Dos hechos del sistema motivan el diseño:
 **Elección:** por canal, emitir en este orden: `CC #120`, `CC #123`, `CC #64`, `CC #121`, `Pitch Bend [0xE0 | chByte, 0x00, 0x40]`, barrido `Note Off` 21→108.
 
 **Rationale:**
+
 - `CC #121` (Reset All Controllers) va **después** de los silenciadores y **antes** del barrido: debe encontrar los controladores ya apagados para dejar estados neutros, y el sintetizador lo aplica por canal. Cubre H-02 (modulación `CC #1`, breath, foot, etc.).
 - `Pitch Bend` centrado `[0x00, 0x40]` (LSB 0, MSB 64) es el centro canónico MIDI; el Korg NS5R retiene el último pitch por canal. Ir después del reset porque algunos sintetadores tratan el pitch bend como controlador y el `CC #121` lo re-centra de todos modos; enviarlo explícito es idempotente y barato (3 bytes).
 - El barrido de 88 `Note Off` se mantiene el último: es el único comando que algunos sintetizadores (incluido el NS5R en modo multi-timbral) obedecen de forma fiable, y deja el canal en silencio limpio tras el reset de controladores.

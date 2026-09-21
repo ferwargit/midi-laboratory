@@ -1,4 +1,3 @@
-
 # 🏛️ Arquitectura del Sistema (Clean Architecture & Data Flow)
 
 ## 1. Cadena de Hardware Físico
@@ -65,10 +64,10 @@ src/
 ---
 
 ## 3. Patrones de Diseño Implementados
+
 1. **Micro-Kernel Pattern (`useTrainerCore`):** Extracción del ciclo de vida de sesión, temporizadores de cuenta regresiva y persistencia atómica en un kernel común parametrizable.
 2. **Strategy Pattern:** Algoritmos de selección musical intercambiables (`AdaptiveV1`, `SpacedRepetition`, `Random`).
 3. **Circuit Breaker Pattern:** Resiliencia ante latencias o caídas del servidor de IA local con fallback algorítmico instantáneo.
 4. **Hardware MIDI Panic & Resiliencia Acústica:** Emisión de CC #120 (All Sound Off), CC #123 (All Notes Off) y CC #64 (Sustain Off) en desmontajes y cambios de programa para evitar tonos colgados en hardware Korg/Roland.
 5. **Item Response Theory (IRT) & Shannon Entropy:** Modelado psicométrico que descuenta el factor azar ($c = 1/\text{PoolSize}$) y cuantifica la carga de incertidumbre ($H = \log_2(N)$).
 6. **Robust Balanced Parser con Soporte `<think>`:** Extracción léxica inmune a bloques de razonamiento profundo generados por modelos como Qwen 2.5 / DeepSeek R1.
-

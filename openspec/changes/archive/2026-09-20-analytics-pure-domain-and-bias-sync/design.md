@@ -31,7 +31,7 @@ En vez de guardar atributos derivados en el registro de base de datos o de dejar
 
 `computeAnalyticsMetrics` deja de tener el literal `1.4` y el bloque de gaps inline y pasa a llamar a estas funciones, de modo que filtro y métricas **necesariamente** coinciden.
 
-*Alternativa descartada:* añadir los campos al `DbSessionRecord` implicaba migrar el esquema de IndexedDB y duplicar persistencia de datos derivados.
+_Alternativa descartada:_ añadir los campos al `DbSessionRecord` implicaba migrar el esquema de IndexedDB y duplicar persistencia de datos derivados.
 
 ### 2. `filterSessionsAdvanced` recibe `answers` como tercer parámetro opcional
 
@@ -39,19 +39,19 @@ Firma: `filterSessionsAdvanced(sessions, filters, answers: DbAnswerRecord[] = []
 
 Los tres filtros nuevos necesitan las respuestas (para `inputMethod` y `dominantBias`); los filtros existentes no. Se añade parámetro opcional con default `[]` en vez de obligatorio para no romper a `filterSessionsByMode` (wrapper que no aplica filtros nuevos) ni a los tests existentes. Si los filtros nuevos se activan sin respuestas, no se aplican (no-op) en lugar de lanzar.
 
-*Alternativa descartada:* partir `filterSessionsAdvanced` en dos funciones habría multiplicado las superficies de API y roto los call sites internos (`computeAnalyticsMetrics`, `AnalyticsView`, tests) sin ganar claridad.
+_Alternativa descartada:_ partir `filterSessionsAdvanced` en dos funciones habría multiplicado las superficies de API y roto los call sites internos (`computeAnalyticsMetrics`, `AnalyticsView`, tests) sin ganar claridad.
 
 ### 3. El gap map se calcula sobre la cronología del input completo, antes de filtrar
 
 `filterSessionsAdvanced` construye el `computeInterSessionGapMap` sobre el array de entrada ordenado cronológicamente y luego aplica todos los filtros. Así, `gap === null` identifica exclusivamente a la **primera sesión de la historia** recibida, y las bandas ISI reflejan los intervalos reales, no los del subconjunto ya filtrado. Esto es coherente con el call site de la vista, que pasa la lista completa de sesiones del store.
 
-*Trade-off aceptado:* `computeAnalyticsMetrics` sigue computando su propio gap map sobre el subconjunto ya filtrado por modalidad (comportamiento actual, conservado). Como comparten la misma función pura, la divergencia se limita a qué sesión marca como "Inicio" cuando se filtra por modalidad; no afecta a la corrección del filtro ISI, que opera sobre la cronología completa.
+_Trade-off aceptado:_ `computeAnalyticsMetrics` sigue computando su propio gap map sobre el subconjunto ya filtrado por modalidad (comportamiento actual, conservado). Como comparten la misma función pura, la divergencia se limita a qué sesión marca como "Inicio" cuando se filtra por modalidad; no afecta a la corrección del filtro ISI, que opera sobre la cronología completa.
 
 ### 4. `diagnosticReportGenerator` adopta `BIAS_DOMINANCE_RATIO`, manteniendo su nivel de agregación
 
 Se reemplazan los literales `1.5` de diagnosticReportGenerator.ts:84,86 por `BIAS_DOMINANCE_RATIO` importado de la SSOT. Se conserva el cómputo a nivel de agregado (`metrics.sharpBiasCount` / `metrics.flatBiasCount`) porque es el insumo que ya tiene el generador y el que la spec exige alineado con el motor.
 
-*Alternativa considerada y postergada:* derivar directamente de `metrics.sessionPsychometricsList[].dominantBias` y agregar por mayoría. Más correcto semánticamente (sesgo dominante *por sesión* vs. *global*), pero cambia los umbrales implícitos del agregado y el alcance de la OLA 2.3 es únicamente la unificación del ratio. Se documenta como posible evolución futura.
+_Alternativa considerada y postergada:_ derivar directamente de `metrics.sessionPsychometricsList[].dominantBias` y agregar por mayoría. Más correcto semánticamente (sesgo dominante _por sesión_ vs. _global_), pero cambia los umbrales implícitos del agregado y el alcance de la OLA 2.3 es únicamente la unificación del ratio. Se documenta como posible evolución futura.
 
 ### 5. `AnalyticsView` elimina el bloque de filtrado manual
 
@@ -72,7 +72,7 @@ Se borran las líneas 159-176 y se pasan `inputSource: selectedInputSource`, `bi
 4. Limpiar el filtrado manual en `AnalyticsView.tsx`.
 5. Unificar el ratio en `diagnosticReportGenerator.ts`.
 6. Verificación no interactiva: `npm run typecheck`, `npm run lint`, `npm run test` (vitest run).
-7. *Rollback:* al ser un cambio interno sin migración de datos ni cambio de esquema, basta con revertir el commit; no hay estado persistido que validar.
+7. _Rollback:_ al ser un cambio interno sin migración de datos ni cambio de esquema, basta con revertir el commit; no hay estado persistido que validar.
 
 ## Open Questions
 

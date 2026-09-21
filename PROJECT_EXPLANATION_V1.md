@@ -60,13 +60,13 @@ src/
 
 ### 5 Modos de Entrenamiento
 
-| Modo | Descripción | Hook Principal |
-|------|-------------|----------------|
-| `single_note` | Reconocimiento de nota individual | `useSingleNoteTrainer` |
-| `intervals` | Identificación de intervalos melódicos/armónicos | `useIntervalTrainer` |
-| `sequences` | Dictado melódico / secuencias | `useSequenceTrainer` |
-| `repertoire` | Práctica con partituras MusicXML | `useRepertoireTrainer` |
-| `analytics` | Dashboard + consultas IA | `AnalyticsView` + `useAiStore` |
+| Modo          | Descripción                                      | Hook Principal                 |
+| ------------- | ------------------------------------------------ | ------------------------------ |
+| `single_note` | Reconocimiento de nota individual                | `useSingleNoteTrainer`         |
+| `intervals`   | Identificación de intervalos melódicos/armónicos | `useIntervalTrainer`           |
+| `sequences`   | Dictado melódico / secuencias                    | `useSequenceTrainer`           |
+| `repertoire`  | Práctica con partituras MusicXML                 | `useRepertoireTrainer`         |
+| `analytics`   | Dashboard + consultas IA                         | `AnalyticsView` + `useAiStore` |
 
 ---
 
@@ -94,7 +94,7 @@ contextBridge.exposeInMainWorld('customAPI', customAPI)
 
 ## 🎹 Subsistema MIDI (`useMidi.ts`)
 
-**Web MIDI API nativa** — *sin librerías externas*
+**Web MIDI API nativa** — _sin librerías externas_
 
 ### Características
 
@@ -130,11 +130,11 @@ parseMidiData(data: Uint8Array): ParsedMidiMessage | null
 
 ### Adaptación Inteligente (`adaptation/`)
 
-| Archivo | Responsabilidad |
-|---------|-----------------|
-| `adaptiveEngine.ts` | Motor principal: ajusta dificultad, selecciona ejercicios según historial |
-| `spacedRepetitionEngine.ts` | SM-2 modificado: intervalos de repaso basados en facilidad/precisión |
-| `types.ts` | Tipos compartidos: `AdaptationState`, `ExerciseSelection`, `DifficultyLevel` |
+| Archivo                     | Responsabilidad                                                              |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `adaptiveEngine.ts`         | Motor principal: ajusta dificultad, selecciona ejercicios según historial    |
+| `spacedRepetitionEngine.ts` | SM-2 modificado: intervalos de repaso basados en facilidad/precisión         |
+| `types.ts`                  | Tipos compartidos: `AdaptationState`, `ExerciseSelection`, `DifficultyLevel` |
 
 ### IA / LM Studio (`ai/`)
 
@@ -223,48 +223,48 @@ interface DatabaseState {
 
 ### Runtime / Framework
 
-| Paquete | Versión | Propósito |
-|---------|---------|-----------|
-| `electron` | 43.4.0 | Runtime desktop |
-| `react` / `react-dom` | 19.2.1 | UI framework |
-| `electron-vite` | 5.0.0 | Build tooling integrado |
-| `typescript` | 5.9.3 | Tipado estático |
+| Paquete               | Versión | Propósito               |
+| --------------------- | ------- | ----------------------- |
+| `electron`            | 43.4.0  | Runtime desktop         |
+| `react` / `react-dom` | 19.2.1  | UI framework            |
+| `electron-vite`       | 5.0.0   | Build tooling integrado |
+| `typescript`          | 5.9.3   | Tipado estático         |
 
 ### Estado & Estilos
 
-| Paquete | Versión | Propósito |
-|---------|---------|-----------|
-| `zustand` | 5.0.15 | Stores reactivos simples |
-| `tailwindcss` | 4.3.3 | Utility-first CSS (v4, plugin Vite) |
-| `@tailwindcss/vite` | 4.3.3 | Integración Vite nativa |
+| Paquete             | Versión | Propósito                           |
+| ------------------- | ------- | ----------------------------------- |
+| `zustand`           | 5.0.15  | Stores reactivos simples            |
+| `tailwindcss`       | 4.3.3   | Utility-first CSS (v4, plugin Vite) |
+| `@tailwindcss/vite` | 4.3.3   | Integración Vite nativa             |
 
 ### Electron Tooling
 
-| Paquete | Versión |
-|---------|---------|
-| `@electron-toolkit/utils` | 4.0.0 |
-| `@electron-toolkit/preload` | 3.0.2 |
-| `@electron-toolkit/tsconfig` | 2.0.0 |
-| `@electron-toolkit/eslint-config-*` | 3.x |
-| `electron-builder` | 26.0.12 |
+| Paquete                             | Versión |
+| ----------------------------------- | ------- |
+| `@electron-toolkit/utils`           | 4.0.0   |
+| `@electron-toolkit/preload`         | 3.0.2   |
+| `@electron-toolkit/tsconfig`        | 2.0.0   |
+| `@electron-toolkit/eslint-config-*` | 3.x     |
+| `electron-builder`                  | 26.0.12 |
 
 ### Testing
 
-| Paquete | Versión |
-|---------|---------|
-| `vitest` | 4.1.10 |
-| `@testing-library/react` | 16.3.2 |
-| `jsdom` | 29.1.1 |
-| `@vitest/coverage-v8` | 4.1.11 |
-| `fake-indexeddb` | 6.2.5 | Mock IndexedDB para tests |
+| Paquete                  | Versión |
+| ------------------------ | ------- |
+| `vitest`                 | 4.1.10  |
+| `@testing-library/react` | 16.3.2  |
+| `jsdom`                  | 29.1.1  |
+| `@vitest/coverage-v8`    | 4.1.11  |
+| `fake-indexeddb`         | 6.2.5   | Mock IndexedDB para tests |
 
 ### Lint / Format
 
-| Paquete | Versión |
-|---------|---------|
-| `eslint` | 9.39.1 |
-| `prettier` | 3.7.4 |
-| `eslint-plugin-react*` | 7.x |
+| Paquete                | Versión |
+| ---------------------- | ------- |
+| `eslint`               | 9.39.1  |
+| `prettier`             | 3.7.4   |
+| `eslint-plugin-react*` | 7.x     |
 
 > **Nota**: **Cero dependencias MIDI/audio externas** — usa APIs nativas del navegador.
 > **Cero SDK de IA** — HTTP directo a LM Studio local.
@@ -353,12 +353,12 @@ npm run format
 
 ## 📄 Documentación Adicional en Repo
 
-| Archivo | Contenido |
-|---------|-----------|
-| `ARCHITECTURE.md` | Decisiones arquitectónicas detalladas |
-| `REPERTOIRE_LEARNING_V1_SPEC.md` | Especificación modo repertoire v1 |
-| `REPERTOIRE_LEARNING_V2_SPEC.md` | Especificación modo repertoire v2 |
-| `AUDIT_REPORT_V*_ARCHIVE.md` | Auditorías históricas |
+| Archivo                          | Contenido                             |
+| -------------------------------- | ------------------------------------- |
+| `ARCHITECTURE.md`                | Decisiones arquitectónicas detalladas |
+| `REPERTOIRE_LEARNING_V1_SPEC.md` | Especificación modo repertoire v1     |
+| `REPERTOIRE_LEARNING_V2_SPEC.md` | Especificación modo repertoire v2     |
+| `AUDIT_REPORT_V*_ARCHIVE.md`     | Auditorías históricas                 |
 
 ---
 
@@ -374,4 +374,4 @@ npm run format
 
 ---
 
-*Generado automáticamente desde análisis de código — `midi-laboratory` v1.0.0*
+_Generado automáticamente desde análisis de código — `midi-laboratory` v1.0.0_

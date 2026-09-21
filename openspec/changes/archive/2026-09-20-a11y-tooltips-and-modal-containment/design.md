@@ -3,7 +3,7 @@
 The four defects being fixed live in the Electron renderer's React layer and were diagnosed in Audit V6 OLA 3.3 (findings F5-05, F5-06, F5-07, F5-09). See `proposal.md - Why` for the failure modes. The relevant current state:
 
 - `PedagogicalTooltip.tsx:75-81` renders the trigger as a plain `<span>` (no `tabIndex`, no `role`, no `aria-*`), wired only to `onMouseEnter` / `onMouseLeave` / `onClick`. The portal at `PedagogicalTooltip.tsx:88-136` is rendered into `document.body` with `position: fixed`.
-- `updatePosition` (`PedagogicalTooltip.tsx:25-41`) decides placement with the single rule `placeBelow = rect.top < 260` and clamps `left` against `window.innerWidth - tooltipWidth - 16`, but never checks the space below against `window.innerHeight`. The render branch at `PedagogicalTooltip.tsx:94-98` uses `top` when `placeBelow` and `bottom: window.innerHeight - coords.top` otherwise — i.e. `coords.top` means the *top edge* in one branch and the *bottom edge* in the other.
+- `updatePosition` (`PedagogicalTooltip.tsx:25-41`) decides placement with the single rule `placeBelow = rect.top < 260` and clamps `left` against `window.innerWidth - tooltipWidth - 16`, but never checks the space below against `window.innerHeight`. The render branch at `PedagogicalTooltip.tsx:94-98` uses `top` when `placeBelow` and `bottom: window.innerHeight - coords.top` otherwise — i.e. `coords.top` means the _top edge_ in one branch and the _bottom edge_ in the other.
 - The only `useEffect` (`PedagogicalTooltip.tsx:58-67`) subscribes `scroll`/`resize` while visible; there is no keyboard subscription.
 - `ConfirmModal.tsx:26`, `SessionDetailModal.tsx:67` (empty branch) and `:103` (populated branch), and `KnowledgeGuideModal.tsx:33` render overlay `<div>`s with no dialog semantics and no keyboard handling. `ConfirmModal` / `KnowledgeGuideModal` / `SessionDetailModal` all early-return `null` when closed (`:23` / `:22` / `:63`), so any new hook must be registered **before** those returns.
 - `SessionDetailModal.tsx:464-472` positions the SVG telemetry tooltip with `left: Math.min(85, Math.max(10, (hoveredPoint.x / 900) * 100))%` plus `transform: translate(-50%, -100%)`. At the first questions (`hoveredPoint.x ≈ 50` over the `900`-unit viewBox) the clamped `10%` minus the centering shift drives the left edge to ≈ −65px, clipping text and forcing the modal's horizontal scrollbar. The tooltip has `whitespace-nowrap` (auto width) and sits in the `relative` chart container (`SessionDetailModal.tsx:192`).
@@ -83,7 +83,7 @@ The listener is only alive while the tooltip is open, so the closed state has ze
 
 Two changes to `updatePosition`:
 
-1. **Unify the coordinate semantics.** `coords.top` becomes the *top edge* in both branches: when placing above, `top = rect.top - 8 - tooltipHeight` instead of `rect.top - 8`. The render branch (`PedagogicalTooltip.tsx:94-98`) then always uses `top: ${coords.top}px` and the `bottom:` expression is dropped — no more dual meaning.
+1. **Unify the coordinate semantics.** `coords.top` becomes the _top edge_ in both branches: when placing above, `top = rect.top - 8 - tooltipHeight` instead of `rect.top - 8`. The render branch (`PedagogicalTooltip.tsx:94-98`) then always uses `top: ${coords.top}px` and the `bottom:` expression is dropped — no more dual meaning.
 2. **Clamp against the viewport.** `placeBelow` becomes a real space comparison (`spaceBelow >= spaceAbove`, where `spaceBelow = innerHeight - rect.bottom` and `spaceAbove = rect.top`), and the resulting top edge is clamped into `[16, innerHeight - tooltipHeight - 16]`.
 
 The math lives in a dedicated pure module, `src/renderer/src/components/ui/tooltipPlacement.ts`, so it is unit-testable with plain numbers (no DOM, no jsdom measurement) and its exports do not trip the repo's `react-refresh/only-export-components` lint rule (same convention as OLA 3.2's `shortcutDecision.ts` / `markdownParser.tsx`):
@@ -93,8 +93,17 @@ export const TOOLTIP_WIDTH = 320
 export const ESTIMATED_TOOLTIP_HEIGHT = 260
 export const VIEWPORT_MARGIN = 16
 
-export interface TriggerRect { top: number; bottom: number; left: number; width: number }
-export interface TooltipPlacement { top: number; left: number; placeBelow: boolean }
+export interface TriggerRect {
+  top: number
+  bottom: number
+  left: number
+  width: number
+}
+export interface TooltipPlacement {
+  top: number
+  left: number
+  placeBelow: boolean
+}
 
 export function computeTooltipPlacement(
   rect: TriggerRect,

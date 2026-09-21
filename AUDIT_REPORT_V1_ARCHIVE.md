@@ -8,15 +8,15 @@
 
 ## 📊 Resumen Ejecutivo
 
-| Aspecto | Estado | Observaciones |
-|---------|--------|---------------|
-| **Estructura** | ✅ Excelente | Bien organizada con separación clara de capas |
-| **Type Safety** | ✅ Excelente | TypeScript sin errores de compilación |
-| **Testing** | ✅ Bueno | 36 tests en 9 archivos, cobertura en dominio |
-| **Linting** | ✅ Excelente | ESLint + Prettier sin errores |
-| **Seguridad** | ⚠️ **CRÍTICO** | 2 vulnerabilidades de severidad ALTA en Electron |
-| **Documentación** | ⚠️ Minimal | README básico, sin documentación de código |
-| **Dependencias** | ✅ Controladas | 5 dependencias principales, actualizadas |
+| Aspecto           | Estado         | Observaciones                                    |
+| ----------------- | -------------- | ------------------------------------------------ |
+| **Estructura**    | ✅ Excelente   | Bien organizada con separación clara de capas    |
+| **Type Safety**   | ✅ Excelente   | TypeScript sin errores de compilación            |
+| **Testing**       | ✅ Bueno       | 36 tests en 9 archivos, cobertura en dominio     |
+| **Linting**       | ✅ Excelente   | ESLint + Prettier sin errores                    |
+| **Seguridad**     | ⚠️ **CRÍTICO** | 2 vulnerabilidades de severidad ALTA en Electron |
+| **Documentación** | ⚠️ Minimal     | README básico, sin documentación de código       |
+| **Dependencias**  | ✅ Controladas | 5 dependencias principales, actualizadas         |
 
 ---
 
@@ -140,8 +140,8 @@ Incluye: Electron, Vite, TypeScript, React, ESLint, Prettier, Vitest, etc.
    - Afectado por: electron@39.2.6
    - Fix: Require npm audit fix --force (actualización a Electron 43.4.0)
    - Severidad: HIGH
-   
-2. electron 
+
+2. electron
    - Depende de versiones vulnerables de extract-zip
    - Severidad: HIGH
 ```
@@ -169,11 +169,13 @@ Incluye: Electron, Vite, TypeScript, React, ESLint, Prettier, Vitest, etc.
 ```
 
 **Configuración:**
+
 - ESLint con @electron-toolkit/eslint-config-ts
 - Plugins: react, react-hooks, react-refresh
 - Prettier integrado para consistencia de formato
 
 **Reglas aplicadas:**
+
 - React hooks eslint-plugin-react-hooks
 - React refresh eslint-plugin-react-refresh
 - TypeScript linting
@@ -189,6 +191,7 @@ Duration:   251ms
 ```
 
 **Archivos de test:**
+
 1. adaptiveEngine.test.ts
 2. databaseEngine.test.ts
 3. evaluator.test.ts
@@ -208,15 +211,18 @@ Duration:   251ms
 ### Configuración de TypeScript
 
 **tsconfig.json (raíz):**
+
 - Usa referencias de proyectos composites
 - Separa main/preload y renderer
 
 **tsconfig.node.json:**
+
 - Compila: electron.vite.config.ts, src/main/**, src/preload/**
 - Target: ES2020
 
 **tsconfig.web.json:**
-- Compila: src/renderer/src/** 
+
+- Compila: src/renderer/src/**
 - JSX: react-jsx
 - Alias: @renderer/* → src/renderer/src/*
 
@@ -236,6 +242,7 @@ Duration:   251ms
 ### Empaquetado (Electron Builder)
 
 **Características:**
+
 - Soporta Windows (NSIS), macOS (DMG), Linux (AppImage, Snap, deb)
 - Firma de código configurada para macOS
 - Auto-updater genérico configurado
@@ -246,11 +253,12 @@ Duration:   251ms
 ### Formatting y Linting
 
 **Prettier:**
+
 ```yaml
-singleQuote: true      # ' en lugar de "
-semi: false            # Sin puntos y comas
-printWidth: 100        # 100 caracteres por línea
-trailingComma: none    # Sin comas finales
+singleQuote: true # ' en lugar de "
+semi: false # Sin puntos y comas
+printWidth: 100 # 100 caracteres por línea
+trailingComma: none # Sin comas finales
 ```
 
 **Estado:** ✅ Configuración consistente
@@ -259,20 +267,20 @@ trailingComma: none    # Sin comas finales
 
 ## 🧪 Scripts Disponibles
 
-| Script | Comando | Propósito |
-|--------|---------|-----------|
-| `npm run format` | prettier --write . | Formatear código |
-| `npm run lint` | eslint con --fix | Linter con correcciones automáticas |
-| `npm run typecheck` | tsc (ambos) | Validar tipos TypeScript |
-| `npm run typecheck:node` | tsc node | Validar tipos (main/preload) |
-| `npm run typecheck:web` | tsc web | Validar tipos (renderer) |
-| `npm run dev` | electron-vite dev | Desarrollo con hot-reload |
-| `npm run start` | electron-vite preview | Preview del build |
-| `npm run build` | typecheck + electron-vite build | Build de producción |
-| `npm run build:unpack` | build + electron-builder --dir | Build desempaquetado |
-| `npm run build:win` | build + electron-builder --win | Build para Windows |
-| `npm run test` | vitest run | Ejecutar tests |
-| `npm run test:watch` | vitest | Tests en modo watch |
+| Script                   | Comando                         | Propósito                           |
+| ------------------------ | ------------------------------- | ----------------------------------- |
+| `npm run format`         | prettier --write .              | Formatear código                    |
+| `npm run lint`           | eslint con --fix                | Linter con correcciones automáticas |
+| `npm run typecheck`      | tsc (ambos)                     | Validar tipos TypeScript            |
+| `npm run typecheck:node` | tsc node                        | Validar tipos (main/preload)        |
+| `npm run typecheck:web`  | tsc web                         | Validar tipos (renderer)            |
+| `npm run dev`            | electron-vite dev               | Desarrollo con hot-reload           |
+| `npm run start`          | electron-vite preview           | Preview del build                   |
+| `npm run build`          | typecheck + electron-vite build | Build de producción                 |
+| `npm run build:unpack`   | build + electron-builder --dir  | Build desempaquetado                |
+| `npm run build:win`      | build + electron-builder --win  | Build para Windows                  |
+| `npm run test`           | vitest run                      | Ejecutar tests                      |
+| `npm run test:watch`     | vitest                          | Tests en modo watch                 |
 
 **Estado:** ✅ Completo y bien documentado
 
@@ -390,6 +398,7 @@ npm run build:win    # Crear instalador Windows
 ### Corto Plazo (Semana 1-2)
 
 1. ✅ **CRÍTICO - Seguridad**
+
    ```bash
    npm audit fix --force
    npm ci
@@ -440,15 +449,15 @@ npm run build:win    # Crear instalador Windows
 
 ## 📈 Métricas
 
-| Métrica | Valor | Target |
-|---------|-------|--------|
-| **Archivos TypeScript** | 47 | - |
-| **Archivos de Test** | 9 | ↑ 15+ |
-| **Test Coverage** | ~19% | ↑ 60%+ |
-| **Type Errors** | 0 | ✅ 0 |
-| **Lint Errors** | 0 | ✅ 0 |
-| **Security Issues** | 2 HIGH | ✅ 0 |
-| **Dependencias** | 5 prod + 15 dev | ✅ Controladas |
+| Métrica                 | Valor           | Target         |
+| ----------------------- | --------------- | -------------- |
+| **Archivos TypeScript** | 47              | -              |
+| **Archivos de Test**    | 9               | ↑ 15+          |
+| **Test Coverage**       | ~19%            | ↑ 60%+         |
+| **Type Errors**         | 0               | ✅ 0           |
+| **Lint Errors**         | 0               | ✅ 0           |
+| **Security Issues**     | 2 HIGH          | ✅ 0           |
+| **Dependencias**        | 5 prod + 15 dev | ✅ Controladas |
 
 ---
 
@@ -460,13 +469,13 @@ npm run build:win    # Crear instalador Windows
 ✅ **Type Safety excelente** - TypeScript sin errores  
 ✅ **Código limpio** - ESLint y Prettier sin problemas  
 ✅ **Tests en dominio** - Lógica de negocio bien cubierta  
-✅ **Build profesional** - Electron Builder configurado correctamente  
+✅ **Build profesional** - Electron Builder configurado correctamente
 
 ### Áreas Críticas
 
 🔴 **Seguridad crítica** - 2 CVEs de severidad ALTA requieren fix inmediato  
 ⚠️ **Testing limitado** - Solo dominio, falta UI y hooks  
-⚠️ **Documentación escasa** - README minimal  
+⚠️ **Documentación escasa** - README minimal
 
 ### Recomendación General
 
@@ -481,6 +490,7 @@ npm run build:win    # Crear instalador Windows
 Recomendado en: **2 semanas** (después de resolver issues críticos)
 
 Checklist para próxima auditoría:
+
 - [ ] Vulnerabilidades resueltas (0 high/critical)
 - [ ] Cobertura de tests ≥ 60%
 - [ ] Documentación ampliada (ARCHITECTURE.md, DEVELOPMENT.md)
@@ -489,6 +499,6 @@ Checklist para próxima auditoría:
 
 ---
 
-*Auditoría generada automáticamente*  
-*Proyecto: midi-laboratory*  
-*Fecha: 2026-08-17*
+_Auditoría generada automáticamente_  
+_Proyecto: midi-laboratory_  
+_Fecha: 2026-08-17_

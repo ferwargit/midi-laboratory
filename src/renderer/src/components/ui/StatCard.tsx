@@ -11,7 +11,11 @@ export function StatCard({ title, value, highlightColor }: StatCardProps): React
   return (
     <Card className="text-center p-3">
       <div className="text-xs text-zinc-400 mb-1">{title}</div>
-      <div className={`text-xl font-bold ${highlightColor || 'text-zinc-100'}`}>{value}</div>
+      <div
+        className={`tabular-nums font-mono text-xl font-bold ${highlightColor || 'text-zinc-100'}`}
+      >
+        {value}
+      </div>
     </Card>
   )
 }

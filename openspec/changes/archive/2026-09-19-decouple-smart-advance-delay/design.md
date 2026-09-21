@@ -38,9 +38,11 @@ Como solo hay dos constantes, todo modo que no sea `'auto_slow'` — es decir, `
 
 ```ts
 const delay =
-  mode === 'auto_slow' ? autoAdvanceSlowDelayMs :
-  mode === 'auto_fast' ? autoAdvanceFastDelayMs :
-  autoAdvanceSmartDelayMs
+  mode === 'auto_slow'
+    ? autoAdvanceSlowDelayMs
+    : mode === 'auto_fast'
+      ? autoAdvanceFastDelayMs
+      : autoAdvanceSmartDelayMs
 ```
 
 **Rationale:** `'smart'` es el default del hook (`defaultAdvanceMode = 'smart'`), por lo que dejarlo como rama residual del ternario es precisamente el bug de acoplamiento que se corrige; debe ser una rama nombrada explícitamente. Esta forma es exhaustiva por construcción para los tres modos con auto-avance y deja a `'manual'` fuera por reachablese solo cuando `shouldWaitManual` es falso.

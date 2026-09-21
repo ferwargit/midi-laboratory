@@ -32,6 +32,7 @@ En éxito, el resultado observable es idéntico al actual: stores vaciados y lue
 
 **D4 — Prueba de rollback mediante aborto dirigido a la transacción que hace `put`.**
 La prueba siembra datos previos (sesión + respuesta + reporte), intercepta el handle interno `db` y envuelve `db.transaction` de modo que la primera transacción `readwrite` que emita un `.put()` reciba `tx.abort()` (vía `queueMicrotask`). Así se apunta exclusivamente a la fase de inserción:
+
 - Con el código actual: la transacción de `clearDatabase()` (que solo hace `.clear()`, sin `put`) commitea intacta; el aborto golpea a la transacción de importación → la base queda vacía → **la prueba falla**.
 - Con el fix: hay una sola transacción; el aborto la revierte entera → los datos previos permanecen → **la prueba pasa**.
 

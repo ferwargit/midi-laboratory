@@ -1,4 +1,3 @@
-
 # 📋 AUDIT REPORT V3 — MIDI Laboratory (Consolidación de Arquitectura, Refactorización & Certificación)
 
 **Fecha de Auditoría:** 23 de Agosto, 2026
@@ -10,16 +9,16 @@
 
 ## 📊 1. Resumen Ejecutivo y Evolución de Versiones
 
-| Métrica / Dimensión | Auditoría V1 (Inicial) | Auditoría V2 (Intermedia) | Auditoría V3 (Actual / Post-Refactor) |
-| :--- | :---: | :---: | :---: |
-| **Puntaje Global** | **7.5 / 10** | **8.0 / 10** | **9.8 / 10** 🌟 |
-| **Batería de Tests** | 36 tests (9 archivos) | 138 tests (38 archivos) | **241 tests (47 archivos - 100% PASS)** |
-| **Cobertura de Código (Líneas)** | ~19% | ~86% | **93.12% Global (> 97% en Dominio y DB)** |
-| **Type Safety (TypeScript)** | PASS | PASS | **PASS (0 errores Node & Web con `composite: false`)** |
-| **Arquitectura de Sesión** | 3 hooks dispersos (~1300L) | Refs y timers con riesgo de carrera | **Micro-Kernel Unificado (`useTrainerCore.ts`)** |
-| **Persistencia e Integridad** | v1 (heurísticas sobre strings) | v4 (promedio no ponderado) | **IndexedDB v5 con `targetMode` canónico e índices** |
-| **Inferencia IA Local (LM Studio)** | Sin Circuit Breaker | Timeout genérico / regex frágil | **Balanced Parser con soporte `<think>` + Timeouts IPC** |
-| **Hardware MIDI & Acústica** | Sin filtrado de notas | Anti-rebote 35ms | **Hardware MIDI Panic (CC 120/123/64) + Watchdogs** |
+| Métrica / Dimensión                 |     Auditoría V1 (Inicial)     |      Auditoría V2 (Intermedia)      |          Auditoría V3 (Actual / Post-Refactor)           |
+| :---------------------------------- | :----------------------------: | :---------------------------------: | :------------------------------------------------------: |
+| **Puntaje Global**                  |          **7.5 / 10**          |            **8.0 / 10**             |                     **9.8 / 10** 🌟                      |
+| **Batería de Tests**                |     36 tests (9 archivos)      |       138 tests (38 archivos)       |         **241 tests (47 archivos - 100% PASS)**          |
+| **Cobertura de Código (Líneas)**    |              ~19%              |                ~86%                 |        **93.12% Global (> 97% en Dominio y DB)**         |
+| **Type Safety (TypeScript)**        |              PASS              |                PASS                 |  **PASS (0 errores Node & Web con `composite: false`)**  |
+| **Arquitectura de Sesión**          |   3 hooks dispersos (~1300L)   | Refs y timers con riesgo de carrera |     **Micro-Kernel Unificado (`useTrainerCore.ts`)**     |
+| **Persistencia e Integridad**       | v1 (heurísticas sobre strings) |     v4 (promedio no ponderado)      |   **IndexedDB v5 con `targetMode` canónico e índices**   |
+| **Inferencia IA Local (LM Studio)** |      Sin Circuit Breaker       |   Timeout genérico / regex frágil   | **Balanced Parser con soporte `<think>` + Timeouts IPC** |
+| **Hardware MIDI & Acústica**        |     Sin filtrado de notas      |          Anti-rebote 35ms           |   **Hardware MIDI Panic (CC 120/123/64) + Watchdogs**    |
 
 ---
 
@@ -65,6 +64,7 @@ src/
 ```
 
 ### Patrones de Software Clave:
+
 1. **Micro-Kernel Pattern (`useTrainerCore`):** Extracción del 100% de la lógica común de temporizadores (`timeRemainingSeconds`), avance automático (`smart`, `auto_fast`, `auto_slow`), tokens anti-carrera y persistencia en base de datos.
 2. **Adapter Pattern:** `useSingleNoteTrainer`, `useIntervalTrainer` y `useSequenceTrainer` desacoplados como adaptadores ligeros que preservan su API pública al 100%.
 3. **Single Source of Truth (SSOT):** Centralización de configuración en `appConfig.ts`, modelos pedagógicos en `pedagogicalDictionary.ts`, umbrales en `thresholdsConsistency.ts` y versión de base de datos en `DB_VERSION = 5`.
@@ -76,26 +76,31 @@ src/
 ## 🛠️ 3. Auditoría Detallada de Resoluciones Técnicas (Fases 1 a 5)
 
 ### Fase 1: Correcciones de Robustez y Seguridad Inmediata (P0)
-* **Desincronización en Prescripciones de IA:** Solucionado mediante la aceptación de objetos de configuración síncronos (`SingleNoteSessionOptions`, `IntervalSessionOptions`, `SequenceSessionOptions`) en `startSession`, evitando la lectura de buffers desactualizados por el render asíncrono de React.
-* **Pérdida de Notas en Secuencias:** `useSequenceTrainer` ahora persiste la frase melódica completa en `reasonTelemetry` (`Secuencia: [N1, N2, ...] | Tocadas: [...]`) y `reconstructSessionConfig` extrae todas las notas para re-testeos longitudinales fieles.
-* **Timeouts IPC en Electron Main:** Integración de `AbortController` con timeout de 2.5s en `check-models` y 900s en `chat-completion` dentro de `src/main/index.ts`.
-* **Soporte `<think>` en Schema Validator:** Purgado automático de bloques de razonamiento antes de parsear JSONs balanceados.
+
+- **Desincronización en Prescripciones de IA:** Solucionado mediante la aceptación de objetos de configuración síncronos (`SingleNoteSessionOptions`, `IntervalSessionOptions`, `SequenceSessionOptions`) en `startSession`, evitando la lectura de buffers desactualizados por el render asíncrono de React.
+- **Pérdida de Notas en Secuencias:** `useSequenceTrainer` ahora persiste la frase melódica completa en `reasonTelemetry` (`Secuencia: [N1, N2, ...] | Tocadas: [...]`) y `reconstructSessionConfig` extrae todas las notas para re-testeos longitudinales fieles.
+- **Timeouts IPC en Electron Main:** Integración de `AbortController` con timeout de 2.5s en `check-models` y 900s en `chat-completion` dentro de `src/main/index.ts`.
+- **Soporte `<think>` en Schema Validator:** Purgado automático de bloques de razonamiento antes de parsear JSONs balanceados.
 
 ### Fase 2: Hardware MIDI Panic y Resiliencia Acústica (P1)
-* **Eliminación de Hanging Notes:** Creación de `sendAllNotesOff` en `useMidi.ts` emitiendo CC 120, CC 123 y CC 64 junto con Note Off explícito para todas las notas activas, evitando tonos sostenidos infinitos en el sintetizador físico (Korg NS5R).
-* **Watchdog de Estímulos:** Cancelación de temporizadores pendientes de notas programadas ante detenciones o reinicios de sesión.
+
+- **Eliminación de Hanging Notes:** Creación de `sendAllNotesOff` en `useMidi.ts` emitiendo CC 120, CC 123 y CC 64 junto con Note Off explícito para todas las notas activas, evitando tonos sostenidos infinitos en el sintetizador físico (Korg NS5R).
+- **Watchdog de Estímulos:** Cancelación de temporizadores pendientes de notas programadas ante detenciones o reinicios de sesión.
 
 ### Fase 3: Unificación del Kernel de Sesión (`useTrainerCore`) (P1)
-* **Reducción de Código Duplicado:** Eliminación de más de 800 líneas de código repetido entre los 3 entrenadores.
-* **Máquina de Estados Concurrente:** Centralización de estados (`isSessionActive`, `isSessionFinished`, `isWaitingManualAdvance`, `isWaitingAnswer`, `currentQuestionIndex`) y protección contra doble avance o clics rápidos.
+
+- **Reducción de Código Duplicado:** Eliminación de más de 800 líneas de código repetido entre los 3 entrenadores.
+- **Máquina de Estados Concurrente:** Centralización de estados (`isSessionActive`, `isSessionFinished`, `isWaitingManualAdvance`, `isWaitingAnswer`, `currentQuestionIndex`) y protección contra doble avance o clics rápidos.
 
 ### Fase 4: Tipado Canónico en Persistencia `DB_VERSION = 5` (P2)
-* **Identificación Explícita de Sesión:** Incorporación de `targetMode: 'single_note' | 'intervals' | 'sequences'` en `DbSessionRecord` con índice en IndexedDB y validación en `recordValidator.ts`.
-* **Simplificación Analítica:** Los clasificadores analíticos y filtros avanzados consultan directamente `targetMode`, con fallback automático para registros legados.
+
+- **Identificación Explícita de Sesión:** Incorporación de `targetMode: 'single_note' | 'intervals' | 'sequences'` en `DbSessionRecord` con índice en IndexedDB y validación en `recordValidator.ts`.
+- **Simplificación Analítica:** Los clasificadores analíticos y filtros avanzados consultan directamente `targetMode`, con fallback automático para registros legados.
 
 ### Fase 5: Configuración Centralizada `appConfig.ts` (P3)
-* **Eliminación de Magic Numbers:** Centralización de URLs, puertos, timeouts y ventanas de debounce en `DEFAULT_APP_CONFIG`.
-* **Inyección en Inferencia:** `LmStudioService` utiliza la configuración centralizada por defecto y permite personalizaciones por constructor.
+
+- **Eliminación de Magic Numbers:** Centralización de URLs, puertos, timeouts y ventanas de debounce en `DEFAULT_APP_CONFIG`.
+- **Inyección en Inferencia:** `LmStudioService` utiliza la configuración centralizada por defecto y permite personalizaciones por constructor.
 
 ---
 

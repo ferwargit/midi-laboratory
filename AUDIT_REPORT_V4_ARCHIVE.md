@@ -1,4 +1,3 @@
-
 # 📋 AUDIT REPORT V4 — MIDI Laboratory (Endurecimiento de Seguridad, SSOT, Matriz Psicoacústica & Respaldo Total)
 
 **Fecha de Auditoría:** 24 de Agosto, 2026
@@ -10,17 +9,17 @@
 
 ## 📊 1. Resumen Ejecutivo y Matriz Evolutiva de Versiones
 
-| Métrica / Dimensión | Auditoría V1 (Inicial) | Auditoría V2 (Intermedia) | Auditoría V3 (Consolidación) | Auditoría V4 (Actual / Blindaje Total) |
-| :--- | :---: | :---: | :---: | :---: |
-| **Puntaje Global** | **7.5 / 10** | **8.0 / 10** | **9.8 / 10** | **10.0 / 10** 🌟 |
-| **Batería de Tests** | 36 tests (9 archivos) | 138 tests (38 archivos) | 241 tests (47 archivos) | **247 tests (48 archivos - 100% PASS)** |
-| **Limpieza de Consola** | Errores no capturados | Warnings varios | Avisos `act()` en timers | **100% Limpia (0 Stderr, 0 Warnings)** |
-| **Cobertura en Store DB** | ~74% | ~81% | ~88% | **100% (Stmts, Branch, Funcs, Lines)** |
-| **Seguridad & Sandbox** | Vulnerable (CVEs) | Sin validación URLs | IPC básico sin CSP | **Protocol Whitelist + CSP connect-src** |
-| **Single Source of Truth** | Hardcoded disperso | Parcial en renderer | `appConfig` aislado | **SSOT Unificado (Main, Renderer, IPC)** |
-| **Generación de IDs** | `Math.random` slice | `Math.random` slice | `Math.random` slice | **`crypto.randomUUID()` Criptográfico** |
-| **Matriz de Confusión** | No existía | Set plano de notas | Set plano de notas | **Matriz Real por Pares Recurrentes ($\ge 2$)** |
-| **Persistencia & Backup** | Volátil en perfil | IndexedDB v4 | IndexedDB v5 | **IndexedDB v5 + Backup JSON (Export/Import)** |
+| Métrica / Dimensión        | Auditoría V1 (Inicial) | Auditoría V2 (Intermedia) | Auditoría V3 (Consolidación) |     Auditoría V4 (Actual / Blindaje Total)      |
+| :------------------------- | :--------------------: | :-----------------------: | :--------------------------: | :---------------------------------------------: |
+| **Puntaje Global**         |      **7.5 / 10**      |       **8.0 / 10**        |         **9.8 / 10**         |                **10.0 / 10** 🌟                 |
+| **Batería de Tests**       | 36 tests (9 archivos)  |  138 tests (38 archivos)  |   241 tests (47 archivos)    |     **247 tests (48 archivos - 100% PASS)**     |
+| **Limpieza de Consola**    | Errores no capturados  |      Warnings varios      |   Avisos `act()` en timers   |     **100% Limpia (0 Stderr, 0 Warnings)**      |
+| **Cobertura en Store DB**  |          ~74%          |           ~81%            |             ~88%             |     **100% (Stmts, Branch, Funcs, Lines)**      |
+| **Seguridad & Sandbox**    |   Vulnerable (CVEs)    |    Sin validación URLs    |      IPC básico sin CSP      |    **Protocol Whitelist + CSP connect-src**     |
+| **Single Source of Truth** |   Hardcoded disperso   |    Parcial en renderer    |     `appConfig` aislado      |    **SSOT Unificado (Main, Renderer, IPC)**     |
+| **Generación de IDs**      |  `Math.random` slice   |    `Math.random` slice    |     `Math.random` slice      |     **`crypto.randomUUID()` Criptográfico**     |
+| **Matriz de Confusión**    |       No existía       |    Set plano de notas     |      Set plano de notas      | **Matriz Real por Pares Recurrentes ($\ge 2$)** |
+| **Persistencia & Backup**  |   Volátil en perfil    |       IndexedDB v4        |         IndexedDB v5         | **IndexedDB v5 + Backup JSON (Export/Import)**  |
 
 ---
 
@@ -30,32 +29,32 @@
 
 ### 🛡️ 2.1. Prioridad 1: Seguridad, Resiliencia Acústica y CSP
 
-* **Defensa en Profundidad en CSP (`index.html`):** Se incorporó la directiva `connect-src 'self' http://127.0.0.1:1234` en el encabezado `Content-Security-Policy`. Si bien el canal de comunicación primario es IPC (`window.customAPI`), esta adición asegura que el fallback directo a `fetch()` en `lmStudioService` nunca sea bloqueado silenciosamente por el motor Chromium.
-* **Test de Regresión de CSP (`src/renderer/src/index-csp.test.ts`):** Prueba automatizada que valida estáticamente que el tag `<meta>` del HTML sincronice siempre con `DEFAULT_APP_CONFIG.lmStudio.baseUrl`.
-* **Validación Estricta de Protocolos en Ventanas (`src/main/index.ts`):** `setWindowOpenHandler` ahora filtra explícitamente y solo permite esquemas `http:` y `https:` antes de invocar `shell.openExternal`, bloqueando cualquier intento de inyección de esquemas arbitrarios (`file:`, `javascript:`, `data:`).
-* **Barrido Completo de Pánico MIDI `21–108` (A0–C8):** En `useMidi.ts`, la rutina `sendAllNotesOff` amplió su rango de emisión explícita de Note Off de `36–84` a `21–108`, cubriendo la totalidad de un teclado de 88 notas físicas (como el Roland FP-8) y evitando notas colgadas en sintetizadores externos como el Korg NS5R.
+- **Defensa en Profundidad en CSP (`index.html`):** Se incorporó la directiva `connect-src 'self' http://127.0.0.1:1234` en el encabezado `Content-Security-Policy`. Si bien el canal de comunicación primario es IPC (`window.customAPI`), esta adición asegura que el fallback directo a `fetch()` en `lmStudioService` nunca sea bloqueado silenciosamente por el motor Chromium.
+- **Test de Regresión de CSP (`src/renderer/src/index-csp.test.ts`):** Prueba automatizada que valida estáticamente que el tag `<meta>` del HTML sincronice siempre con `DEFAULT_APP_CONFIG.lmStudio.baseUrl`.
+- **Validación Estricta de Protocolos en Ventanas (`src/main/index.ts`):** `setWindowOpenHandler` ahora filtra explícitamente y solo permite esquemas `http:` y `https:` antes de invocar `shell.openExternal`, bloqueando cualquier intento de inyección de esquemas arbitrarios (`file:`, `javascript:`, `data:`).
+- **Barrido Completo de Pánico MIDI `21–108` (A0–C8):** En `useMidi.ts`, la rutina `sendAllNotesOff` amplió su rango de emisión explícita de Note Off de `36–84` a `21–108`, cubriendo la totalidad de un teclado de 88 notas físicas (como el Roland FP-8) y evitando notas colgadas en sintetizadores externos como el Korg NS5R.
 
 ---
 
 ### 🔄 2.2. Prioridad 2: Refactorización DRY, SSOT de Configuración y Alertas de Persistencia
 
-* **Refactorización DRY en `lmStudioService.ts`:** Se extrajo el método privado `sendChat(messages, temperature, model)`. Los métodos públicos `analyzeAndPrescribe`, `askCustomConsultation` y `askMultiSessionComparison` se redujeron a llamadas compactas y declarativas, eliminando más de 60 líneas de código duplicado y asegurando que las mejoras en el manejo de `reasoning_content` impacten unívocamente a todos los flujos.
-* **Cierre de la Brecha SSOT en IPC (`preload` y `main`):** Los handlers IPC (`lm-studio:check-models` y `lm-studio:chat-completion`) ahora reciben dinámicamente el parámetro `baseUrl` desde la configuración centralizada de `appConfig.ts`, eliminando la dependencia de constantes estáticas aisladas en el proceso `main`.
-* **Unificación de Parámetros MIDI:** `useMidi.ts` y `useTrainerCore.ts` consumen directamente los valores canónicos de `DEFAULT_APP_CONFIG.midi` (`debounceWindowMs = 35`, `hungNoteWatchdogMs = 6000`, `autoAdvanceFastDelayMs = 1500`, `autoAdvanceSlowDelayMs = 3500`).
-* **Alertas de Fallo en IndexedDB (`DbSaveAlert.tsx`):** `useTrainerCore` ahora intercepta cualquier fallo de cuota o corrupción en `saveSessionToDb`, capturando el error en el estado reactivo `saveError`. El nuevo componente `DbSaveAlert` alerta visualmente al usuario en la interfaz principal en caso de problemas de almacenamiento en disco.
+- **Refactorización DRY en `lmStudioService.ts`:** Se extrajo el método privado `sendChat(messages, temperature, model)`. Los métodos públicos `analyzeAndPrescribe`, `askCustomConsultation` y `askMultiSessionComparison` se redujeron a llamadas compactas y declarativas, eliminando más de 60 líneas de código duplicado y asegurando que las mejoras en el manejo de `reasoning_content` impacten unívocamente a todos los flujos.
+- **Cierre de la Brecha SSOT en IPC (`preload` y `main`):** Los handlers IPC (`lm-studio:check-models` y `lm-studio:chat-completion`) ahora reciben dinámicamente el parámetro `baseUrl` desde la configuración centralizada de `appConfig.ts`, eliminando la dependencia de constantes estáticas aisladas en el proceso `main`.
+- **Unificación de Parámetros MIDI:** `useMidi.ts` y `useTrainerCore.ts` consumen directamente los valores canónicos de `DEFAULT_APP_CONFIG.midi` (`debounceWindowMs = 35`, `hungNoteWatchdogMs = 6000`, `autoAdvanceFastDelayMs = 1500`, `autoAdvanceSlowDelayMs = 3500`).
+- **Alertas de Fallo en IndexedDB (`DbSaveAlert.tsx`):** `useTrainerCore` ahora intercepta cualquier fallo de cuota o corrupción en `saveSessionToDb`, capturando el error en el estado reactivo `saveError`. El nuevo componente `DbSaveAlert` alerta visualmente al usuario en la interfaz principal en caso de problemas de almacenamiento en disco.
 
 ---
 
 ### 🧠 2.3. Prioridad 3: Robustez Criptográfica, Tipado Estricto, Matriz Psicoacústica y Respaldo Total
 
-* **Identificadores Criptográficos Inmunes a Colisiones:** Se reemplazó la concatenación de `Date.now() + Math.random()` por `crypto.randomUUID()` estándar en:
+- **Identificadores Criptográficos Inmunes a Colisiones:** Se reemplazó la concatenación de `Date.now() + Math.random()` por `crypto.randomUUID()` estándar en:
   - Generación de IDs de sesión (`useTrainerCore.ts`).
   - Tokens anti-carrera de preguntas (`generateQuestionToken`).
   - Registros de respuestas individuales (`useSingleNoteTrainer`, `useIntervalTrainer`, `useSequenceTrainer`).
   - Reportes de IA y consultas al tutor psicoacústico (`useAiStore`, `AiConsultationTab`, `AnalyticsView`).
-* **Tipado Estricto en Métodos de Inicio (`startSession`):** Se eliminó el tipo `unknown` en los argumentos de entrada de los tres entrenadores, sustituyéndolo por uniones tipadas (`SingleNoteStartArg`, `IntervalStartArg`, `SequenceStartArg`) y proporcionando métodos semánticos complementarios (`startWithNotePool`, `startWithIntervalPool`, `startWithSequencePool`).
-* **Matriz de Confusión Psicoacústica Real (`adaptiveEngine.ts`):** `AdaptiveV1SelectionStrategy` abandonó el `Set` plano de notas falladas para implementar un registro matricial por pares específicos `(esperada_tocada)`. El incremento de peso adaptativo ($+1.5$) solo se asigna a notas que integran un par de confusión recurrente ($\ge 2$ repeticiones), distinguiendo un resbalón motor aislado de una debilidad auditiva real.
-* **Sistema de Backup & Restauración JSON:**
+- **Tipado Estricto en Métodos de Inicio (`startSession`):** Se eliminó el tipo `unknown` en los argumentos de entrada de los tres entrenadores, sustituyéndolo por uniones tipadas (`SingleNoteStartArg`, `IntervalStartArg`, `SequenceStartArg`) y proporcionando métodos semánticos complementarios (`startWithNotePool`, `startWithIntervalPool`, `startWithSequencePool`).
+- **Matriz de Confusión Psicoacústica Real (`adaptiveEngine.ts`):** `AdaptiveV1SelectionStrategy` abandonó el `Set` plano de notas falladas para implementar un registro matricial por pares específicos `(esperada_tocada)`. El incremento de peso adaptativo ($+1.5$) solo se asigna a notas que integran un par de confusión recurrente ($\ge 2$ repeticiones), distinguiendo un resbalón motor aislado de una debilidad auditiva real.
+- **Sistema de Backup & Restauración JSON:**
   - `DatabaseEngine.ts`: Funciones `exportDatabase()` e `importDatabase()` (con soporte para modos `merge` y `replace` y validación estricta de esquemas).
   - `useDatabaseStore.ts`: Métodos `exportBackupJson()` e `importBackupJson()`.
   - UI (`StudioBottomDock.tsx` y `DatabaseCard.tsx`): Botones dedicados **`📥 Exportar Backup`** y **`📤 Importar Backup`** integrados en el dock permanente del estudio.

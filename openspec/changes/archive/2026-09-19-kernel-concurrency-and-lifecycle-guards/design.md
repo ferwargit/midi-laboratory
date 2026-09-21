@@ -6,12 +6,12 @@ Paralelamente, `useSequenceTrainer` ejecuta la evaluación y la persistencia den
 
 Estado actual relevante constatado en el código:
 
-| Hallazgo | Ubicación | Estado |
-| --- | --- | --- |
-| F01 | `useTrainerCore.ts` `recordAnswer` (guard incompleto, sin `clearTimeout` previo, timer sin check de token) | **No remediado** |
-| F07 | `useTrainerCore.ts` rama `else` de `recordAnswer` y `advanceToNextQuestion` (sin reset de `isWaitingManualAdvance`) | **No remediado** |
-| F02 | `useSequenceTrainer.ts:277-313` (evaluación + `recordAnswer` dentro del updater) | **No remediado** |
-| F03 | `useSingleNoteTrainer.ts` (cancelación de `preRollTimerRef`) | **Parcialmente remediado**: `startSession`, `stopSession` y `resetToConfig` ya cancelan el pre-roll; falta el guard defensivo en `triggerNextQuestion` |
+| Hallazgo | Ubicación                                                                                                           | Estado                                                                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| F01      | `useTrainerCore.ts` `recordAnswer` (guard incompleto, sin `clearTimeout` previo, timer sin check de token)          | **No remediado**                                                                                                                                       |
+| F07      | `useTrainerCore.ts` rama `else` de `recordAnswer` y `advanceToNextQuestion` (sin reset de `isWaitingManualAdvance`) | **No remediado**                                                                                                                                       |
+| F02      | `useSequenceTrainer.ts:277-313` (evaluación + `recordAnswer` dentro del updater)                                    | **No remediado**                                                                                                                                       |
+| F03      | `useSingleNoteTrainer.ts` (cancelación de `preRollTimerRef`)                                                        | **Parcialmente remediado**: `startSession`, `stopSession` y `resetToConfig` ya cancelan el pre-roll; falta el guard defensivo en `triggerNextQuestion` |
 
 ## Goals / Non-Goals
 

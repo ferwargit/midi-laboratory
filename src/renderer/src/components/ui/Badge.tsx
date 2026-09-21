@@ -8,10 +8,10 @@ interface BadgeProps {
 }
 
 const badgeStyles: Record<BadgeVariant, string> = {
-  success: 'bg-emerald-950/60 text-emerald-400 border-emerald-800',
-  danger: 'bg-red-950/60 text-red-400 border-red-800',
-  warning: 'bg-amber-950/60 text-amber-400 border-amber-800',
-  info: 'bg-sky-950/60 text-sky-400 border-sky-800'
+  success: 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30',
+  danger: 'bg-rose-950/60 text-rose-300 border border-rose-500/30',
+  warning: 'bg-amber-950/60 text-amber-300 border border-amber-500/30',
+  info: 'bg-cyan-950/60 text-cyan-300 border border-cyan-500/30'
 }
 
 export function Badge({ children, variant = 'info' }: BadgeProps): React.ReactElement {

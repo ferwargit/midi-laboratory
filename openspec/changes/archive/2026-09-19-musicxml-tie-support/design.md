@@ -7,6 +7,7 @@ Esa variable es el punto de anclaje natural para la consolidación de ligaduras:
 La duración de un evento se computa al emitirlo (líneas 231-233): `durationBeats = duration / divisions`, `durationMs = round(durationBeats * (60000 / baseBpm))`. Tres campos derivados que deben mantenerse coherentes al acumular.
 
 Los consumidores:
+
 - `repertoireEvaluator.ts:160-177` usa `durationBeats` para los modos rítmicos (`relative_proportional` compara IOI, `strict_metronome` cuadrícula acumulada).
 - `useRepertoireTrainer.ts:141-143` (`fuseConcurrentEvents`) toma `Math.min` de las duraciones al fusionar RH+LH.
 - `stimulusScheduler.ts:32` usa `durationMs` para programar el Note Off del sintetizador.
@@ -26,7 +27,7 @@ En los tres, la consolidación entrega **exactamente el valor que ya esperaban**
 
 - No se dibuja la ligadura en la partitura visual: el renderer se limita a poder leer `isTied` si quiere; este cambio no toca componentes de UI.
 - No se soportan slur (`<slur>`) ni ligaduras de frase: son indicaciones expresivas, no de prolongación de duración.
-- No se soportan ligaduras *parciales* sobre acordes (un `<tie>` que afecta a una sola voz interna de un acorde ya emitido con `<chord/>`): el dominio `ScorePlaybackEvent` es monolítico por voz; MuseScore 4 exporta esas voces como elementos `<note>` separados con `voice` distinto, que el parser ya trata como voces independientes.
+- No se soportan ligaduras _parciales_ sobre acordes (un `<tie>` que afecta a una sola voz interna de un acorde ya emitido con `<chord/>`): el dominio `ScorePlaybackEvent` es monolítico por voz; MuseScore 4 exporta esas voces como elementos `<note>` separados con `voice` distinto, que el parser ya trata como voces independientes.
 - No se recorta `durationMs` por la articulación legada del sintetizador: la duración es la matemática de la partitura.
 - No se alteran los modos de evaluación rítmica: consumen `durationBeats` sin cambio.
 
@@ -65,8 +66,9 @@ lastEventInVoice.durationMs = Math.round(lastEventInVoice.durationBeats * (60000
 **Elección:** una lectura por nota, priorizando la forma canónica de MuseScore 4:
 
 ```ts
-const tieType = child.querySelector('tie')?.getAttribute('type')
-  ?? child.querySelector('notations > tied')?.getAttribute('type')
+const tieType =
+  child.querySelector('tie')?.getAttribute('type') ??
+  child.querySelector('notations > tied')?.getAttribute('type')
 ```
 
 **Rationale:** MuseScore Studio 4 exporta `<tie type="start|stop"/>` como hijo directo de `<note>`; `<tied>` bajo `<notations>` es la forma del schema 4.0 que usan otros exportadores (Finale, MusicXML de muestra). `querySelector('tie')` sin descendente es deliberado: `<tied>` NO debe matchingar como hijo de `<notations>`. El `??` da prioridad a la forma nativa cuando ambas aparecen (algunos exportadores escriben ambas). **Alternativa rechazada:** leer solo `<tie>` — dejaría partituras reales sin consolidar y contradiría el objetivo del hallazgo.

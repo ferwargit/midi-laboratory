@@ -42,12 +42,12 @@
 
 ### Cobertura final medida (rama completa)
 
-| Módulo | Ramas | Líneas | Funciones |
-| --- | --- | --- | --- |
-| `music/defaultScore.ts` | 100% | 100% | 100% |
-| `analytics/sessionFilters.ts` | 100% | 100% | 100% |
-| `analytics/longitudinal.ts` | 98.82% | 100% | 100% |
-| `analytics/latencyStats.ts` | 97.22% | 100% | 100% |
+| Módulo                        | Ramas  | Líneas | Funciones |
+| ----------------------------- | ------ | ------ | --------- |
+| `music/defaultScore.ts`       | 100%   | 100%   | 100%      |
+| `analytics/sessionFilters.ts` | 100%   | 100%   | 100%      |
+| `analytics/longitudinal.ts`   | 98.82% | 100%   | 100%      |
+| `analytics/latencyStats.ts`   | 97.22% | 100%   | 100%      |
 
 Total del proyecto: 85.24% ramas / 95.99% líneas (desde 77.54% / 93.85%).
 

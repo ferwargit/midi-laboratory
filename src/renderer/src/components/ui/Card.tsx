@@ -12,14 +12,14 @@ export function Card({
   ...props
 }: CardProps): React.ReactElement {
   const glowStyles = {
-    none: 'border-zinc-800/80 shadow-[0_8px_30px_rgb(0,0,0,0.4)]',
-    cyan: 'border-sky-500/30 shadow-[0_0_35px_rgba(56,189,248,0.12)]',
-    purple: 'border-purple-500/30 shadow-[0_0_35px_rgba(168,85,247,0.12)]'
+    none: 'border-slate-800/80',
+    cyan: 'border-cyan-500/30 shadow-[0_0_20px_-5px_rgba(6,182,212,0.15)]',
+    purple: 'border-purple-500/30 shadow-[0_0_20px_-5px_rgba(168,85,247,0.15)]'
   }
 
   return (
     <div
-      className={`bg-zinc-900/60 backdrop-blur-xl border rounded-2xl p-4.5 transition-all duration-200 ${glowStyles[glow]} ${className}`}
+      className={`bg-linear-to-b from-slate-900/95 to-slate-950/95 border rounded-xl transition-all duration-150 ease-out active:scale-[0.99] ${glowStyles[glow]} ${className}`}
       {...props}
     >
       {children}

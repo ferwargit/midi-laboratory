@@ -172,30 +172,30 @@ src/renderer/src/
 
 ## 🔐 Modelo de Seguridad
 
-| Configuración | Valor | Razón |
-|---------------|-------|-------|
-| **contextIsolation** | `true` | Aísla el renderizador de Node.js |
-| **sandbox** | `false` | Intencional para `window.customAPI` |
-| **nodeIntegration** | `false` | Renderizador sin acceso directo a Node |
-| **IPC** | Con tiempos de espera y AbortController | Previene bloqueos |
-| **CSP** | Permite localhost:1234 | Para LM Studio local |
+| Configuración        | Valor                                   | Razón                                  |
+| -------------------- | --------------------------------------- | -------------------------------------- |
+| **contextIsolation** | `true`                                  | Aísla el renderizador de Node.js       |
+| **sandbox**          | `false`                                 | Intencional para `window.customAPI`    |
+| **nodeIntegration**  | `false`                                 | Renderizador sin acceso directo a Node |
+| **IPC**              | Con tiempos de espera y AbortController | Previene bloqueos                      |
+| **CSP**              | Permite localhost:1234                  | Para LM Studio local                   |
 
 ---
 
 ## 📊 Scripts NPM Disponibles
 
-| Script | Propósito |
-|--------|-----------|
-| `npm run dev` | Desarrollo con HMR (recarga en caliente) |
-| `npm start` | Vista previa de la construcción |
-| `npm run build` | Construcción completa (verificación de tipos + vite) |
-| `npm run build:win` | Instalador Windows |
-| `npm run test` | Pruebas unitarias |
-| `npm run test:coverage` | Pruebas + cobertura |
-| `npm run test:watch` | Modo observación |
-| `npm run lint` | ESLint con corrección automática |
-| `npm run format` | Prettier |
-| `npm run typecheck` | Verificación TypeScript completa |
+| Script                  | Propósito                                            |
+| ----------------------- | ---------------------------------------------------- |
+| `npm run dev`           | Desarrollo con HMR (recarga en caliente)             |
+| `npm start`             | Vista previa de la construcción                      |
+| `npm run build`         | Construcción completa (verificación de tipos + vite) |
+| `npm run build:win`     | Instalador Windows                                   |
+| `npm run test`          | Pruebas unitarias                                    |
+| `npm run test:coverage` | Pruebas + cobertura                                  |
+| `npm run test:watch`    | Modo observación                                     |
+| `npm run lint`          | ESLint con corrección automática                     |
+| `npm run format`        | Prettier                                             |
+| `npm run typecheck`     | Verificación TypeScript completa                     |
 
 ---
 
@@ -248,5 +248,4 @@ Este es un proyecto técnicamente sofisticado que combina tecnologías web moder
 
 ---
 
-*Documento generado: 29 de agosto de 2026*
-
+_Documento generado: 29 de agosto de 2026_

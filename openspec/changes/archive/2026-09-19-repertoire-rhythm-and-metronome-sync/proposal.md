@@ -16,7 +16,7 @@ Ambos son fallos de corrección en conducta observable (no de rendimiento), por 
 - `StimulusScheduler.startContinuousMetronome` **reinicia limpiamente el tempo** cuando recibe un `beatDurationMs` distinto del actual: cancela el `setInterval` viejo, cancela las frases pendientes programadas sobre la cuadrícula anterior (`cancelSequenceTimers`), reasigna `clockStartTime` y la fase de beat a downbeat, y reanuda inmediatamente con el nuevo tempo.
 - `useRepertoireTrainer.setStudyBpm` propurga el cambio de tempo al scheduler **también con el metrónomo de sesión activo** (no solo el libre); `App.tsx` `onPlaySlice` reenvía el tempo actual en cada programación de frase, dejando que el scheduler decida el reinicio.
 - Pruebas nuevas en `repertoireEvaluator.test.ts` (silencios incorporados al IOI; ausencia de `NaN`/`Infinity` con duración 0) y `stimulusScheduler.test.ts` (cambio de tempo en metrónomo continuo activo).
-- Deltas formales en `03-practice-modalities` (requisito *Modos de Evaluación Rítmica y Tolerancia*) y `01-midi-audio-hardware` (requisito *Scheduler y Reloj Maestro Cuantizado*).
+- Deltas formales en `03-practice-modalities` (requisito _Modos de Evaluación Rítmica y Tolerancia_) y `01-midi-audio-hardware` (requisito _Scheduler y Reloj Maestro Cuantizado_).
 
 **Compatibilidad:** sin breaking changes de API. La nueva fórmula es **más correcta**, no más laxa: piezas sin silencios ni notas de adorno producen los mismos valores numéricos que hoy (ver `design.md`, Decisión 2). El guard de IOI `<= 0` y el piso de 60 ms son aditivos.
 
@@ -28,10 +28,10 @@ Ambos son fallos de corrección en conducta observable (no de rendimiento), por 
 
 ### Modified Capabilities
 
-- `03-practice-modalities`: el requisito *Modos de Evaluación Rítmica y Tolerancia (Modalidad 04)* cambia la forma de calcular los tiempos esperados en `relative_proportional` y `strict_metronome` — de la duración del evento previo a la distancia métrica entre eventos sonoros (incluyendo silencios intermedios y fronteras de compás) — y añade el guard de IOI no positivo con exención de penalización rítmica más el piso de 60 ms. Requiere delta formal.
-- `01-midi-audio-hardware`: el requisito *Scheduler y Reloj Maestro Cuantizado (StimulusScheduler)* exige que `startContinuousMetronome` se reinicie limpiamente ante un cambio de tempo mientras el metrónomo ya está corriendo, cancelando la cuadrícula pendiente. Requiere delta formal.
+- `03-practice-modalities`: el requisito _Modos de Evaluación Rítmica y Tolerancia (Modalidad 04)_ cambia la forma de calcular los tiempos esperados en `relative_proportional` y `strict_metronome` — de la duración del evento previo a la distancia métrica entre eventos sonoros (incluyendo silencios intermedios y fronteras de compás) — y añade el guard de IOI no positivo con exención de penalización rítmica más el piso de 60 ms. Requiere delta formal.
+- `01-midi-audio-hardware`: el requisito _Scheduler y Reloj Maestro Cuantizado (StimulusScheduler)_ exige que `startContinuousMetronome` se reinicie limpiamente ante un cambio de tempo mientras el metrónomo ya está corriendo, cancelando la cuadrícula pendiente. Requiere delta formal.
 
-> **Nota:** el requisito *Control Maestro de Tempo y Metrónomo Libre (Modalidad 04)* de `03-practice-modalities` también se ve afectado en su frase "`setStudyBpm(bpm)` MUST propagarse al scheduler"; la redacción ya es correcta y **no** requiere delta — el cambio está en la implementación que hoy no la cumple. Ver `design.md`, Decisión 5.
+> **Nota:** el requisito _Control Maestro de Tempo y Metrónomo Libre (Modalidad 04)_ de `03-practice-modalities` también se ve afectado en su frase "`setStudyBpm(bpm)` MUST propagarse al scheduler"; la redacción ya es correcta y **no** requiere delta — el cambio está en la implementación que hoy no la cumple. Ver `design.md`, Decisión 5.
 
 ## Impact
 

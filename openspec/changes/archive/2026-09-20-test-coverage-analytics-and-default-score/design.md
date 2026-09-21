@@ -78,6 +78,7 @@ dominio.
 ### D3: Mapa de ramas objetivo por suite
 
 **`defaultScore.test.ts`** (rama única de exportación):
+
 1. `typeof DEFAULT_PARTITURA_XML === 'string'` y longitud > 0.
 2. `parseMusicXml(DEFAULT_PARTITURA_XML)` → aserciones sobre el contrato
    observable de `ScoreDataModel`: `title === 'Partitura 1'`,
@@ -89,6 +90,7 @@ dominio.
 
 **`sessionFilters.test.ts`** (los 11 grupos de filtros de
 `filterSessionsAdvanced`, con y sin `answers`):
+
 - Modalidad: `single_note`, `intervals`, `sequences`, `repertoire`, `all`.
 - Instrumento: `instrumentId !== 'all'` (match y no-match).
 - Estrategia: `strategyId !== 'all'` (match y no-match).
@@ -112,6 +114,7 @@ dominio.
   mapa de gap se construye solo sobre `createdAt`).
 
 **`longitudinal.test.ts`**:
+
 - `reconstructSessionConfig` con sesión de intervalos: respuestas con
   `reasonTelemetry` que matcheen `/(\d+)\s*st/i` → `recommendedIntervals`
   deduplicado y ordenado; y caso sin telemetría → fallback `[2,4,5,7,12]`.
@@ -127,6 +130,7 @@ dominio.
   acumula `totalQuestions` de todo el grupo.
 
 **`longitudinal.mock.test.ts`** (suite aislada, ramas defensivas de presets):
+
 - Aísla el módulo con `vi.mock('../music/presets', () => ({ EXERCISE_PRESETS: [] }))`
   para que `EXERCISE_PRESETS.find(...)?.notes` resuelva a `undefined` y se
   ejerciten los fallbacks `|| [...]` de `reconstructSessionConfig` (niveles 1-4
@@ -138,6 +142,7 @@ dominio.
   presets reales usadas por el resto de los casos.
 
 **`latencyStats.test.ts`**:
+
 - Ninguna respuesta correcta → `fastestNote === null`, `slowestNote === null`,
   `avgLatencyMs === 0` por nota, `fastReflexPercent === 0`,
   `fastestOctave === null`.

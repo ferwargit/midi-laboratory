@@ -1,6 +1,6 @@
 ## 1. Código del kernel
 
-- [x] 1.1 En `src/renderer/src/hooks/useTrainerCore.ts:210`, reemplazar la generación del token en `generateQuestionToken` por `` `${prefix}_${crypto.randomUUID()}` `` y verificar con `npm run typecheck` que no hay errores de tipos (crypto es un global ya usado en los *plug-ins*).
+- [x] 1.1 En `src/renderer/src/hooks/useTrainerCore.ts:210`, reemplazar la generación del token en `generateQuestionToken` por `` `${prefix}_${crypto.randomUUID()}` `` y verificar con `npm run typecheck` que no hay errores de tipos (crypto es un global ya usado en los _plug-ins_).
 - [x] 1.2 En `src/renderer/src/hooks/useTrainerCore.ts:314`, reemplazar la generación del `sessionId` en `startCoreSession` por `` `session_${crypto.randomUUID()}` `` y verificar con `npm run typecheck`.
 
 ## 2. Pruebas
@@ -12,7 +12,7 @@
 
 ## 3. Spec y validación
 
-- [x] 3.1 Confirmar que el delta spec `openspec/changes/unify-kernel-crypto-uuids/specs/02-trainer-core-engine/spec.md` refleja `crypto.randomUUID()` y ya no contiene la fórmula `Date.now()` + base-36 en los dos *bullets* de formato.
+- [x] 3.1 Confirmar que el delta spec `openspec/changes/unify-kernel-crypto-uuids/specs/02-trainer-core-engine/spec.md` refleja `crypto.randomUUID()` y ya no contiene la fórmula `Date.now()` + base-36 en los dos _bullets_ de formato.
 - [x] 3.2 Ejecutar `openspec validate unify-kernel-crypto-uuids --strict` y verificar que pasa sin errores.
 
 ## 4. Verificación final

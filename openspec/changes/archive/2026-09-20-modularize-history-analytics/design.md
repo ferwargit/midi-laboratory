@@ -43,31 +43,31 @@ export function computeAnalyticsMetrics(...) { /* orquestador */ }
 
 Los 35 sitios consumidores no se tocan. El orquestador es la única función que permanece implementada en `historyAnalytics.ts` (orquesta `filterSessionsAdvanced` → `computeInterSessionGapMap` → `resolveNominalPoolSize`/`calculateSessionCPI`/`resolveSessionDominantBias`/`resolveSessionInputMethod`/`resolveSessionFormat` → `computeLongitudinalComparisons`).
 
-*Alternativa descartada:* actualizar los 35 import sites a los submódulos nuevos. Multiplica el riesgo de regresión, ensucia el diff y mezcla reorganización de imports con correcciones de comportamiento, dificultando la revisión.
+_Alternativa descartada:_ actualizar los 35 import sites a los submódulos nuevos. Multiplica el riesgo de regresión, ensucia el diff y mezcla reorganización de imports con correcciones de comportamiento, dificultando la revisión.
 
 ### 2. `resolveNominalPoolSize` se exporta desde `sessionClassification.ts` y queda alcanzada por el barrel
 
 Hoy es función privada de módulo (sin `export`). Al dividir el archivo, `sessionFilters.ts` (rama `poolSizeFilter`) y el orquestador necesitan consumirla desde otro archivo, por lo que debe ser `export`-ada en `sessionClassification.ts`.
 
-Originalmente se planteó excluirla del barrel para no ensanchar la API pública. **En la implementación se desestimó esa exclusión** y se acepta que `export * from './sessionClassification'` la re-exporta, por dos razones: (a) `export *` no permite excluir símbolos individuales sin caer en una lista frágil de re-exports con nombre, que debería mantenerse sincronizada a mano ante cualquier evolución futura de `sessionClassification.ts`, contradiciendo el objetivo de simplicidad y robustez del barrel; y (b) el ensanche es estrictamente *additive*: ningún consumidor externo la importa ni la usa, por lo que no hay rotura ni cambio de comportamiento observable; es visibilidad intra-paquete ganada, no un contrato nuevo.
+Originalmente se planteó excluirla del barrel para no ensanchar la API pública. **En la implementación se desestimó esa exclusión** y se acepta que `export * from './sessionClassification'` la re-exporta, por dos razones: (a) `export *` no permite excluir símbolos individuales sin caer en una lista frágil de re-exports con nombre, que debería mantenerse sincronizada a mano ante cualquier evolución futura de `sessionClassification.ts`, contradiciendo el objetivo de simplicidad y robustez del barrel; y (b) el ensanche es estrictamente _additive_: ningún consumidor externo la importa ni la usa, por lo que no hay rotura ni cambio de comportamiento observable; es visibilidad intra-paquete ganada, no un contrato nuevo.
 
-*Alternativa descartada:* duplicar la lógica en `sessionFilters.ts` — reintroduciría exactamente el tipo de divergencia que la spec 05 prohíbe.
+_Alternativa descartada:_ duplicar la lógica en `sessionFilters.ts` — reintroduciría exactamente el tipo de divergencia que la spec 05 prohíbe.
 
 ### 3. Asignación de funciones a submódulos por cohesión, no por conteo de líneas
 
 La taxonomía respeta la separación ya existente en los tests y en la propia spec 05 (psicometría / cognición / algoritmo):
 
-| Submódulo | Contenido | Líneas aprox. |
-|---|---|---|
-| `thresholds.ts` | `COGNITIVE_LATENCY_THRESHOLDS`, `MASTERY_THRESHOLDS`, `ISI_THRESHOLDS`, `BIAS_DOMINANCE_RATIO` | ~25 |
-| `types.ts` | 18 interfaces y tipos (`AnalyticsMetrics`, `DetailedSessionAnalysis`, `SessionTimelineAnalysis`, `ConfusionMatrix2DData`, `AnalyticsFilterOptions`, `LongitudinalComparison`, …) | ~200 |
-| `sessionClassification.ts` | `resolveSessionFormat`, `resolveNominalPoolSize` (F-06/F-14), `formatInterSessionGap`, `computeInterSessionGapMap`, `InterSessionGapInfo`, `resolveSessionInputMethod`, `resolveSessionDominantBias`, `isSingleNoteSession`/`isIntervalSession`/`isSequenceSession`/`isRepertoireSession` | ~185 |
-| `psychometrics.ts` | `calculateSessionCPI` | ~20 |
-| `latencyStats.ts` | `computePerNoteLatencyStats`, `computeNotePerformancesFromAnswers` | ~145 |
-| `timelineTelemetry.ts` | `analyzeSessionTimeline` (F-13) | ~155 |
-| `confusionMatrix.ts` | `computePitchClassConfusionMatrix`, `PITCH_CLASSES` | ~50 |
-| `sessionFilters.ts` | `filterSessionsAdvanced`, `filterSessionsByMode` | ~165 |
-| `longitudinal.ts` | `computeLongitudinalComparisons` (F-09), `reconstructSessionConfig` | ~180 |
+| Submódulo                  | Contenido                                                                                                                                                                                                                                                                                 | Líneas aprox. |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `thresholds.ts`            | `COGNITIVE_LATENCY_THRESHOLDS`, `MASTERY_THRESHOLDS`, `ISI_THRESHOLDS`, `BIAS_DOMINANCE_RATIO`                                                                                                                                                                                            | ~25           |
+| `types.ts`                 | 18 interfaces y tipos (`AnalyticsMetrics`, `DetailedSessionAnalysis`, `SessionTimelineAnalysis`, `ConfusionMatrix2DData`, `AnalyticsFilterOptions`, `LongitudinalComparison`, …)                                                                                                          | ~200          |
+| `sessionClassification.ts` | `resolveSessionFormat`, `resolveNominalPoolSize` (F-06/F-14), `formatInterSessionGap`, `computeInterSessionGapMap`, `InterSessionGapInfo`, `resolveSessionInputMethod`, `resolveSessionDominantBias`, `isSingleNoteSession`/`isIntervalSession`/`isSequenceSession`/`isRepertoireSession` | ~185          |
+| `psychometrics.ts`         | `calculateSessionCPI`                                                                                                                                                                                                                                                                     | ~20           |
+| `latencyStats.ts`          | `computePerNoteLatencyStats`, `computeNotePerformancesFromAnswers`                                                                                                                                                                                                                        | ~145          |
+| `timelineTelemetry.ts`     | `analyzeSessionTimeline` (F-13)                                                                                                                                                                                                                                                           | ~155          |
+| `confusionMatrix.ts`       | `computePitchClassConfusionMatrix`, `PITCH_CLASSES`                                                                                                                                                                                                                                       | ~50           |
+| `sessionFilters.ts`        | `filterSessionsAdvanced`, `filterSessionsByMode`                                                                                                                                                                                                                                          | ~165          |
+| `longitudinal.ts`          | `computeLongitudinalComparisons` (F-09), `reconstructSessionConfig`                                                                                                                                                                                                                       | ~180          |
 
 `types.ts` y `sessionClassification.ts` superan las 150 líneas por pura cantidad de contratos y de ramas de clasificación; partirlos por partir (p. ej. `types-psychometrics.ts` vs `types-filters.ts`) reduciría cohesión sin ganar mantenibilidad.
 
@@ -143,7 +143,7 @@ Su único import de `historyAnalytics` es esa constante. Tras la modularización
 5. Reducir `historyAnalytics.ts` a orquestador + barrel; actualizar `pedagogicalDictionary.ts` a `./thresholds`.
 6. Aplicar las cuatro correcciones (F-06/F-14, F-09, F-13, F-16) en sus submódulos; verificar que los tests TDD pasan (Verde) y que la suite preexistente sigue al 100%.
 7. Verificación final no interactiva: `npm run typecheck`, `npm run lint`, `npm run test`.
-8. *Rollback:* cambio interno sin migración de datos ni cambio de esquema; basta con revertir el commit. No hay estado persistido que validar (los `poolSize` corregidos son derivados en tiempo de cómputo, no almacenados).
+8. _Rollback:_ cambio interno sin migración de datos ni cambio de esquema; basta con revertir el commit. No hay estado persistido que validar (los `poolSize` corregidos son derivados en tiempo de cómputo, no almacenados).
 
 ## Open Questions
 

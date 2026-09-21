@@ -9,14 +9,13 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    'bg-gradient-to-b from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-white shadow-[0_0_15px_rgba(56,189,248,0.3)] border border-sky-400/30 font-semibold',
+    'bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold shadow-sm shadow-cyan-500/20 active:scale-[0.98]',
   secondary:
-    'bg-zinc-900/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/60 hover:border-zinc-500/80 shadow-sm',
-  success:
-    'bg-gradient-to-b from-emerald-400 to-emerald-600 hover:from-emerald-300 hover:to-emerald-500 text-zinc-950 font-bold shadow-[0_0_20px_rgba(16,185,129,0.35)] border border-emerald-300/40',
-  danger:
-    'bg-gradient-to-b from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] border border-red-400/30',
-  ghost: 'bg-transparent hover:bg-zinc-800/60 text-zinc-400 hover:text-zinc-100'
+    'bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/60 shadow-sm active:scale-[0.98]',
+  success: 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-[0.98]',
+  danger: 'bg-rose-600 hover:bg-rose-500 text-white active:scale-[0.98]',
+  ghost:
+    'bg-transparent hover:bg-slate-800/60 text-slate-400 hover:text-slate-200 active:scale-[0.98]'
 }
 
 const sizeStyles = {
@@ -35,7 +34,7 @@ export function Button({
 }: ButtonProps): React.ReactElement {
   return (
     <button
-      className={`inline-flex items-center justify-center transition-all duration-150 cursor-pointer active:scale-[0.97] active:brightness-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+      className={`inline-flex items-center justify-center transition-all duration-150 ease-out cursor-pointer active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 focus-visible:outline-none ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
       disabled={disabled}
       {...props}
     >
