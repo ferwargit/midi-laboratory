@@ -8,6 +8,7 @@ import {
 import { evaluateSingleNoteAnswer, calculateSessionStats } from '../domain/exercise/evaluator'
 import { StrategyId, NotePerformance, SelectionDecision } from '../domain/adaptation/types'
 import { createStrategy } from '../domain/adaptation/adaptiveEngine'
+import { MASTERY_THRESHOLDS } from '../domain/analytics/historyAnalytics'
 import { InstrumentProfile, getInstrumentById } from '../domain/music/instruments'
 import { resolveNotePresetName } from '../domain/music/presets'
 import { TonalContextMode, getTotalContextDurationMs } from '../domain/music/tonalContext'
@@ -156,7 +157,9 @@ export function useSingleNoteTrainer({
       )
       return activeNotesBufferRef.current.every((note) => {
         const perf = currentPerformances.get(note)
-        return perf && perf.attempts >= 2 && perf.accuracyPercentage >= 85
+        return (
+          perf && perf.attempts >= 2 && perf.accuracyPercentage >= MASTERY_THRESHOLDS.MASTERED_MIN
+        )
       })
     },
     [strategy]
@@ -200,6 +203,8 @@ export function useSingleNoteTrainer({
 
   const triggerNextQuestion = useCallback(
     (notesPool?: number[]): void => {
+      if (!core.isSessionActive) return
+
       const pool = notesPool || activeNotesBufferRef.current
       if (pool.length < 2) return
 
@@ -373,9 +378,15 @@ export function useSingleNoteTrainer({
         onTelemetryLog('EVAL', evalMsg)
       }
 
-      core.recordAnswer(result, answerRecord, result.correct, () => {
-        advanceToNextQuestion()
-      })
+      core.recordAnswer(
+        result,
+        answerRecord,
+        result.correct,
+        () => {
+          advanceToNextQuestion()
+        },
+        core.questionToken
+      )
     },
     [core, onTelemetryLog, advanceToNextQuestion]
   )
@@ -401,7 +412,7 @@ export function useSingleNoteTrainer({
   const trainWeakNotesOnly = useCallback((): void => {
     const weakNotes: number[] = []
     performances.forEach((perf, note) => {
-      if (perf.attempts > 0 && perf.accuracyPercentage < 85) {
+      if (perf.attempts > 0 && perf.accuracyPercentage < MASTERY_THRESHOLDS.MASTERED_MIN) {
         weakNotes.push(note)
       }
     })
@@ -415,45 +426,88 @@ export function useSingleNoteTrainer({
     startSession(poolToTrain.sort((a, b) => a - b))
   }, [performances, startSession])
 
-  return {
-    activeNotes,
-    setActiveNotes,
-    toggleNote,
-    sessionLimitType: core.sessionLimitType,
-    setSessionLimitType: core.setSessionLimitType,
-    sessionQuestionsCount: core.sessionQuestionsCount,
-    setSessionQuestionsCount: core.setSessionQuestionsCount,
-    sessionDurationMinutes: core.sessionDurationMinutes,
-    setSessionDurationMinutes: core.setSessionDurationMinutes,
-    timeRemainingSeconds: core.timeRemainingSeconds,
-    sessionElapsedSeconds: core.sessionElapsedSeconds,
-    advanceMode: core.advanceMode,
-    setAdvanceMode: core.setAdvanceMode,
-    tonalContextMode,
-    setTonalContextMode,
-    selectedStrategyId,
-    setSelectedStrategyId,
-    selectedInstrument,
-    setSelectedInstrumentId,
-    isSessionActive: core.isSessionActive,
-    isSessionFinished: core.isSessionFinished,
-    isWaitingManualAdvance: core.isWaitingManualAdvance,
-    currentQuestionIndex: core.currentQuestionIndex,
-    currentExpectedNote,
-    isWaitingAnswer: core.isWaitingAnswer,
-    lastResult: core.lastResult,
-    sessionHistory: core.sessionHistory,
-    stats,
-    performances,
-    saveError: core.saveError,
-    clearSaveError: core.clearSaveError,
-    startSession,
-    startWithNotePool,
-    stopSession,
-    advanceToNextQuestion,
-    repeatCurrentNote,
-    handleUserNotePlayed,
-    trainWeakNotesOnly,
-    resetToConfig
-  }
+  return useMemo(
+    () => ({
+      activeNotes,
+      setActiveNotes,
+      toggleNote,
+      sessionLimitType: core.sessionLimitType,
+      setSessionLimitType: core.setSessionLimitType,
+      sessionQuestionsCount: core.sessionQuestionsCount,
+      setSessionQuestionsCount: core.setSessionQuestionsCount,
+      sessionDurationMinutes: core.sessionDurationMinutes,
+      setSessionDurationMinutes: core.setSessionDurationMinutes,
+      timeRemainingSeconds: core.timeRemainingSeconds,
+      sessionElapsedSeconds: core.sessionElapsedSeconds,
+      advanceMode: core.advanceMode,
+      setAdvanceMode: core.setAdvanceMode,
+      tonalContextMode,
+      setTonalContextMode,
+      selectedStrategyId,
+      setSelectedStrategyId,
+      selectedInstrument,
+      setSelectedInstrumentId,
+      isSessionActive: core.isSessionActive,
+      isSessionFinished: core.isSessionFinished,
+      isWaitingManualAdvance: core.isWaitingManualAdvance,
+      currentQuestionIndex: core.currentQuestionIndex,
+      currentExpectedNote,
+      isWaitingAnswer: core.isWaitingAnswer,
+      lastResult: core.lastResult,
+      sessionHistory: core.sessionHistory,
+      stats,
+      performances,
+      saveError: core.saveError,
+      clearSaveError: core.clearSaveError,
+      startSession,
+      startWithNotePool,
+      stopSession,
+      advanceToNextQuestion,
+      repeatCurrentNote,
+      handleUserNotePlayed,
+      trainWeakNotesOnly,
+      resetToConfig
+    }),
+    [
+      activeNotes,
+      setActiveNotes,
+      toggleNote,
+      core.sessionLimitType,
+      core.setSessionLimitType,
+      core.sessionQuestionsCount,
+      core.setSessionQuestionsCount,
+      core.sessionDurationMinutes,
+      core.setSessionDurationMinutes,
+      core.timeRemainingSeconds,
+      core.sessionElapsedSeconds,
+      core.advanceMode,
+      core.setAdvanceMode,
+      tonalContextMode,
+      setTonalContextMode,
+      selectedStrategyId,
+      setSelectedStrategyId,
+      selectedInstrument,
+      setSelectedInstrumentId,
+      core.isSessionActive,
+      core.isSessionFinished,
+      core.isWaitingManualAdvance,
+      core.currentQuestionIndex,
+      currentExpectedNote,
+      core.isWaitingAnswer,
+      core.lastResult,
+      core.sessionHistory,
+      stats,
+      performances,
+      core.saveError,
+      core.clearSaveError,
+      startSession,
+      startWithNotePool,
+      stopSession,
+      advanceToNextQuestion,
+      repeatCurrentNote,
+      handleUserNotePlayed,
+      trainWeakNotesOnly,
+      resetToConfig
+    ]
+  )
 }

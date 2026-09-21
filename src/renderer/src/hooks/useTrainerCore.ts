@@ -11,6 +11,7 @@ export interface TrainerCoreOptions<TResult> {
   defaultAdvanceMode?: AdvanceMode
   autoAdvanceFastDelayMs?: number
   autoAdvanceSlowDelayMs?: number
+  autoAdvanceSmartDelayMs?: number
   onBuildSessionRecord: (ctx: {
     sessionId: string
     totalSeconds: number
@@ -71,7 +72,8 @@ export interface UseTrainerCoreReturn<TResult> {
     result: TResult,
     answerRecord: DbAnswerRecord,
     isCorrectForSmartAdvance: boolean,
-    onAdvanceTrigger: () => void
+    onAdvanceTrigger: () => void,
+    questionToken: string
   ) => void
   stopCoreSession: () => void
   resetCoreToConfig: () => void
@@ -86,6 +88,7 @@ export function useTrainerCore<TResult>({
   defaultAdvanceMode = 'smart',
   autoAdvanceFastDelayMs = DEFAULT_APP_CONFIG.midi.autoAdvanceFastDelayMs,
   autoAdvanceSlowDelayMs = DEFAULT_APP_CONFIG.midi.autoAdvanceSlowDelayMs,
+  autoAdvanceSmartDelayMs = DEFAULT_APP_CONFIG.midi.autoAdvanceSmartDelayMs,
   onBuildSessionRecord,
   checkIsMasteryCompleted
 }: TrainerCoreOptions<TResult>): UseTrainerCoreReturn<TResult> {
@@ -100,7 +103,7 @@ export function useTrainerCore<TResult>({
   const [sessionElapsedSeconds, setSessionElapsedSecondsState] = useState<number>(0)
   const [advanceMode, setAdvanceModeState] = useState<AdvanceMode>(defaultAdvanceMode)
 
-  const [isSessionActive, setIsSessionActiveState] = useState<boolean>(false)
+  const [, setIsSessionActiveState] = useState<boolean>(false)
   const [isSessionFinished, setIsSessionFinishedState] = useState<boolean>(false)
   const [isWaitingManualAdvance, setIsWaitingManualAdvanceState] = useState<boolean>(false)
   const [isWaitingAnswer, setIsWaitingAnswerState] = useState<boolean>(false)
@@ -207,7 +210,7 @@ export function useTrainerCore<TResult>({
   }, [cleanupTimers])
 
   const generateQuestionToken = useCallback((prefix = 'token'): string => {
-    const token = `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    const token = `${prefix}_${crypto.randomUUID()}`
     questionTokenRef.current = token
     preAnswerListensRef.current = 1
     postErrorListensRef.current = 0
@@ -311,7 +314,7 @@ export function useTrainerCore<TResult>({
         }
       }
 
-      const newSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+      const newSessionId = `session_${crypto.randomUUID()}`
       sessionIdRef.current = newSessionId
       sessionStartTimeRef.current = Date.now()
 
@@ -415,6 +418,7 @@ export function useTrainerCore<TResult>({
       } else {
         currentQuestionIndexRef.current += 1
         setCurrentQuestionIndexState((prev) => prev + 1)
+        setIsWaitingManualAdvanceState(false)
         preAnswerListensRef.current = 1
         postErrorListensRef.current = 0
         errorPauseStartTimeRef.current = 0
@@ -430,9 +434,18 @@ export function useTrainerCore<TResult>({
       result: TResult,
       answerRecord: DbAnswerRecord,
       isCorrectForSmartAdvance: boolean,
-      onAdvanceTrigger: () => void
+      onAdvanceTrigger: () => void,
+      questionToken: string
     ): void => {
-      if (!isSessionActiveRef.current || !questionTokenRef.current) return
+      if (
+        !isSessionActiveRef.current ||
+        !questionTokenRef.current ||
+        !questionToken ||
+        questionToken !== questionTokenRef.current ||
+        !isWaitingAnswerRef.current
+      ) {
+        return
+      }
 
       // Estampar telemetría de escuchas previas
       answerRecord.preAnswerListens = preAnswerListensRef.current
@@ -456,16 +469,30 @@ export function useTrainerCore<TResult>({
           postErrorListensRef.current = 0
         }
       } else {
-        const delay = mode === 'auto_slow' ? autoAdvanceSlowDelayMs : autoAdvanceFastDelayMs
+        setIsWaitingManualAdvanceState(false)
+
+        const delay =
+          mode === 'auto_slow'
+            ? autoAdvanceSlowDelayMs
+            : mode === 'auto_fast'
+              ? autoAdvanceFastDelayMs
+              : autoAdvanceSmartDelayMs
         const currentId = sessionIdRef.current
+        const scheduledToken = questionTokenRef.current
+
+        if (autoAdvanceTimerRef.current) {
+          clearTimeout(autoAdvanceTimerRef.current)
+          autoAdvanceTimerRef.current = null
+        }
 
         autoAdvanceTimerRef.current = setTimeout(() => {
           if (sessionIdRef.current !== currentId) return
+          if (questionTokenRef.current !== scheduledToken) return
           onAdvanceTrigger()
         }, delay)
       }
     },
-    [autoAdvanceFastDelayMs, autoAdvanceSlowDelayMs, setIsWaitingAnswer]
+    [autoAdvanceFastDelayMs, autoAdvanceSlowDelayMs, autoAdvanceSmartDelayMs, setIsWaitingAnswer]
   )
 
   const stopCoreSession = useCallback((): void => {
@@ -478,6 +505,7 @@ export function useTrainerCore<TResult>({
       isAdvancingRef.current = false
       isWaitingAnswerRef.current = false
 
+      isSessionActiveRef.current = false
       setIsSessionActiveState(false)
       setIsSessionFinishedState(false)
       setIsWaitingAnswerState(false)
@@ -493,6 +521,7 @@ export function useTrainerCore<TResult>({
     isWaitingAnswerRef.current = false
     setSaveError(null)
 
+    isSessionActiveRef.current = false
     setIsSessionActiveState(false)
     setIsSessionFinishedState(false)
     setIsWaitingAnswerState(false)
@@ -511,7 +540,9 @@ export function useTrainerCore<TResult>({
     sessionElapsedSeconds,
     advanceMode,
     setAdvanceMode,
-    isSessionActive,
+    get isSessionActive() {
+      return isSessionActiveRef.current
+    },
     isSessionFinished,
     isWaitingManualAdvance,
     isWaitingAnswer,

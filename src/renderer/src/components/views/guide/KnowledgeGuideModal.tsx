@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '../../../components/ui/Button'
 import { IrtCurveDiagram } from './IrtCurveDiagram'
 import { LatencySpectrumDiagram } from './LatencySpectrumDiagram'
@@ -19,6 +19,17 @@ export function KnowledgeGuideModal({
 }: KnowledgeGuideModalProps): React.ReactElement | null {
   const [activeTopic, setActiveTopic] = useState<GuideTopic>('irt')
 
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return (): void => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   const topics: Array<{ id: GuideTopic; label: string; icon: string }> = [
@@ -31,7 +42,12 @@ export function KnowledgeGuideModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-4xl w-full p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto font-sans">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Centro de Conocimiento Psicoacústico & Metacognición"
+        className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-4xl w-full p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto font-sans"
+      >
         {/* Cabecera del Modal */}
         <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
@@ -40,7 +56,7 @@ export function KnowledgeGuideModal({
             </div>
             <div>
               <h2 className="text-base font-bold text-zinc-100 m-0">
-                Centro de Conocimiento Psicoacústico & Metacognición
+                Centro de Conocimiento Psicoacústico &amp; Metacognición
               </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
                 Diagramas interactivos de los modelos cognitivos y matemáticos que rigen el

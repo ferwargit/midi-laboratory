@@ -112,11 +112,15 @@ export function parseMusicXml(xmlContent: string): ScoreDataModel {
   const allEvents: ScorePlaybackEvent[] = []
   const harmonicProgression: HarmonicContextTag[] = []
 
+  // Ancla de voz: persiste entre compases para que una ligadura de prolongación que cruza
+  // la frontera de compás consolide su duración sobre el evento que la abrió (H-05).
+  // Se nulifica con <backup>/<forward>, que son justamente los cortes de continuidad temporal.
+  let lastEventInVoice: ScorePlaybackEvent | null = null
+
   // 3. Procesamiento compás por compás respetando <backup>, <chord>, <harmony>
   measureElements.forEach((measureEl, mIdx) => {
     const measureNumber = parseInt(measureEl.getAttribute('number') || `${mIdx + 1}`, 10)
     let currentCursorDivisions = 0
-    let lastEventInVoice: ScorePlaybackEvent | null = null
 
     // Recorrer los hijos en orden estricto de aparición
     const children = Array.from(measureEl.children)
@@ -221,8 +225,42 @@ export function parseMusicXml(xmlContent: string): ScoreDataModel {
           }
         }
 
+        // Ligadura de prolongación H-05: <tie> (forma canónica de MuseScore 4) o <tied> bajo <notations>
+        const tieType =
+          (
+            child.querySelector('tie')?.getAttribute('type') ??
+            child.querySelector('notations > tied')?.getAttribute('type')
+          )
+            ?.trim()
+            .toLowerCase() || null
+
+        // Una nota de continuación de ligadura consolida su duración sobre el evento que la abrió,
+        // avanzando el cursor temporal pero sin emitir un nuevo ScorePlaybackEvent.
+        const anchor = lastEventInVoice
+        const isTieContinuation =
+          tieType === 'stop' &&
+          !!anchor &&
+          !isChord &&
+          !isRest &&
+          !!noteDetail &&
+          anchor.notes.length === 1 &&
+          !anchor.isRest &&
+          anchor.voice === voice &&
+          anchor.staff === staff &&
+          anchor.notes[0].pitch === noteDetail.pitch &&
+          anchor.notes[0].step === noteDetail.step &&
+          anchor.notes[0].alter === noteDetail.alter &&
+          anchor.notes[0].octave === noteDetail.octave
+
+        if (isTieContinuation && anchor) {
+          anchor.durationDivisions += duration
+          anchor.durationBeats = anchor.durationDivisions / divisions
+          anchor.durationMs = Math.round(anchor.durationBeats * (60000 / baseBpm))
+          anchor.isTied = true
+          currentCursorDivisions += duration
+        }
         // Si es una nota de acorde simultáneo (<chord/>)
-        if (isChord && lastEventInVoice && noteDetail) {
+        else if (isChord && lastEventInVoice && noteDetail) {
           lastEventInVoice.notes.push(noteDetail)
           lastEventInVoice.midiNotes.push(noteDetail.pitch)
           lastEventInVoice.isChord = true

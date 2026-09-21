@@ -5,6 +5,7 @@ import { SequenceExerciseResult } from '../../domain/exercise/sequenceEvaluator'
 import { PianoKeyboard } from './PianoKeyboard'
 import { generateMidiRange, midiNoteToName } from '../../domain/music/noteUtils'
 import { NotePerformance } from '../../domain/adaptation/types'
+import { MASTERY_THRESHOLDS } from '../../domain/analytics/historyAnalytics'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6
 
@@ -59,7 +60,7 @@ export function SequenceSummaryCard({
 
   const activeNotesInSession = Array.from(new Set(history.flatMap((h) => h.expectedNotes)))
   const weakNotesList = Array.from(keyboardPerformances.values()).filter(
-    (p) => p.accuracyPercentage < 85
+    (p) => p.accuracyPercentage < MASTERY_THRESHOLDS.MASTERED_MIN
   )
 
   return (
@@ -92,15 +93,16 @@ export function SequenceSummaryCard({
           <span>Mapa de Precisión por Nota en las Frases:</span>
           <div className="flex gap-3 text-[11px]">
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Dominada
-              (&gt;85%)
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Dominada (&gt;
+              {MASTERY_THRESHOLDS.MASTERED_MIN}%)
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> En progreso
-              (50-85%)
+              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> En progreso (
+              {MASTERY_THRESHOLDS.CRITICAL_MAX}-{MASTERY_THRESHOLDS.MASTERED_MIN}%)
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> A reforzar (&lt;50%)
+              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> A reforzar (&lt;
+              {MASTERY_THRESHOLDS.CRITICAL_MAX}%)
             </span>
           </div>
         </div>

@@ -9,7 +9,7 @@ export function LatencySpectrumDiagram(): React.ReactElement {
     <div className="p-4 bg-zinc-950/90 rounded-2xl border border-zinc-800/80 space-y-3 font-mono">
       <div className="flex justify-between items-center text-xs">
         <span className="font-bold text-emerald-400">
-          ⚡ ESPECTRO DE LATENCIA COGNITIVA & FATIGA
+          ⚡ ESPECTRO DE LATENCIA COGNITIVA &amp; FATIGA
         </span>
         <span className="text-[10px] text-zinc-500">Tiempo de acceso a la memoria auditiva</span>
       </div>
@@ -17,13 +17,13 @@ export function LatencySpectrumDiagram(): React.ReactElement {
       {/* Barra continua de 3 zonas */}
       <div className="space-y-2 pt-2">
         <div className="w-full h-8 rounded-xl overflow-hidden flex text-[10px] font-bold select-none shadow-inner border border-zinc-800">
-          <div className="w-[35%] bg-gradient-to-r from-emerald-600 to-emerald-500 text-zinc-950 flex items-center justify-center gap-1 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+          <div className="w-[35%] bg-linear-to-r from-emerald-600 to-emerald-500 text-zinc-950 flex items-center justify-center gap-1 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
             <span>⚡ REFLEJO INMEDIATO</span>
           </div>
-          <div className="w-[40%] bg-gradient-to-r from-amber-600 to-amber-500 text-zinc-950 flex items-center justify-center gap-1">
+          <div className="w-[40%] bg-linear-to-r from-amber-600 to-amber-500 text-zinc-950 flex items-center justify-center gap-1">
             <span>🤔 DEDUCCIÓN ACTIVA</span>
           </div>
-          <div className="w-[25%] bg-gradient-to-r from-rose-600 to-rose-700 text-white flex items-center justify-center gap-1">
+          <div className="w-[25%] bg-linear-to-r from-rose-600 to-rose-700 text-white flex items-center justify-center gap-1">
             <span>⏳ FATIGA / DUDA</span>
           </div>
         </div>

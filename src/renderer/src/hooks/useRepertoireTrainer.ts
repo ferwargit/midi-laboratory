@@ -13,6 +13,7 @@ import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useTrainerCore, CoreStartSessionOptions } from './useTrainerCore'
 import { stimulusScheduler } from '../services/audio/stimulusScheduler'
 import { midiNoteToName } from '../domain/music/noteUtils'
+import { sanitizeResponseTime } from '../domain/exercise/evalPolicy'
 
 export type ChainingDirection = 'forward' | 'backward'
 export type ChainingStepGranularity = '1_event' | '2_events' | '1_measure'
@@ -288,7 +289,10 @@ export function useRepertoireTrainer({
       studyBpmRef.current = bpm
       setStudyBpmState(bpm)
 
-      if (isFreeMetronomeActiveRef.current && stimulusScheduler.isContinuousMetronomeActive()) {
+      // Propagar el tempo al scheduler siempre que el reloj maestro esté activo,
+      // cubriendo tanto el metrónomo libre como el metrónomo continuo de sesión
+      // (H-04): el scheduler decide si el cambio exige reiniciar el intervalo.
+      if (stimulusScheduler.isContinuousMetronomeActive()) {
         const beats = currentScoreRef.current?.timeSignature.beats || 2
         const beatMs = Math.round(60000 / bpm)
         stimulusScheduler.startContinuousMetronome(beatMs, beats, (note, dur, vel, ch) => {
@@ -454,11 +458,16 @@ export function useRepertoireTrainer({
   }, [])
 
   const triggerPlayCurrentSlice = useCallback(
-    (sliceOverride?: ScorePlaybackEvent[]): void => {
+    (sliceOverride?: ScorePlaybackEvent[], regenerateToken = true): void => {
       const slice = sliceOverride || getActiveSlice()
       if (slice.length === 0) return
 
-      core.generateQuestionToken('token_rep')
+      // Solo las preguntas NUEVAS (inicio/avance) rotan el token: hacerlo en una
+      // re-escucha resetearía los contadores de telemetría del kernel
+      // (generateQuestionToken reinicia preAnswerListens/postErrorListens).
+      if (regenerateToken) {
+        core.generateQuestionToken('token_rep')
+      }
       playedNotesBufferRef.current = []
 
       core.setLastResult(null)
@@ -600,8 +609,13 @@ export function useRepertoireTrainer({
   }, [core, setActiveSliceLength, setStreak])
 
   const repeatCurrentSlice = useCallback((): void => {
-    triggerPlayCurrentSlice()
-  }, [triggerPlayCurrentSlice])
+    if (core.isWaitingAnswer) {
+      core.recordPreAnswerRepeat()
+    } else if (core.isWaitingManualAdvance) {
+      core.recordPostErrorRepeat()
+    }
+    triggerPlayCurrentSlice(undefined, false)
+  }, [core, triggerPlayCurrentSlice])
 
   const handleUserNotePlayed = useCallback(
     (
@@ -619,7 +633,7 @@ export function useRepertoireTrainer({
         )
       }
 
-      if (!core.isSessionActive || slice.length === 0) return
+      if (!core.isSessionActive || slice.length === 0 || !core.questionToken) return
 
       let now = Date.now()
       const lastNote = playedNotesBufferRef.current[playedNotesBufferRef.current.length - 1]
@@ -645,10 +659,16 @@ export function useRepertoireTrainer({
           ...DEFAULT_REPERTOIRE_CONFIG,
           rhythmMode,
           rhythmTolerancePercent,
-          baseBpm: studyBpmRef.current
+          baseBpm: studyBpmRef.current,
+          beatsPerMeasure: currentScoreRef.current?.timeSignature.beats || 2
         }
 
         const result = evaluateRepertoireAttempt(slice, playedNotesToEvaluate, evalConfig)
+
+        const firstPlayedNote = playedNotesToEvaluate[0]
+        const lastPlayedNote = playedNotesToEvaluate[playedNotesToEvaluate.length - 1]
+        const rawResponseTimeMs = lastPlayedNote.timestampMs - firstPlayedNote.timestampMs
+        const responseTimeMs = sanitizeResponseTime(rawResponseTimeMs)
 
         const firstExpectedNote = slice[0]?.midiNotes[0] ?? 60
         const answerRecord: DbAnswerRecord = {
@@ -659,7 +679,7 @@ export function useRepertoireTrainer({
           playedNote: noteNumber,
           isCorrect: result.isCompleteSuccess,
           semitoneDistance: result.pitchAccuracyPercent === 100 ? 0 : 1,
-          responseTimeMs: 1000,
+          responseTimeMs,
           velocity,
           reasonTelemetry: `Rebanada: ${slice.length} evento(s) | Afinación: ${result.pitchAccuracyPercent}% | Ritmo: ${result.rhythmAccuracyPercent}%`,
           createdAt: new Date().toISOString(),
@@ -701,7 +721,7 @@ export function useRepertoireTrainer({
                 )
               }
               stimulusScheduler.cancelAll()
-              core.recordAnswer(result, answerRecord, true, () => {})
+              core.recordAnswer(result, answerRecord, true, () => {}, core.questionToken)
               void core.finalizeAndSaveSession()
               return
             }
@@ -733,9 +753,15 @@ export function useRepertoireTrainer({
           }
         }
 
-        core.recordAnswer(result, answerRecord, result.isCompleteSuccess, () => {
-          advanceToNextStep()
-        })
+        core.recordAnswer(
+          result,
+          answerRecord,
+          result.isCompleteSuccess,
+          () => {
+            advanceToNextStep()
+          },
+          core.questionToken
+        )
       }
     },
     [
@@ -752,58 +778,114 @@ export function useRepertoireTrainer({
     ]
   )
 
-  return {
-    currentScore,
-    setCurrentScore,
-    selectedHand,
-    setSelectedHand,
-    startMeasure,
-    setStartMeasure,
-    endMeasure,
-    setEndMeasure,
-    chainingDirection,
-    setChainingDirection,
-    streakTarget,
-    setStreakTarget,
-    currentStreak,
-    activeEventsSlice,
-    activeSliceLength,
-    rhythmMode,
-    setRhythmMode,
-    rhythmTolerancePercent,
-    setRhythmTolerancePercent,
-    includeResolutionNote,
-    setIncludeResolutionNote,
-    continuousMetronome,
-    setContinuousMetronome,
-    restingMeasures,
-    setRestingMeasures,
-    studyBpm,
-    setStudyBpm,
-    autoSpeedRamp,
-    setAutoSpeedRamp,
-    sessionLimitType: core.sessionLimitType,
-    setSessionLimitType: core.setSessionLimitType,
-    advanceMode: core.advanceMode,
-    setAdvanceMode: core.setAdvanceMode,
-    isSessionActive: core.isSessionActive,
-    isSessionFinished: core.isSessionFinished,
-    isWaitingManualAdvance: core.isWaitingManualAdvance,
-    currentQuestionIndex: core.currentQuestionIndex,
-    lastResult: core.lastResult,
-    sessionHistory: core.sessionHistory,
-    activeBeatIndex,
-    visualBeatEnabled,
-    setVisualBeatEnabled,
-    isFreeMetronomeActive,
-    toggleFreeMetronome,
-    saveError: core.saveError,
-    clearSaveError: core.clearSaveError,
-    startSession,
-    stopSession,
-    advanceToNextStep,
-    repeatCurrentSlice,
-    handleUserNotePlayed,
-    resetToConfig
-  }
+  return useMemo(
+    () => ({
+      currentScore,
+      setCurrentScore,
+      selectedHand,
+      setSelectedHand,
+      startMeasure,
+      setStartMeasure,
+      endMeasure,
+      setEndMeasure,
+      chainingDirection,
+      setChainingDirection,
+      streakTarget,
+      setStreakTarget,
+      currentStreak,
+      activeEventsSlice,
+      activeSliceLength,
+      rhythmMode,
+      setRhythmMode,
+      rhythmTolerancePercent,
+      setRhythmTolerancePercent,
+      includeResolutionNote,
+      setIncludeResolutionNote,
+      continuousMetronome,
+      setContinuousMetronome,
+      restingMeasures,
+      setRestingMeasures,
+      studyBpm,
+      setStudyBpm,
+      autoSpeedRamp,
+      setAutoSpeedRamp,
+      sessionLimitType: core.sessionLimitType,
+      setSessionLimitType: core.setSessionLimitType,
+      advanceMode: core.advanceMode,
+      setAdvanceMode: core.setAdvanceMode,
+      isSessionActive: core.isSessionActive,
+      isSessionFinished: core.isSessionFinished,
+      isWaitingManualAdvance: core.isWaitingManualAdvance,
+      currentQuestionIndex: core.currentQuestionIndex,
+      lastResult: core.lastResult,
+      sessionHistory: core.sessionHistory,
+      activeBeatIndex,
+      visualBeatEnabled,
+      setVisualBeatEnabled,
+      isFreeMetronomeActive,
+      toggleFreeMetronome,
+      saveError: core.saveError,
+      clearSaveError: core.clearSaveError,
+      startSession,
+      stopSession,
+      advanceToNextStep,
+      repeatCurrentSlice,
+      handleUserNotePlayed,
+      resetToConfig
+    }),
+    [
+      currentScore,
+      setCurrentScore,
+      selectedHand,
+      setSelectedHand,
+      startMeasure,
+      setStartMeasure,
+      endMeasure,
+      setEndMeasure,
+      chainingDirection,
+      setChainingDirection,
+      streakTarget,
+      setStreakTarget,
+      currentStreak,
+      activeEventsSlice,
+      activeSliceLength,
+      rhythmMode,
+      setRhythmMode,
+      rhythmTolerancePercent,
+      setRhythmTolerancePercent,
+      includeResolutionNote,
+      setIncludeResolutionNote,
+      continuousMetronome,
+      setContinuousMetronome,
+      restingMeasures,
+      setRestingMeasures,
+      studyBpm,
+      setStudyBpm,
+      autoSpeedRamp,
+      setAutoSpeedRamp,
+      core.sessionLimitType,
+      core.setSessionLimitType,
+      core.advanceMode,
+      core.setAdvanceMode,
+      core.isSessionActive,
+      core.isSessionFinished,
+      core.isWaitingManualAdvance,
+      core.currentQuestionIndex,
+      core.lastResult,
+      core.sessionHistory,
+      activeBeatIndex,
+      visualBeatEnabled,
+      setVisualBeatEnabled,
+      isFreeMetronomeActive,
+      toggleFreeMetronome,
+      core.saveError,
+      core.clearSaveError,
+      startSession,
+      stopSession,
+      advanceToNextStep,
+      repeatCurrentSlice,
+      handleUserNotePlayed,
+      resetToConfig
+    ]
+  )
 }

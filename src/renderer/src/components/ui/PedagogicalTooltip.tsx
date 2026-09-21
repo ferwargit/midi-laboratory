@@ -1,6 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { getConcept } from '../../domain/analytics/pedagogicalDictionary'
+import {
+  TOOLTIP_WIDTH,
+  ESTIMATED_TOOLTIP_HEIGHT,
+  computeTooltipPlacement,
+  type TooltipPlacement
+} from './tooltipPlacement'
+
+const TOOLTIP_ID = 'pedagogical-tooltip'
 
 interface PedagogicalTooltipProps {
   conceptId: string
@@ -14,30 +22,27 @@ export function PedagogicalTooltip({
   className = ''
 }: PedagogicalTooltipProps): React.ReactElement {
   const [isVisible, setIsVisible] = useState(false)
-  const [coords, setCoords] = useState<{ top: number; left: number; placeBelow: boolean }>({
+  const [coords, setCoords] = useState<TooltipPlacement>({
     top: 0,
     left: 0,
     placeBelow: false
   })
   const triggerRef = useRef<HTMLSpanElement>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
   const concept = getConcept(conceptId)
 
   const updatePosition = (): void => {
     if (!triggerRef.current) return
     const rect = triggerRef.current.getBoundingClientRect()
-    const tooltipWidth = 320
+    const tooltipHeight = tooltipRef.current?.offsetHeight ?? ESTIMATED_TOOLTIP_HEIGHT
 
-    // Si está cerca del borde superior (<260px), se despliega hacia abajo; si no, hacia arriba
-    const placeBelow = rect.top < 260
-    const top = placeBelow ? rect.bottom + 8 : rect.top - 8
-
-    // Centrado horizontal seguro dentro de los límites de la ventana
-    let left = rect.left + rect.width / 2 - tooltipWidth / 2
-    if (typeof window !== 'undefined') {
-      left = Math.max(16, Math.min(window.innerWidth - tooltipWidth - 16, left))
-    }
-
-    setCoords({ top, left, placeBelow })
+    setCoords(
+      computeTooltipPlacement(
+        { top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width },
+        { innerWidth: window.innerWidth, innerHeight: window.innerHeight },
+        tooltipHeight
+      )
+    )
   }
 
   const handleMouseEnter = (): void => {
@@ -55,15 +60,36 @@ export function PedagogicalTooltip({
     setIsVisible((prev) => !prev)
   }
 
+  const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>): void => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      // Space: suprime el scroll nativo de la página (patrón WAI-ARIA button)
+      e.preventDefault()
+      updatePosition()
+      setIsVisible((prev) => !prev)
+    }
+  }
+
   useEffect(() => {
     if (!isVisible) return
     const handleScrollOrResize = (): void => updatePosition()
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setIsVisible(false)
+    }
     window.addEventListener('scroll', handleScrollOrResize, true)
     window.addEventListener('resize', handleScrollOrResize)
+    window.addEventListener('keydown', handleKeyDown)
     return (): void => {
       window.removeEventListener('scroll', handleScrollOrResize, true)
       window.removeEventListener('resize', handleScrollOrResize)
+      window.removeEventListener('keydown', handleKeyDown)
     }
+  }, [isVisible])
+
+  // Nada de abajo depende de `isVisible`, así que este layout effect puede
+  // re-posicionar con la altura real del portal recién montado, antes de pintar.
+  useLayoutEffect(() => {
+    if (!isVisible) return
+    updatePosition()
   }, [isVisible])
 
   if (!concept) {
@@ -74,10 +100,15 @@ export function PedagogicalTooltip({
     <>
       <span
         ref={triggerRef}
-        className={`inline-flex items-center cursor-help group ${className}`}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isVisible}
+        aria-controls={isVisible ? TOOLTIP_ID : undefined}
+        className={`inline-flex items-center cursor-help group focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 rounded ${className}`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
+        onKeyDown={handleTriggerKeyDown}
       >
         <span className="border-b border-dotted border-zinc-500/80 group-hover:border-sky-400 transition-colors">
           {children}
@@ -89,15 +120,13 @@ export function PedagogicalTooltip({
         typeof document !== 'undefined' &&
         createPortal(
           <div
+            id={TOOLTIP_ID}
+            ref={tooltipRef}
             style={{
               position: 'fixed',
-              top: coords.placeBelow ? `${coords.top}px` : undefined,
-              bottom:
-                !coords.placeBelow && typeof window !== 'undefined'
-                  ? `${window.innerHeight - coords.top}px`
-                  : undefined,
+              top: `${coords.top}px`,
               left: `${coords.left}px`,
-              width: '320px',
+              width: `${TOOLTIP_WIDTH}px`,
               zIndex: 99999
             }}
             className="p-3.5 bg-zinc-950/95 backdrop-blur-2xl border border-sky-500/50 rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.95)] text-left font-sans animate-in fade-in zoom-in-95 duration-150 pointer-events-none"

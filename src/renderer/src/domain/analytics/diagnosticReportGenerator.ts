@@ -1,4 +1,9 @@
-import { AnalyticsMetrics, COGNITIVE_LATENCY_THRESHOLDS } from './historyAnalytics'
+import {
+  AnalyticsMetrics,
+  COGNITIVE_LATENCY_THRESHOLDS,
+  MASTERY_THRESHOLDS,
+  BIAS_DOMINANCE_RATIO
+} from './historyAnalytics'
 
 export interface DiagnosticReport {
   title: string
@@ -77,9 +82,9 @@ export function generateDiagnosticReport(metrics: AnalyticsMetrics): DiagnosticR
   let directionalBiasAnalysis = ''
   const totalErrors = metrics.sharpBiasCount + metrics.flatBiasCount
   if (totalErrors > 0) {
-    if (metrics.sharpBiasCount > metrics.flatBiasCount * 1.5) {
+    if (metrics.sharpBiasCount > metrics.flatBiasCount * BIAS_DOMINANCE_RATIO) {
       directionalBiasAnalysis = `Se detecta un SESGO HACIA LO AGUDO (+semitonos): en el ${Math.round((metrics.sharpBiasCount / totalErrors) * 100)}% de tus errores tiendes a percibir la nota más alta de lo que realmente suena.`
-    } else if (metrics.flatBiasCount > metrics.sharpBiasCount * 1.5) {
+    } else if (metrics.flatBiasCount > metrics.sharpBiasCount * BIAS_DOMINANCE_RATIO) {
       directionalBiasAnalysis = `Se detecta un SESGO HACIA LO GRAVE (-semitonos): en el ${Math.round((metrics.flatBiasCount / totalErrors) * 100)}% de tus errores tiendes a percibir la nota por debajo de su tono real.`
     } else {
       directionalBiasAnalysis =
@@ -105,7 +110,7 @@ export function generateDiagnosticReport(metrics: AnalyticsMetrics): DiagnosticR
   concreteActionPlan.push(
     'Realizar una sesión de 5 minutos cronometrada para reforzar la velocidad de reflejo auditivo sin sobrepensar.'
   )
-  if (metrics.overallAccuracy >= 80) {
+  if (metrics.overallAccuracy >= MASTERY_THRESHOLDS.MASTERED_MIN) {
     concreteActionPlan.push(
       'Avanzar a Modalidad 2 (Intervalos) con dirección mixta o a Modalidad 3 (Secuencias de 4 notas).'
     )

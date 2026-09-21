@@ -3,6 +3,7 @@ import { generateMidiRange, midiNoteToName } from './domain/music/noteUtils'
 import { VisualCueMode } from './domain/exercise/visualAudioSync'
 import { TonalContextMode, getTonalContextSteps } from './domain/music/tonalContext'
 import { parseMusicXml } from './domain/music/scoreParser'
+import { DEFAULT_PARTITURA_XML } from './domain/music/defaultScore'
 import { stimulusScheduler, ScheduledNoteEvent } from './services/audio/stimulusScheduler'
 import { useMidi } from './hooks/useMidi'
 import { useSingleNoteTrainer } from './hooks/useSingleNoteTrainer'
@@ -21,140 +22,18 @@ import { RepertoireView } from './components/views/RepertoireView'
 import { AnalyticsView } from './components/views/AnalyticsView'
 import { ConfirmModal } from './components/ui/ConfirmModal'
 import { AiExercisePrescription } from './domain/ai/types'
+import {
+  resolveShortcutDecision,
+  ShortcutContext,
+  AppMode
+} from './services/keyboard/shortcutDecision'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
-type AppMode = 'single_note' | 'intervals' | 'sequences' | 'repertoire' | 'analytics'
-
-const DEFAULT_PARTITURA_XML = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
-<score-partwise version="4.0">
-  <work><work-title>Partitura 1</work-title></work>
-  <credit page="1"><credit-type>title</credit-type><credit-words default-x="600" default-y="1600" font-size="22">Partitura 1</credit-words></credit>
-  <credit page="1"><credit-type>composer</credit-type><credit-words default-x="1100" default-y="1500" justify="right">Félix Dumont</credit-words></credit>
-  <credit page="1"><credit-type>subtitle</credit-type><credit-words default-x="600" default-y="1550" font-size="14">Canto de los cazadores tiroleses</credit-words></credit>
-  <part id="P1">
-    <!-- Compas 1 -->
-    <measure number="1">
-      <attributes>
-        <divisions>4</divisions>
-        <key><fifths>0</fifths></key>
-        <time><beats>2</beats><beat-type>4</beat-type></time>
-        <staves>2</staves>
-        <clef number="1"><sign>G</sign><line>2</line></clef>
-        <clef number="2"><sign>F</sign><line>4</line></clef>
-      </attributes>
-      <harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>
-      <direction placement="above"><sound tempo="86"/></direction>
-      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>E</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <backup><duration>8</duration></backup>
-      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-    </measure>
-    <!-- Compas 2 -->
-    <measure number="2">
-      <note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>
-      <backup><duration>8</duration></backup>
-      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-    </measure>
-    <!-- Compas 3 -->
-    <measure number="3">
-      <harmony><root><root-step>G</root-step></root><kind>major</kind><bass><bass-step>B</bass-step></bass></harmony>
-      <note><pitch><step>F</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>F</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <backup><duration>8</duration></backup>
-      <note><pitch><step>B</step><octave>2</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>D</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-    </measure>
-    <!-- Compas 4 -->
-    <measure number="4">
-      <harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>
-      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <backup><duration>8</duration></backup>
-      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-    </measure>
-    <!-- Compas 5 -->
-    <measure number="5">
-      <note><pitch><step>G</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>G</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>A</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>G</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>E</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>D</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <backup><duration>8</duration></backup>
-      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-    </measure>
-    <!-- Compas 6 -->
-    <measure number="6">
-      <note><pitch><step>C</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>E</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>F</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>G</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>
-      <backup><duration>8</duration></backup>
-      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-    </measure>
-    <!-- Compas 7 -->
-    <measure number="7">
-      <harmony><root><root-step>G</root-step></root><kind>major</kind><bass><bass-step>B</bass-step></bass></harmony>
-      <note><pitch><step>F</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>F</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>E</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>D</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>E</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <note><pitch><step>D</step><octave>6</octave></pitch><duration>1</duration><voice>1</voice><type>16th</type><staff>1</staff></note>
-      <backup><duration>8</duration></backup>
-      <note><pitch><step>B</step><octave>2</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>D</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-    </measure>
-    <!-- Compas 8 -->
-    <measure number="8">
-      <harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>
-      <note><pitch><step>C</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>E</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><pitch><step>C</step><octave>6</octave></pitch><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <note><rest/><duration>2</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>
-      <backup><duration>8</duration></backup>
-      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><chord/><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><chord/><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-      <note><rest/><duration>2</duration><voice>5</voice><type>eighth</type><staff>2</staff></note>
-    </measure>
-  </part>
-</score-partwise>`
+// Referencia inmutable para el modo blind: evita generar una nueva identidad de
+// arreglo en cada render y preserva el React.memo de PianoKeyboard (OLA 3.1 / F5-01).
+const EMPTY_STIMULUS_NOTES: number[] = []
+// AppMode proviene de ./services/keyboard/shortcutDecision (fuente única de
+// verdad compartida con el decisor de atajos).
 
 export default function App(): React.ReactElement {
   const [appMode, setAppMode] = useState<AppMode>('single_note')
@@ -326,14 +205,14 @@ export default function App(): React.ReactElement {
       })
 
       if (isContinuousMetro) {
-        if (!stimulusScheduler.isContinuousMetronomeActive()) {
-          stimulusScheduler.startContinuousMetronome(
-            beatDurationMs,
-            beats,
-            (note, dur, vel, ch) => {
-              midi.sendNote(note, dur, vel, ch)
-            }
-          )
+        // Se invoca siempre con el tempo vigente: el scheduler es idempotente ante
+        // un tempo sin cambios y reinicia limpiamente la cuadrícula si cambió (H-04,
+        // ej. autoSpeedRamp), de modo que la frase nunca se desplaza del downbeat.
+        const wasMetroActive = stimulusScheduler.isContinuousMetronomeActive()
+        stimulusScheduler.startContinuousMetronome(beatDurationMs, beats, (note, dur, vel, ch) => {
+          midi.sendNote(note, dur, vel, ch)
+        })
+        if (!wasMetroActive) {
           midi.addLog({
             type: 'OUT',
             message: `⏱️ Metrónomo Continuo activo en Canal 10 (${bpm} BPM)`
@@ -475,25 +354,42 @@ export default function App(): React.ReactElement {
 
       if (isTyping) return
 
-      if (e.code === 'Space') {
+      const shortcutContext: ShortcutContext = {
+        appMode,
+        singleNoteWaiting,
+        singleNoteActive,
+        intervalWaiting,
+        intervalActive,
+        sequenceWaiting,
+        sequenceActive,
+        repertoireWaiting,
+        repertoireActive
+      }
+
+      const decision = resolveShortcutDecision(e, shortcutContext)
+
+      if (decision.shouldPreventDefault) {
         e.preventDefault()
-        if (appMode === 'single_note' && singleNoteWaiting) {
+      }
+
+      if (decision.action === 'advance') {
+        if (appMode === 'single_note') {
           singleNoteAdvance()
-        } else if (appMode === 'intervals' && intervalWaiting) {
+        } else if (appMode === 'intervals') {
           intervalAdvance()
-        } else if (appMode === 'sequences' && sequenceWaiting) {
+        } else if (appMode === 'sequences') {
           sequenceAdvance()
-        } else if (appMode === 'repertoire' && repertoireWaiting) {
+        } else if (appMode === 'repertoire') {
           repertoireAdvance()
         }
-      } else if (e.key === 'r' || e.key === 'R') {
-        if (appMode === 'single_note' && singleNoteActive) {
+      } else if (decision.action === 'repeat') {
+        if (appMode === 'single_note') {
           singleNoteRepeat()
-        } else if (appMode === 'intervals' && intervalActive) {
+        } else if (appMode === 'intervals') {
           intervalRepeat()
-        } else if (appMode === 'sequences' && sequenceActive) {
+        } else if (appMode === 'sequences') {
           sequenceRepeat()
-        } else if (appMode === 'repertoire' && repertoireActive) {
+        } else if (appMode === 'repertoire') {
           repertoireRepeat()
         }
       }
@@ -623,7 +519,8 @@ export default function App(): React.ReactElement {
     setIsResetModalOpen(false)
   }
 
-  const liveStimulusNotes = visualCueMode === 'assisted' ? midi.activeStimulusNotes : []
+  const liveStimulusNotes =
+    visualCueMode === 'assisted' ? midi.activeStimulusNotes : EMPTY_STIMULUS_NOTES
 
   return (
     <div className="min-h-screen flex flex-col justify-between p-3 md:p-5 max-w-[1800px] w-full mx-auto space-y-3 font-sans">

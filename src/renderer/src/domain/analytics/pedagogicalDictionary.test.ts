@@ -28,4 +28,12 @@ describe('pedagogicalDictionary - Diccionario y Modelos Psicoacústicos Centrali
   it('debe devolver null si el concepto no existe', () => {
     expect(getConcept('concepto_inexistente')).toBeNull()
   })
+
+  it('F-16: la fórmula del CPI documenta los límites de clamp que aplica calculateSessionCPI', () => {
+    const cpi = getConcept('cpi_score')
+    expect(cpi).not.toBeNull()
+    expect(cpi?.formulaOrCalculation).toContain('0.5')
+    expect(cpi?.formulaOrCalculation).toContain('0.6')
+    expect(cpi?.formulaOrCalculation).toContain('2.5')
+  })
 })

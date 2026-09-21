@@ -12,6 +12,9 @@ describe('appConfig - Configuración Centralizada y Parametrización del Sistema
     expect(DEFAULT_APP_CONFIG.midi.debounceWindowMs).toBe(35)
     expect(DEFAULT_APP_CONFIG.midi.hungNoteWatchdogMs).toBe(6000)
     expect(DEFAULT_APP_CONFIG.midi.defaultVelocity).toBe(90)
+    expect(DEFAULT_APP_CONFIG.midi.autoAdvanceFastDelayMs).toBe(1500)
+    expect(DEFAULT_APP_CONFIG.midi.autoAdvanceSlowDelayMs).toBe(3500)
+    expect(DEFAULT_APP_CONFIG.midi.autoAdvanceSmartDelayMs).toBe(1500)
   })
 
   it('LmStudioService debe instanciarse con la configuración por defecto y aceptar overrides', () => {

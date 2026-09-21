@@ -1,4 +1,4 @@
-import { COGNITIVE_LATENCY_THRESHOLDS } from './historyAnalytics'
+import { COGNITIVE_LATENCY_THRESHOLDS } from './thresholds'
 
 export interface PedagogicalConcept {
   id: string
@@ -106,7 +106,7 @@ export const PEDAGOGICAL_DICTIONARY: Record<string, PedagogicalConcept> = {
     shortDefinition:
       'Puntuación compuesta que evalúa el mérito cognitivo real integrando precisión IRT, entropía de notas, cadencia y velocidad de reflejo.',
     formulaOrCalculation:
-      'CPI = Oído Real × (Entropía/3.0) × (RPM/15.0) × (1.5s/Latencia) × Factor Entrada × 10',
+      'CPI = Oído Real × máx(0.5; Entropía/3.0) × (RPM/15.0) × (1.5s/máx(0.6s; Latencia)) × [0.3 – 2.5] × Factor Entrada × 10',
     practicalTakeaway:
       'Permite comparar sesiones de diferente dificultad: un 80% en 13 notas con el piano físico obtiene más puntos que un 80% en 3 notas con ratón.'
   }

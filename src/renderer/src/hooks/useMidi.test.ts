@@ -15,7 +15,7 @@ interface MockMidiOutput {
   name: string
   state: string
   type: string
-  send: (data: number[]) => void
+  send: ReturnType<typeof vi.fn>
 }
 
 interface MockMidiAccessResult {
@@ -119,7 +119,7 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
     expect(mockOutput.send).toHaveBeenCalledWith([0xc0, 73])
   })
 
-  it('sendAllNotesOff debe emitir CC 120 (Sound Off), CC 123 (Notes Off) y CC 64 (Sustain Off)', async () => {
+  it('sendAllNotesOff(1) debe emitir la secuencia canónica completa en Canal 1 (CC 120, 123, 64, 121 y Pitch Bend centrado)', async () => {
     const { access, mockOutput } = createMockMidiAccess()
     ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
       .fn()
@@ -138,6 +138,125 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
     expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
     expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 123, 0])
     expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 64, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 121, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xe0, 0x00, 0x40])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 21, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 108, 0])
+
+    // Canal 1 debe quedar aislado: ningún silenciador debe alcanzar el Canal 10
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0xb9, 120, 0])
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0xb9, 123, 0])
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0xb9, 64, 0])
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0xb9, 121, 0])
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0xe9, 0x00, 0x40])
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0x89, 21, 0])
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0x89, 108, 0])
+  })
+
+  it('sendAllNotesOff() global debe silenciar los canales activos 1 y 10', async () => {
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    act(() => {
+      result.current.sendAllNotesOff()
+    })
+
+    // Canal 1 (0xB0 / 0x80 / 0xE0)
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 123, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 64, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 121, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xe0, 0x00, 0x40])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 21, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 108, 0])
+
+    // Canal 10 (0xB9 / 0x89 / 0xE9)
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 120, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 123, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 64, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 121, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xe9, 0x00, 0x40])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x89, 21, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x89, 108, 0])
+  })
+
+  it('sendAllNotesOff(1) no debe tocar el Canal 10, pero clearAllPressedNotes sí', async () => {
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    act(() => {
+      result.current.sendAllNotesOff(1)
+    })
+
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 121, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xe0, 0x00, 0x40])
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0xb9, 121, 0])
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0xe9, 0x00, 0x40])
+
+    mockOutput.send.mockClear()
+
+    act(() => {
+      result.current.clearAllPressedNotes()
+    })
+
+    expect(result.current.pressedNotes).toEqual([])
+    expect(result.current.activeStimulusNotes).toEqual([])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 121, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 121, 0])
+  })
+
+  it('sendAllNotesOff contiene las excepciones del puerto de salida', async () => {
+    const { access, mockOutput } = createMockMidiAccess()
+    mockOutput.send.mockImplementation(() => {
+      throw new Error('Puerto de salida caído')
+    })
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    expect(() =>
+      act(() => {
+        result.current.sendAllNotesOff()
+      })
+    ).not.toThrow()
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[useMidi] Error al emitir MIDI Panic:',
+      expect.any(Error)
+    )
+    expect(consoleSpy).toHaveBeenCalledTimes(1)
+    consoleSpy.mockRestore()
+
+    expect(result.current.pressedNotes).toEqual([])
+    expect(result.current.activeStimulusNotes).toEqual([])
+
+    // Restablecer el mock para que el unmount pasivo del hook no lance
+    // (el cleanup de useMidi vuelve a invocar sendAllNotesOff al desmontar)
+    mockOutput.send = vi.fn()
   })
 
   it('clearAllPressedNotes debe invocar sendAllNotesOff y limpiar el buffer', async () => {

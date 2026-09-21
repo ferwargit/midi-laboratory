@@ -18,6 +18,7 @@ describe('s3-db-validation - Validación de Integridad de Persistencia en Indexe
 
   it('initialize creates schema version: la base de datos se inicializa con la versión de esquema canónica', () => {
     expect(engine.getVersion()).toBe(DB_VERSION)
+    expect(DB_VERSION).toBe(6)
   })
 
   it('saveSession rejects invalid answer: debe rechazar y abortar si una respuesta tiene datos corruptos', async () => {

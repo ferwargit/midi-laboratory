@@ -1,5 +1,6 @@
 import { ExerciseResult } from '../exercise/types'
 import { midiNoteToName } from '../music/noteUtils'
+import { MASTERY_THRESHOLDS } from '../analytics/historyAnalytics'
 import { SpacedRepetitionStrategy } from './spacedRepetitionEngine'
 import {
   ExerciseSelectionStrategy,
@@ -112,9 +113,9 @@ export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
     if (perf && perf.attempts > 0) {
       if (perf.lastResultWasCorrect === false) {
         reason = `🎯 Refuerzo inmediato de fallo reciente (Precisión: ${perf.accuracyPercentage}%)`
-      } else if (perf.accuracyPercentage < 50) {
+      } else if (perf.accuracyPercentage < MASTERY_THRESHOLDS.CRITICAL_MAX) {
         reason = `⚠️ Nota con tasa de error alta (Precisión: ${perf.accuracyPercentage}%)`
-      } else if (perf.accuracyPercentage >= 85 && perf.attempts >= 3) {
+      } else if (perf.accuracyPercentage >= MASTERY_THRESHOLDS.MASTERED_MIN && perf.attempts >= 3) {
         reason = `🔁 Mantenimiento de nota dominada (${perf.accuracyPercentage}%)`
       } else {
         reason = `📈 Entrenamiento en progreso (${perf.accuracyPercentage}%)`
@@ -146,7 +147,7 @@ export class AdaptiveV1SelectionStrategy implements ExerciseSelectionStrategy {
             weight += 2.0
           }
 
-          if (perf.accuracyPercentage >= 85 && perf.attempts >= 3) {
+          if (perf.accuracyPercentage >= MASTERY_THRESHOLDS.MASTERED_MIN && perf.attempts >= 3) {
             weight = 0.3
           }
         }

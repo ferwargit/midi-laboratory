@@ -48,6 +48,11 @@ export class StimulusScheduler {
 
   /**
    * Inicia el Metrónomo Continuo en Canal 10 con notificación de Beat al indicador visual.
+   *
+   * Si el metrónomo ya está corriendo y el tempo difiere del vigente, se reinicia
+   * limpiamente con el nuevo tempo (H-04): cancela el intervalo anterior, anula las
+   * frases pendientes programadas sobre la cuadrícula vieja, reasigna el reloj maestro
+   * y reinicia la fase desde el downbeat. Con tempo idéntico es idempotente.
    */
   startContinuousMetronome(
     beatDurationMs: number,
@@ -58,7 +63,13 @@ export class StimulusScheduler {
       return
     }
 
-    this.stopContinuousMetronome()
+    // Cambio de tempo con el metrónomo activo: descartar la cuadrícula vieja.
+    if (this.metronomeTimer) {
+      clearInterval(this.metronomeTimer)
+      this.metronomeTimer = null
+      this.cancelSequenceTimers()
+    }
+
     this.currentBeatDurationMs = beatDurationMs
     this.currentBeatsPerMeasure = beatsPerMeasure
     this.isMetroRunning = true
@@ -129,6 +140,14 @@ export class StimulusScheduler {
 
   isContinuousMetronomeActive(): boolean {
     return this.isMetroRunning
+  }
+
+  /**
+   * Tempo vigente del metrónomo continuo (ms por tiempo). Solo lectura — sirve
+   * de verificación de sincronización (tests/telemetría) sin efectos de audio.
+   */
+  getCurrentBeatDurationMs(): number {
+    return this.currentBeatDurationMs
   }
 
   cancelSequenceTimers(): void {

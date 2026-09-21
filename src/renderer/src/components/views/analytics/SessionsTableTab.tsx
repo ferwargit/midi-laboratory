@@ -2,7 +2,9 @@ import React, { useState } from 'react'
 import {
   DetailedSessionAnalysis,
   reconstructSessionConfig,
-  COGNITIVE_LATENCY_THRESHOLDS
+  COGNITIVE_LATENCY_THRESHOLDS,
+  MASTERY_THRESHOLDS,
+  ISI_THRESHOLDS
 } from '../../../domain/analytics/historyAnalytics'
 import { DbAnswerRecord, DbSessionRecord } from '../../../domain/database/types'
 import { INSTRUMENT_CATALOG } from '../../../domain/music/instruments'
@@ -160,7 +162,7 @@ export function SessionsTableTab({
 
         {/* BARRA FLOTANTE DE ACCIONES MÚLTIPLES */}
         {selectedIds.size > 0 && (
-          <div className="p-2.5 bg-gradient-to-r from-sky-950/90 via-purple-950/90 to-zinc-950 border border-sky-500/50 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3 font-mono text-xs shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="p-2.5 bg-linear-to-r from-sky-950/90 via-purple-950/90 to-zinc-950 border border-sky-500/50 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3 font-mono text-xs shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse" />
               <span className="font-bold text-white">
@@ -176,7 +178,7 @@ export function SessionsTableTab({
                   variant="primary"
                   size="sm"
                   onClick={(): void => onIsolateSessions(Array.from(selectedIds))}
-                  className="bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 font-bold text-xs shadow-md cursor-pointer border border-sky-400/40"
+                  className="bg-linear-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 font-bold text-xs shadow-md cursor-pointer border border-sky-400/40"
                   title="Recalcular todo el panel de analítica exclusivamente para estas sesiones marcadas"
                 >
                   📊 Aislar en Analítica ({selectedIds.size})
@@ -188,7 +190,7 @@ export function SessionsTableTab({
                   variant="primary"
                   size="sm"
                   onClick={(): void => onCompareSessionsWithAi(Array.from(selectedIds))}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold text-xs shadow-md cursor-pointer border border-purple-400/30"
+                  className="bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold text-xs shadow-md cursor-pointer border border-purple-400/30"
                 >
                   🔬 Comparar con IA Local ({selectedIds.size})
                 </Button>
@@ -254,7 +256,7 @@ export function SessionsTableTab({
                     className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
                   >
                     <div className="flex items-center">
-                      <span>Fecha & ISI</span>
+                      <span>Fecha &amp; ISI</span>
                       {renderSortIndicator('date')}
                     </div>
                   </th>
@@ -264,7 +266,7 @@ export function SessionsTableTab({
                     className="pb-2.5 cursor-pointer hover:text-zinc-200 transition-colors group"
                   >
                     <div className="flex items-center">
-                      <span>Contenido & Timbre</span>
+                      <span>Contenido &amp; Timbre</span>
                       {renderSortIndicator('content')}
                     </div>
                   </th>
@@ -427,11 +429,12 @@ export function SessionsTableTab({
                             className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold whitespace-nowrap ${
                               item.interSessionGapLabel === 'Inicio'
                                 ? 'bg-zinc-900 text-zinc-500 border border-zinc-800'
-                                : item.interSessionGapMs !== null && item.interSessionGapMs < 900000
+                                : item.interSessionGapMs !== null &&
+                                    item.interSessionGapMs < ISI_THRESHOLDS.MASSED_MAX_MS
                                   ? 'bg-amber-950/80 text-amber-300 border border-amber-800/80'
                                   : item.interSessionGapMs !== null &&
-                                      item.interSessionGapMs >= 43200000 &&
-                                      item.interSessionGapMs <= 172800000
+                                      item.interSessionGapMs >= ISI_THRESHOLDS.OPTIMAL_MIN_MS &&
+                                      item.interSessionGapMs <= ISI_THRESHOLDS.OPTIMAL_MAX_MS
                                     ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80'
                                     : 'bg-zinc-900 text-sky-400 border border-zinc-800'
                             }`}
@@ -536,9 +539,9 @@ export function SessionsTableTab({
                       <td className="py-3 text-center whitespace-nowrap">
                         <span
                           className={`font-bold ${
-                            item.normalizedAccuracy >= 85
+                            item.normalizedAccuracy >= MASTERY_THRESHOLDS.MASTERED_MIN
                               ? 'text-emerald-400'
-                              : item.normalizedAccuracy >= 50
+                              : item.normalizedAccuracy >= MASTERY_THRESHOLDS.CRITICAL_MAX
                                 ? 'text-amber-400'
                                 : 'text-rose-400'
                           }`}

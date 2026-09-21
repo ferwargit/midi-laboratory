@@ -8,7 +8,7 @@ import {
   computeAnalyticsMetrics,
   DetailedSessionAnalysis
 } from '../../domain/analytics/historyAnalytics'
-import { LmStudioService } from '../../domain/ai/lmStudioService'
+import { aiService } from '../../domain/ai/lmStudioService'
 import { AnalyticsCharts } from '../trainer/AnalyticsCharts'
 import { AiExercisePrescription } from '../../domain/ai/types'
 import { DbAiConsultationRecord } from '../../domain/database/types'
@@ -28,8 +28,6 @@ import { ConfusionMatrixTab } from './analytics/ConfusionMatrixTab'
 interface AnalyticsViewProps {
   onLoadPrescription: (prescription: AiExercisePrescription) => void
 }
-
-const aiService = new LmStudioService()
 
 export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React.ReactElement {
   const sessions = useDatabaseStore((state) => state.sessions)
@@ -141,39 +139,27 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
 
   // 1. Filtrado Reactivo de Sesiones
   const displayedAnalysisList: DetailedSessionAnalysis[] = useMemo(() => {
-    const filteredRaw = filterSessionsAdvanced(sessions, {
-      mode: modeFilter,
-      instrumentId: selectedInstrument,
-      strategyId: selectedStrategy,
-      presetFilter: selectedPreset,
-      format: selectedFormat,
-      mastery: selectedMastery,
-      poolSizeFilter: selectedPoolSize,
-      searchQuery
-    })
+    const filteredRaw = filterSessionsAdvanced(
+      sessions,
+      {
+        mode: modeFilter,
+        instrumentId: selectedInstrument,
+        strategyId: selectedStrategy,
+        presetFilter: selectedPreset,
+        format: selectedFormat,
+        mastery: selectedMastery,
+        inputSource: selectedInputSource,
+        biasFilter: selectedBias,
+        poolSizeFilter: selectedPoolSize,
+        isiFilter: selectedIsi,
+        searchQuery
+      },
+      answers
+    )
     const validIds = new Set(filteredRaw.map((s) => s.id))
     let list = (metrics.sessionPsychometricsList || []).filter((item) =>
       validIds.has(item.session.id)
     )
-
-    if (selectedInputSource !== 'all') {
-      list = list.filter((item) => item.inputMethod === selectedInputSource)
-    }
-
-    if (selectedBias !== 'all') {
-      list = list.filter((item) => item.dominantBias === selectedBias)
-    }
-
-    if (selectedIsi !== 'all') {
-      list = list.filter((item) => {
-        const gap = item.interSessionGapMs
-        if (gap === null) return selectedIsi === 'spaced'
-        if (selectedIsi === 'massed') return gap < 900000
-        if (selectedIsi === 'optimal') return gap >= 43200000 && gap <= 172800000
-        if (selectedIsi === 'spaced') return gap > 172800000
-        return true
-      })
-    }
 
     // Si está activo el modo aislamiento por casillas
     if (isolatedSessionIds && isolatedSessionIds.size > 0) {
@@ -244,6 +230,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     })
   }, [
     sessions,
+    answers,
     modeFilter,
     selectedInstrument,
     selectedStrategy,
@@ -330,7 +317,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     <div className="space-y-4 font-sans w-full">
       {/* BANNER DE MODO AISLADO ACTIVO */}
       {isolatedSessionIds && (
-        <div className="p-3 bg-gradient-to-r from-sky-950 via-purple-950 to-zinc-950 border border-sky-400 rounded-2xl flex justify-between items-center font-mono text-xs shadow-2xl animate-in fade-in">
+        <div className="p-3 bg-linear-to-r from-sky-950 via-purple-950 to-zinc-950 border border-sky-400 rounded-2xl flex justify-between items-center font-mono text-xs shadow-2xl animate-in fade-in">
           <div className="flex items-center gap-2.5">
             <span className="w-3 h-3 rounded-full bg-sky-400 animate-ping" />
             <span className="text-zinc-100 font-bold">

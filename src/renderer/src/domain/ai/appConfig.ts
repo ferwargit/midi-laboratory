@@ -11,6 +11,7 @@ export interface MidiConfig {
   defaultVelocity: number
   autoAdvanceFastDelayMs: number
   autoAdvanceSlowDelayMs: number
+  autoAdvanceSmartDelayMs: number
 }
 
 export interface AppConfig {
@@ -30,6 +31,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     hungNoteWatchdogMs: 6000,
     defaultVelocity: 90,
     autoAdvanceFastDelayMs: 1500,
-    autoAdvanceSlowDelayMs: 3500
+    autoAdvanceSlowDelayMs: 3500,
+    autoAdvanceSmartDelayMs: 1500
   }
 }

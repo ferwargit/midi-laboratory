@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import {
   INTERVAL_PRESETS,
   IntervalPreset,
@@ -311,9 +311,14 @@ export function useIntervalTrainer({
   const repeatCurrentInterval = useCallback((): void => {
     const stim = currentStimulusRef.current
     if (stim) {
+      if (core.isWaitingAnswer) {
+        core.recordPreAnswerRepeat()
+      } else if (core.isWaitingManualAdvance) {
+        core.recordPostErrorRepeat()
+      }
       onPlayInterval(stim.rootNote, stim.targetNote, stim.direction)
     }
-  }, [onPlayInterval])
+  }, [core, onPlayInterval])
 
   const handleUserNotePlayed = useCallback(
     (playedNoteNumber: number, source: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'): void => {
@@ -356,9 +361,15 @@ export function useIntervalTrainer({
           onTelemetryLog('EVAL', result.feedbackMessage)
         }
 
-        core.recordAnswer(result, answerRecord, result.isIntervalCorrect, () => {
-          advanceToNextInterval()
-        })
+        core.recordAnswer(
+          result,
+          answerRecord,
+          result.isIntervalCorrect,
+          () => {
+            advanceToNextInterval()
+          },
+          core.questionToken
+        )
       }
     },
     [core, waitingNoteStep, firstNotePlayed, onTelemetryLog, advanceToNextInterval]
@@ -380,45 +391,87 @@ export function useIntervalTrainer({
     startSession(weakIntervals)
   }, [sessionHistory, startSession])
 
-  return {
-    presets: INTERVAL_PRESETS,
-    selectedPresetId,
-    setSelectedPresetId,
-    activeIntervals,
-    setActiveIntervals,
-    toggleInterval,
-    directionMode,
-    setDirectionMode,
-    rootRangeNotes,
-    setRootRangeNotes,
-    toggleRootNote,
-    sessionLimitType: core.sessionLimitType,
-    setSessionLimitType: core.setSessionLimitType,
-    sessionQuestionsCount: core.sessionQuestionsCount,
-    setSessionQuestionsCount: core.setSessionQuestionsCount,
-    sessionDurationMinutes: core.sessionDurationMinutes,
-    setSessionDurationMinutes: core.setSessionDurationMinutes,
-    timeRemainingSeconds: core.timeRemainingSeconds,
-    advanceMode: core.advanceMode,
-    setAdvanceMode: core.setAdvanceMode,
-    isSessionActive: core.isSessionActive,
-    isSessionFinished: core.isSessionFinished,
-    isWaitingManualAdvance: core.isWaitingManualAdvance,
-    currentQuestionIndex: core.currentQuestionIndex,
-    currentStimulus,
-    waitingNoteStep,
-    firstNotePlayed,
-    lastResult: core.lastResult,
-    sessionHistory: core.sessionHistory,
-    saveError: core.saveError,
-    clearSaveError: core.clearSaveError,
-    startSession,
-    startWithIntervalPool,
-    stopSession,
-    advanceToNextInterval,
-    repeatCurrentInterval,
-    handleUserNotePlayed,
-    trainWeakIntervalsOnly,
-    resetToConfig
-  }
+  return useMemo(
+    () => ({
+      presets: INTERVAL_PRESETS,
+      selectedPresetId,
+      setSelectedPresetId,
+      activeIntervals,
+      setActiveIntervals,
+      toggleInterval,
+      directionMode,
+      setDirectionMode,
+      rootRangeNotes,
+      setRootRangeNotes,
+      toggleRootNote,
+      sessionLimitType: core.sessionLimitType,
+      setSessionLimitType: core.setSessionLimitType,
+      sessionQuestionsCount: core.sessionQuestionsCount,
+      setSessionQuestionsCount: core.setSessionQuestionsCount,
+      sessionDurationMinutes: core.sessionDurationMinutes,
+      setSessionDurationMinutes: core.setSessionDurationMinutes,
+      timeRemainingSeconds: core.timeRemainingSeconds,
+      advanceMode: core.advanceMode,
+      setAdvanceMode: core.setAdvanceMode,
+      isSessionActive: core.isSessionActive,
+      isSessionFinished: core.isSessionFinished,
+      isWaitingManualAdvance: core.isWaitingManualAdvance,
+      currentQuestionIndex: core.currentQuestionIndex,
+      currentStimulus,
+      waitingNoteStep,
+      firstNotePlayed,
+      lastResult: core.lastResult,
+      sessionHistory: core.sessionHistory,
+      saveError: core.saveError,
+      clearSaveError: core.clearSaveError,
+      startSession,
+      startWithIntervalPool,
+      stopSession,
+      advanceToNextInterval,
+      repeatCurrentInterval,
+      handleUserNotePlayed,
+      trainWeakIntervalsOnly,
+      resetToConfig
+    }),
+    [
+      selectedPresetId,
+      setSelectedPresetId,
+      activeIntervals,
+      setActiveIntervals,
+      toggleInterval,
+      directionMode,
+      setDirectionMode,
+      rootRangeNotes,
+      setRootRangeNotes,
+      toggleRootNote,
+      core.sessionLimitType,
+      core.setSessionLimitType,
+      core.sessionQuestionsCount,
+      core.setSessionQuestionsCount,
+      core.sessionDurationMinutes,
+      core.setSessionDurationMinutes,
+      core.timeRemainingSeconds,
+      core.advanceMode,
+      core.setAdvanceMode,
+      core.isSessionActive,
+      core.isSessionFinished,
+      core.isWaitingManualAdvance,
+      core.currentQuestionIndex,
+      currentStimulus,
+      waitingNoteStep,
+      firstNotePlayed,
+      core.lastResult,
+      core.sessionHistory,
+      core.saveError,
+      core.clearSaveError,
+      startSession,
+      startWithIntervalPool,
+      stopSession,
+      advanceToNextInterval,
+      repeatCurrentInterval,
+      handleUserNotePlayed,
+      trainWeakIntervalsOnly,
+      resetToConfig
+    ]
+  )
 }

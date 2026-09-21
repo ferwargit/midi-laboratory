@@ -1,5 +1,5 @@
 import React from 'react'
-import { AnalyticsMetrics } from '../../../domain/analytics/historyAnalytics'
+import { AnalyticsMetrics, MASTERY_THRESHOLDS } from '../../../domain/analytics/historyAnalytics'
 import { PedagogicalTooltip } from '../../ui/PedagogicalTooltip'
 
 interface AnalyticsKpiCardsProps {
@@ -30,9 +30,9 @@ export function AnalyticsKpiCards({
         </span>
         <strong
           className={`text-lg ${
-            metrics.normalizedOverallAccuracy >= 85
+            metrics.normalizedOverallAccuracy >= MASTERY_THRESHOLDS.MASTERED_MIN
               ? 'text-emerald-400'
-              : metrics.normalizedOverallAccuracy >= 50
+              : metrics.normalizedOverallAccuracy >= MASTERY_THRESHOLDS.CRITICAL_MAX
                 ? 'text-amber-400'
                 : 'text-rose-400'
           }`}

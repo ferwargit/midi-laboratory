@@ -202,3 +202,9 @@ export class LmStudioService {
     }, fallbackOp)
   }
 }
+
+// Singleton compartido a nivel de proceso (OLA 4.1 / F4-02): una única
+// instancia de LmStudioService implica un único CircuitBreaker, de forma que
+// el estado OPEN se comparte entre el store, la vista de analítica y la
+// pestaña de consulta, evitando reintentos redundantes cuando LM Studio cae.
+export const aiService = new LmStudioService()

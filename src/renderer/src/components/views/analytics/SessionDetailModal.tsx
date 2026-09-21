@@ -1,15 +1,22 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { DbSessionRecord, DbAnswerRecord } from '../../../domain/database/types'
 import {
   analyzeSessionTimeline,
   computeNotePerformancesFromAnswers,
   reconstructSessionConfig,
-  COGNITIVE_LATENCY_THRESHOLDS
+  COGNITIVE_LATENCY_THRESHOLDS,
+  MASTERY_THRESHOLDS
 } from '../../../domain/analytics/historyAnalytics'
 import { PianoKeyboard } from '../../trainer/PianoKeyboard'
 import { generateMidiRange } from '../../../domain/music/noteUtils'
 import { Button } from '../../ui/Button'
 import { AiExercisePrescription } from '../../../domain/ai/types'
+import {
+  CHART_TOOLTIP_WIDTH,
+  CHART_MARGIN,
+  CHART_VIEWBOX_WIDTH,
+  clampChartTooltipLeftEdge
+} from './chartTooltipPlacement'
 
 const PIANO_KEYS = generateMidiRange(48, 84) // C3 a C6 (37 teclas)
 
@@ -44,6 +51,19 @@ export function SessionDetailModal({
   onReTest
 }: SessionDetailModalProps): React.ReactElement | null {
   const [hoveredPoint, setHoveredPoint] = useState<HoveredPointInfo | null>(null)
+  const [chartTooltipLeft, setChartTooltipLeft] = useState<number>(CHART_MARGIN)
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return (): void => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, onClose])
 
   const sessionAnswers = useMemo(() => {
     if (!session) return []
@@ -64,7 +84,12 @@ export function SessionDetailModal({
   if (!analysis) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
-        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 font-mono text-center select-none">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={session.presetName}
+          className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 font-mono text-center select-none"
+        >
           <div className="text-3xl">🔬</div>
           <h2 className="text-base font-bold text-zinc-100 m-0">{session.presetName}</h2>
           <p className="text-xs text-zinc-400 leading-relaxed font-sans">
@@ -100,7 +125,12 @@ export function SessionDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-[1680px] w-full p-5 md:p-6 shadow-2xl space-y-4 max-h-[94vh] overflow-y-auto font-sans select-none">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={session.presetName}
+        className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-[1680px] w-full p-5 md:p-6 shadow-2xl space-y-4 max-h-[94vh] overflow-y-auto font-sans select-none"
+      >
         {/* 1. CABECERA EXPANDIDA */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-3 border-b border-zinc-800 gap-3">
           <div className="flex items-center gap-3.5">
@@ -116,7 +146,10 @@ export function SessionDetailModal({
                   {session.strategyId}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-lg bg-purple-950/70 border border-purple-800 text-xs font-mono text-purple-300 font-bold">
-                  Score CPI: {analysis.session.accuracyPercentage >= 85 ? '🌟' : '🔥'}{' '}
+                  Score CPI:{' '}
+                  {analysis.session.accuracyPercentage >= MASTERY_THRESHOLDS.MASTERED_MIN
+                    ? '🌟'
+                    : '🔥'}{' '}
                   {analysis.session.correctAnswers * 12 + analysis.totalQuestions * 2} pts
                 </span>
               </div>
@@ -185,7 +218,7 @@ export function SessionDetailModal({
             </div>
 
             {/* CONTENEDOR SVG CON MAPAS DE ZONA 1, 2 Y 3 */}
-            <div className="h-64 w-full relative pt-2 pb-7">
+            <div ref={chartContainerRef} className="h-64 w-full relative pt-2 pb-7">
               <svg
                 className="w-full h-full overflow-visible"
                 viewBox="0 0 900 160"
@@ -413,7 +446,13 @@ export function SessionDetailModal({
                                     fill={color}
                                     stroke="#09090b"
                                     strokeWidth={1.5}
-                                    onMouseEnter={(): void =>
+                                    onMouseEnter={(): void => {
+                                      // F5-09: el centro (unidades del viewBox) se
+                                      // escala al ancho real del contenedor y el
+                                      // borde izquierdo del tooltip se clampa en
+                                      // píxeles dentro del handler (no en render).
+                                      const containerWidth =
+                                        chartContainerRef.current?.clientWidth ?? 0
                                       setHoveredPoint({
                                         x: p.x,
                                         y: p.y,
@@ -428,7 +467,14 @@ export function SessionDetailModal({
                                         postListens: p.q.postErrorListens,
                                         dwellTimeMs: p.q.postErrorDwellTimeMs
                                       })
-                                    }
+                                      setChartTooltipLeft(
+                                        clampChartTooltipLeftEdge(
+                                          (p.x / CHART_VIEWBOX_WIDTH) * containerWidth,
+                                          containerWidth,
+                                          CHART_TOOLTIP_WIDTH
+                                        )
+                                      )
+                                    }}
                                     onMouseLeave={(): void => setHoveredPoint(null)}
                                   />
 
@@ -461,11 +507,11 @@ export function SessionDetailModal({
                 <div
                   style={{
                     position: 'absolute',
-                    left: `${Math.min(85, Math.max(10, (hoveredPoint.x / 900) * 100))}%`,
+                    left: `${chartTooltipLeft}px`,
                     top: '-15px',
-                    transform: 'translate(-50%, -100%)'
+                    transform: 'translateY(-100%)'
                   }}
-                  className="p-3 bg-zinc-950/95 border border-sky-400 rounded-xl shadow-2xl text-xs font-mono space-y-1.5 z-30 pointer-events-none whitespace-nowrap"
+                  className="p-3 bg-zinc-950/95 border border-sky-400 rounded-xl shadow-2xl text-xs font-mono space-y-1.5 z-30 pointer-events-none w-[260px]"
                 >
                   <div className="font-bold text-zinc-100 flex justify-between gap-4 border-b border-zinc-800 pb-1">
                     <span>Pregunta #{hoveredPoint.qIndex}</span>
@@ -623,9 +669,15 @@ export function SessionDetailModal({
                 Mapa de Calor de esta Sesión ({analysis.activeNotes.length} notas activas):
               </span>
               <div className="flex gap-2.5 text-[10px]">
-                <span className="text-emerald-400">● &gt;85% Dominada</span>
-                <span className="text-amber-400">● 50-85% En progreso</span>
-                <span className="text-rose-400">● &lt;50% A reforzar</span>
+                <span className="text-emerald-400">
+                  ● &gt;{MASTERY_THRESHOLDS.MASTERED_MIN}% Dominada
+                </span>
+                <span className="text-amber-400">
+                  ● {MASTERY_THRESHOLDS.CRITICAL_MAX}-{MASTERY_THRESHOLDS.MASTERED_MIN}% En progreso
+                </span>
+                <span className="text-rose-400">
+                  ● &lt;{MASTERY_THRESHOLDS.CRITICAL_MAX}% A reforzar
+                </span>
               </div>
             </div>
             <PianoKeyboard

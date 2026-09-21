@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { useDatabaseStore } from '../../stores/useDatabaseStore'
+import { MASTERY_THRESHOLDS } from '../../domain/analytics/historyAnalytics'
 import { MidiLogEntry } from '../../hooks/useMidi'
 import { MidiMonitor } from './MidiMonitor'
 
@@ -81,9 +82,9 @@ export function StudioBottomDock({
             <span className="text-zinc-500">PRECISIÓN GLOBAL:</span>
             <strong
               className={
-                summary.overallAccuracy >= 80
+                summary.overallAccuracy >= MASTERY_THRESHOLDS.MASTERED_MIN
                   ? 'text-emerald-400'
-                  : summary.overallAccuracy >= 50
+                  : summary.overallAccuracy >= MASTERY_THRESHOLDS.CRITICAL_MAX
                     ? 'text-amber-400'
                     : 'text-rose-400'
               }

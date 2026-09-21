@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Button } from './Button'
 
 interface ConfirmModalProps {
@@ -20,11 +20,27 @@ export function ConfirmModal({
   onConfirm,
   onCancel
 }: ConfirmModalProps): React.ReactElement | null {
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onCancel()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return (): void => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, onCancel])
+
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
-      <div className="bg-zinc-900 border border-zinc-700/80 rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="bg-zinc-900 border border-zinc-700/80 rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
+      >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-red-950/80 border border-red-800 flex items-center justify-center text-red-400 text-lg shrink-0">
             ⚠️

@@ -13,7 +13,10 @@ import {
   computePitchClassConfusionMatrix,
   isIntervalSession,
   isSingleNoteSession,
-  isSequenceSession
+  isSequenceSession,
+  BIAS_DOMINANCE_RATIO,
+  ISI_THRESHOLDS,
+  DetailedSessionAnalysis
 } from './historyAnalytics'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
@@ -412,6 +415,255 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
     })
   })
 
+  describe('filterSessionsAdvanced - Umbral de maestría 60', () => {
+    const sCritical = { ...sNotePiano, id: 's_59', accuracyPercentage: 59 }
+    const sLearningLow = { ...sNotePiano, id: 's_60', accuracyPercentage: 60 }
+    const sLearningHigh = { ...sNotePiano, id: 's_84', accuracyPercentage: 84 }
+    const sMastered = { ...sNotePiano, id: 's_85', accuracyPercentage: 85 }
+    const boundarySessions = [sCritical, sLearningLow, sLearningHigh, sMastered]
+
+    it('critical incluye solo precisión estrictamente menor a 60', () => {
+      const critical = filterSessionsAdvanced(boundarySessions, {
+        mode: 'all',
+        mastery: 'critical'
+      })
+      expect(critical.map((s) => s.id)).toEqual(['s_59'])
+    })
+
+    it('learning abarca exactamente el rango 60..84', () => {
+      const learning = filterSessionsAdvanced(boundarySessions, {
+        mode: 'all',
+        mastery: 'learning'
+      })
+      expect(learning.map((s) => s.id)).toEqual(['s_60', 's_84'])
+    })
+
+    it('mastered incluye solo precisión mayor o igual a 85', () => {
+      const mastered = filterSessionsAdvanced(boundarySessions, {
+        mode: 'all',
+        mastery: 'mastered'
+      })
+      expect(mastered.map((s) => s.id)).toEqual(['s_85'])
+    })
+  })
+
+  describe('Filtros Avanzados de Sesión en el Dominio Puro (F-01 / F-02 / F-04)', () => {
+    const makeAnswer = (
+      id: string,
+      sessionId: string,
+      semitoneDistance: number,
+      inputSource: 'midi_hardware' | 'virtual_ui' = 'midi_hardware'
+    ): DbAnswerRecord => ({
+      id,
+      sessionId,
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 60 + semitoneDistance,
+      isCorrect: semitoneDistance === 0,
+      semitoneDistance,
+      responseTimeMs: 1000,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: new Date().toISOString(),
+      inputSource
+    })
+
+    it('1.1 filterSessionsAdvanced filtra por inputSource (hardware / virtual / mixed / all)', () => {
+      const sHw = { ...sNotePiano, id: 's_hw' }
+      const sVirt = { ...sNotePiano, id: 's_virt' }
+      const sMixed = { ...sNotePiano, id: 's_mixed' }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('h1', 's_hw', 0, 'midi_hardware'),
+        makeAnswer('v1', 's_virt', 0, 'virtual_ui'),
+        makeAnswer('m1', 's_mixed', 0, 'midi_hardware'),
+        makeAnswer('m2', 's_mixed', 0, 'virtual_ui')
+      ]
+      const all = [sHw, sVirt, sMixed]
+
+      expect(
+        filterSessionsAdvanced(all, { mode: 'all', inputSource: 'virtual' }, answers).map(
+          (s) => s.id
+        )
+      ).toEqual(['s_virt'])
+      expect(
+        filterSessionsAdvanced(all, { mode: 'all', inputSource: 'hardware' }, answers).map(
+          (s) => s.id
+        )
+      ).toEqual(['s_hw'])
+      expect(
+        filterSessionsAdvanced(all, { mode: 'all', inputSource: 'all' }, answers).map((s) => s.id)
+      ).toEqual(['s_hw', 's_virt', 's_mixed'])
+    })
+
+    it('1.2 filterSessionsAdvanced filtra por biasFilter contra el sesgo dominante', () => {
+      const sSharp = { ...sNotePiano, id: 's_sharp' }
+      const sBalanced = { ...sNotePiano, id: 's_balanced' }
+      const answers: DbAnswerRecord[] = [
+        // 3 errores agudos vs 2 graves -> sharp bajo 1.4 (3 > 2 * 1.4)
+        makeAnswer('sh1', 's_sharp', 2),
+        makeAnswer('sh2', 's_sharp', 2),
+        makeAnswer('sh3', 's_sharp', 1),
+        makeAnswer('fl1', 's_sharp', -2),
+        makeAnswer('fl2', 's_sharp', -1),
+        // 2 agudos vs 2 graves -> balanced
+        makeAnswer('b1', 's_balanced', 2),
+        makeAnswer('b2', 's_balanced', 1),
+        makeAnswer('b3', 's_balanced', -2),
+        makeAnswer('b4', 's_balanced', -1)
+      ]
+      const all = [sSharp, sBalanced]
+
+      expect(
+        filterSessionsAdvanced(all, { mode: 'all', biasFilter: 'sharp' }, answers).map((s) => s.id)
+      ).toEqual(['s_sharp'])
+      expect(
+        filterSessionsAdvanced(all, { mode: 'all', biasFilter: 'balanced' }, answers).map(
+          (s) => s.id
+        )
+      ).toEqual(['s_balanced'])
+    })
+
+    it('1.3 filterSessionsAdvanced clasifica las bandas ISI (massed / optimal / spaced)', () => {
+      const t0 = new Date('2026-09-01T10:00:00Z').getTime()
+      const sFirst = { ...sNotePiano, id: 's_first', createdAt: new Date(t0).toISOString() }
+      const sMassed = {
+        ...sNotePiano,
+        id: 's_massed',
+        createdAt: new Date(t0 + 600000).toISOString()
+      }
+      const sOptimal = {
+        ...sNotePiano,
+        id: 's_optimal',
+        createdAt: new Date(t0 + 600000 + 50000000).toISOString()
+      }
+      const sSpaced = {
+        ...sNotePiano,
+        id: 's_spaced',
+        createdAt: new Date(t0 + 600000 + 50000000 + 200000000).toISOString()
+      }
+      const all = [sFirst, sMassed, sOptimal, sSpaced]
+
+      expect(
+        filterSessionsAdvanced(all, { mode: 'all', isiFilter: 'massed' }).map((s) => s.id)
+      ).toEqual(['s_massed'])
+      expect(
+        filterSessionsAdvanced(all, { mode: 'all', isiFilter: 'optimal' }).map((s) => s.id)
+      ).toEqual(['s_optimal'])
+      expect(
+        filterSessionsAdvanced(all, { mode: 'all', isiFilter: 'spaced' }).map((s) => s.id)
+      ).toEqual(['s_spaced'])
+    })
+
+    it('1.4 (F-02) la primera sesion (gap === null) no pertenece a ninguna banda ISI', () => {
+      const single = [{ ...sNotePiano, id: 's_only' }]
+
+      expect(
+        filterSessionsAdvanced(single, { mode: 'all', isiFilter: 'spaced' }).map((s) => s.id)
+      ).toEqual([])
+      expect(
+        filterSessionsAdvanced(single, { mode: 'all', isiFilter: 'massed' }).map((s) => s.id)
+      ).toEqual([])
+      expect(
+        filterSessionsAdvanced(single, { mode: 'all', isiFilter: 'optimal' }).map((s) => s.id)
+      ).toEqual([])
+      expect(
+        filterSessionsAdvanced(single, { mode: 'all', isiFilter: 'all' }).map((s) => s.id)
+      ).toEqual(['s_only'])
+    })
+
+    it('1.5 BIAS_DOMINANCE_RATIO e ISI_THRESHOLDS exponen los umbrales canónicos de la SSOT', () => {
+      expect(BIAS_DOMINANCE_RATIO).toBe(1.4)
+      expect(ISI_THRESHOLDS.MASSED_MAX_MS).toBe(900000)
+      expect(ISI_THRESHOLDS.OPTIMAL_MIN_MS).toBe(43200000)
+      expect(ISI_THRESHOLDS.OPTIMAL_MAX_MS).toBe(172800000)
+
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('x1', 's_note_piano', 2),
+        makeAnswer('x2', 's_note_piano', 2),
+        makeAnswer('x3', 's_note_piano', 1),
+        makeAnswer('y1', 's_note_piano', -2),
+        makeAnswer('y2', 's_note_piano', -1)
+      ]
+      const metrics = computeAnalyticsMetrics([sNotePiano], answers, 'all')
+      expect(metrics.sharpBiasCount).toBe(3)
+      expect(metrics.flatBiasCount).toBe(2)
+      expect(metrics.sessionPsychometricsList[0].dominantBias).toBe('sharp')
+    })
+
+    it('1.6 (F-04) generateDiagnosticReport coincide con el motor en el sesgo direccional', () => {
+      // 3 agudos vs 2 graves: sharp bajo 1.4 (3 > 2.8) pero balanced bajo 1.5 (3 <= 3)
+      const session = { ...sNotePiano, id: 's_bias_report' }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('r1', 's_bias_report', 2),
+        makeAnswer('r2', 's_bias_report', 2),
+        makeAnswer('r3', 's_bias_report', 1),
+        makeAnswer('r4', 's_bias_report', -2),
+        makeAnswer('r5', 's_bias_report', -1)
+      ]
+      const metrics = computeAnalyticsMetrics([session], answers, 'all')
+      expect(metrics.sharpBiasCount).toBe(3)
+      expect(metrics.flatBiasCount).toBe(2)
+      expect(metrics.sessionPsychometricsList[0].dominantBias).toBe('sharp')
+
+      const report = generateDiagnosticReport(metrics)
+      expect(report.directionalBiasAnalysis).toContain('AGUDO')
+    })
+
+    it('1.6b (spec) informe y motor coinciden con 7 agudos / 2 graves', () => {
+      const session = { ...sNotePiano, id: 's_bias_72' }
+      const answers: DbAnswerRecord[] = [
+        ...Array.from({ length: 7 }, (_, i) => makeAnswer(`p${i}`, 's_bias_72', 2)),
+        ...Array.from({ length: 2 }, (_, i) => makeAnswer(`q${i}`, 's_bias_72', -2))
+      ]
+      const metrics = computeAnalyticsMetrics([session], answers, 'all')
+      expect(metrics.sharpBiasCount).toBe(7)
+      expect(metrics.flatBiasCount).toBe(2)
+      expect(generateDiagnosticReport(metrics).directionalBiasAnalysis).toContain('AGUDO')
+    })
+
+    it('1.7 los tres filtros nuevos se combinan conjuntamente con los existentes', () => {
+      const sMatch = { ...sNotePiano, id: 's_match' }
+      const sWrongInput = { ...sNotePiano, id: 's_wrong_input' }
+      const sWrongBias = { ...sNotePiano, id: 's_wrong_bias' }
+      const sWrongMode = { ...sInterval, id: 's_wrong_mode' }
+
+      const answers: DbAnswerRecord[] = [
+        // sMatch: single_note + hardware + sharp (3 agudos vs 2 graves)
+        makeAnswer('a1', 's_match', 2, 'midi_hardware'),
+        makeAnswer('a2', 's_match', 2, 'midi_hardware'),
+        makeAnswer('a3', 's_match', 1, 'midi_hardware'),
+        makeAnswer('a4', 's_match', -2, 'midi_hardware'),
+        makeAnswer('a5', 's_match', -1, 'midi_hardware'),
+        // sWrongInput: single_note + virtual + sharp
+        makeAnswer('b1', 's_wrong_input', 2, 'virtual_ui'),
+        makeAnswer('b2', 's_wrong_input', 2, 'virtual_ui'),
+        makeAnswer('b3', 's_wrong_input', 1, 'virtual_ui'),
+        makeAnswer('b4', 's_wrong_input', -2, 'virtual_ui'),
+        makeAnswer('b5', 's_wrong_input', -1, 'virtual_ui'),
+        // sWrongBias: single_note + hardware + balanced (2 agudos vs 2 graves)
+        makeAnswer('c1', 's_wrong_bias', 2, 'midi_hardware'),
+        makeAnswer('c2', 's_wrong_bias', 1, 'midi_hardware'),
+        makeAnswer('c3', 's_wrong_bias', -2, 'midi_hardware'),
+        makeAnswer('c4', 's_wrong_bias', -1, 'midi_hardware'),
+        // sWrongMode: intervals + hardware + sharp
+        makeAnswer('d1', 's_wrong_mode', 2, 'midi_hardware'),
+        makeAnswer('d2', 's_wrong_mode', 2, 'midi_hardware'),
+        makeAnswer('d3', 's_wrong_mode', 1, 'midi_hardware'),
+        makeAnswer('d4', 's_wrong_mode', -2, 'midi_hardware'),
+        makeAnswer('d5', 's_wrong_mode', -1, 'midi_hardware')
+      ]
+      const all = [sMatch, sWrongInput, sWrongBias, sWrongMode]
+
+      expect(
+        filterSessionsAdvanced(
+          all,
+          { mode: 'single_note', inputSource: 'hardware', biasFilter: 'sharp' },
+          answers
+        ).map((s) => s.id)
+      ).toEqual(['s_match'])
+    })
+  })
+
   describe('reconstructSessionConfig - Clonación de Sesiones', () => {
     it('reconstruye sesiones de nota individual', () => {
       const conf = reconstructSessionConfig(sNotePiano, mockAnswers)
@@ -518,6 +770,92 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
       const report = generateDiagnosticReport(metrics)
       expect(report.title).toBeDefined()
       expect(report.concreteActionPlan.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('Casos Borde de la Auditoría Frente 3 (F-06/F-09/F-13)', () => {
+    it('F-13: analyzeSessionTimeline con sesión vacía no reporta 100% de confianza ni reparación', () => {
+      const timeline = analyzeSessionTimeline(sNotePiano, [])
+      expect(timeline.totalQuestions).toBe(0)
+      expect(timeline.overallAccuracy).toBe(0)
+      expect(timeline.avgLatencyMs).toBe(0)
+      expect(timeline.firstHalfAccuracy).toBe(0)
+      expect(timeline.secondHalfAccuracy).toBe(0)
+      expect(timeline.firstListenConfidencePercent).toBe(0)
+      expect(timeline.errorRepairRatePercent).toBe(0)
+    })
+
+    it('F-06/F-14: resolveNominalPoolSize respeta niveles de dos dígitos y aplica piso >= 2', () => {
+      const answerFor = (sessionId: string): DbAnswerRecord => ({
+        id: `ans_${sessionId}`,
+        sessionId,
+        questionIndex: 1,
+        expectedNote: 60,
+        playedNote: 60,
+        isCorrect: true,
+        semitoneDistance: 0,
+        responseTimeMs: 1000,
+        velocity: 90,
+        reasonTelemetry: '',
+        createdAt: new Date().toISOString()
+      })
+
+      // "Nivel 10" contiene la subcadena "nivel 1": el bug F-14 devolvía poolSize 3.
+      const sLevel10: DbSessionRecord = {
+        ...sNotePiano,
+        id: 's_level10',
+        presetName: 'Nivel 10 (Custom) • Notas personalizadas (11)'
+      }
+      const metrics10 = computeAnalyticsMetrics([sLevel10], [answerFor('s_level10')], 'all')
+      expect(metrics10.sessionPsychometricsList[0].poolSize).toBe(11)
+
+      // Pool personalizado de 1 nota debe pisarse a 2 (F-06).
+      const sPool1: DbSessionRecord = {
+        ...sNotePiano,
+        id: 's_pool1',
+        presetName: 'Notas Personalizadas (1)'
+      }
+      const metricsPool1 = computeAnalyticsMetrics([sPool1], [answerFor('s_pool1')], 'all')
+      expect(metricsPool1.sessionPsychometricsList[0].poolSize).toBe(2)
+    })
+
+    it('F-09: computeLongitudinalComparisons acumula el total de preguntas evaluadas en totalAttempts', () => {
+      const s1: DbSessionRecord = {
+        ...sNotePiano,
+        id: 'long_base',
+        createdAt: '2026-08-10T10:00:00Z'
+      }
+      const s2: DbSessionRecord = {
+        ...sNotePiano,
+        id: 'long_retest',
+        createdAt: '2026-08-20T10:00:00Z'
+      }
+
+      const buildDetail = (session: DbSessionRecord): DetailedSessionAnalysis => ({
+        session,
+        poolSize: 3,
+        entropyBits: 1.58,
+        chanceBaseline: 33,
+        normalizedAccuracy: 70,
+        responsesPerMinute: 12,
+        fastPercent: 50,
+        mediumPercent: 40,
+        slowPercent: 10,
+        sharpBiasCount: 0,
+        flatBiasCount: 0,
+        dominantBias: 'balanced' as const,
+        formatType: 'questions' as const,
+        formatLabel: '🔢 Serie 10',
+        inputMethod: 'hardware' as const,
+        interSessionGapMs: null,
+        interSessionGapLabel: 'Inicio',
+        cpiScore: 500
+      })
+
+      const comps = computeLongitudinalComparisons([buildDetail(s1), buildDetail(s2)])
+      expect(comps.length).toBe(1)
+      // El bug F-09 asignaba sorted.length (2) en lugar del total de preguntas (10 + 10).
+      expect(comps[0].totalAttempts).toBe(20)
     })
   })
 })

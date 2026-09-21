@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import {
   COGNITIVE_LATENCY_THRESHOLDS,
   MASTERY_THRESHOLDS,
   computeAnalyticsMetrics
 } from './historyAnalytics'
 import { ConfusionMatrixTab } from '../../components/views/analytics/ConfusionMatrixTab'
+import { AnalyticsKpiCards } from '../../components/views/analytics/AnalyticsKpiCards'
+import { AnalyticsMetrics } from './historyAnalytics'
 import { LatencySpectrumDiagram } from '../../components/views/guide/LatencySpectrumDiagram'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
 import { buildUserPrompt } from '../ai/promptBuilder'
@@ -73,6 +77,8 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
     expect(COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL).toBe('< 1.4s')
     expect(COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL).toBe('1.4s - 2.8s')
     expect(MASTERY_THRESHOLDS.MASTERED_MIN).toBe(85)
+    expect(MASTERY_THRESHOLDS.LEARNING_MIN).toBe(60)
+    expect(MASTERY_THRESHOLDS.CRITICAL_MAX).toBe(60)
   })
 
   it('computeAnalyticsMetrics debe clasificar exactamente en base al umbral de 1400ms', () => {
@@ -109,6 +115,34 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
     expect(screen.queryByText(/1.2s/i)).toBeNull()
   })
 
+  it('AnalyticsKpiCards debe colorear el KPI de Oído Real según la SSOT (60% en ámbar)', () => {
+    const metrics: AnalyticsMetrics = {
+      modeFilter: 'all',
+      filteredSessionsCount: 1,
+      totalAnswers: 10,
+      totalCorrect: 6,
+      overallAccuracy: 60,
+      normalizedOverallAccuracy: 60,
+      avgEntropyBits: 1.58,
+      avgResponseTimeMs: 1200,
+      fastResponsesCount: 4,
+      mediumResponsesCount: 4,
+      slowResponsesCount: 2,
+      sharpBiasCount: 0,
+      flatBiasCount: 0,
+      topConfusions: [],
+      mostDifficultNotes: [],
+      strongestNotes: [],
+      sessionPsychometricsList: [],
+      longitudinalComparisons: []
+    }
+
+    render(<AnalyticsKpiCards metrics={metrics} totalFilteredSessions={1} />)
+
+    const kpiValue = screen.getByText('60%')
+    expect(kpiValue.className).toContain('text-amber-400')
+  })
+
   it('diagnosticReportGenerator y promptBuilder deben derivar de la constante canónica', () => {
     const metrics = computeAnalyticsMetrics([mockSession], [mockAnswers[0]], 'all')
     const report = generateDiagnosticReport(metrics)
@@ -117,5 +151,35 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
     const prompt = buildUserPrompt(metrics)
     // Validación usando la constante central
     expect(prompt).toContain(`Respuestas Rápidas (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})`)
+  })
+})
+
+describe('AnalyticsView - Pipeline de Dominio Puro (F-01, spec 05)', () => {
+  // Regresión arquitectónica estática (patrón de index-csp.test.ts): la spec 05
+  // prohíbe que la vista reimplemente con .filter() propios los filtros que ya
+  // declara AnalyticsFilterOptions. Una regresión silenciosa en este punto
+  // reintroduciría la lógica fugada F-01 sin que los tests funcionales lo
+  // detectaran, por lo que se fija el contrato sobre el propio código fuente.
+  const viewSource = readFileSync(
+    resolve(__dirname, '../../components/views/AnalyticsView.tsx'),
+    'utf-8'
+  )
+
+  it('no reimplementa el filtrado de inputSource, bias ni ISI con .filter() manuales', () => {
+    // La forma histórica del bug (OLA 2.3, F-01) era `if (x !== 'all') { list = list.filter(...) }`,
+    // por lo que la regex admite la llave de apertura opcional y el salto de línea.
+    expect(viewSource).not.toMatch(
+      /selectedInputSource\s*!==\s*'all'\s*\)\s*\{?\s*list\s*=\s*list\.filter/
+    )
+    expect(viewSource).not.toMatch(
+      /selectedBias\s*!==\s*'all'\s*\)\s*\{?\s*list\s*=\s*list\.filter/
+    )
+    expect(viewSource).not.toMatch(/selectedIsi\s*!==\s*'all'\s*\)\s*\{?\s*list\s*=\s*list\.filter/)
+  })
+
+  it('delega los tres filtros al dominio mediante filterSessionsAdvanced', () => {
+    expect(viewSource).toMatch(/inputSource:\s*selectedInputSource/)
+    expect(viewSource).toMatch(/biasFilter:\s*selectedBias/)
+    expect(viewSource).toMatch(/isiFilter:\s*selectedIsi/)
   })
 })

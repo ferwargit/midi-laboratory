@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { UseSingleNoteTrainerReturn } from '../../hooks/useSingleNoteTrainer'
 import { EXERCISE_PRESETS } from '../../domain/music/presets'
 import { AVAILABLE_STRATEGIES } from '../../domain/adaptation/adaptiveEngine'
+import { MASTERY_THRESHOLDS } from '../../domain/analytics/historyAnalytics'
 import { StrategyId } from '../../domain/adaptation/types'
 import { INSTRUMENT_CATALOG } from '../../domain/music/instruments'
 import { ADVANCE_MODE_OPTIONS, AdvanceMode, SessionLimitType } from '../../domain/exercise/types'
@@ -36,7 +37,7 @@ export function SingleNoteView({
   const [visualTheme, setVisualTheme] = useState<KeyboardVisualTheme>('ghost_neon')
 
   const weakNotesList = Array.from(trainer.performances.values())
-    .filter((p) => p.attempts > 0 && p.accuracyPercentage < 85)
+    .filter((p) => p.attempts > 0 && p.accuracyPercentage < MASTERY_THRESHOLDS.MASTERED_MIN)
     .map((p) => ({
       name: midiNoteToName(p.noteNumber),
       accuracy: p.accuracyPercentage,
@@ -404,9 +405,9 @@ export function SingleNoteView({
             </span>
             <strong
               className={`text-sm ${
-                trainer.stats.accuracyPercentage >= 85
+                trainer.stats.accuracyPercentage >= MASTERY_THRESHOLDS.MASTERED_MIN
                   ? 'text-emerald-400'
-                  : trainer.stats.accuracyPercentage >= 50
+                  : trainer.stats.accuracyPercentage >= MASTERY_THRESHOLDS.CRITICAL_MAX
                     ? 'text-amber-400'
                     : 'text-rose-400'
               }`}

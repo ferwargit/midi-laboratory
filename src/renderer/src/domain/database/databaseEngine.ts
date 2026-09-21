@@ -15,7 +15,7 @@ import {
 } from './recordValidator'
 
 export const DB_NAME = 'MusicalEarTrainerDB'
-export const DB_VERSION = 5
+export const DB_VERSION = 6
 export const SESSIONS_STORE = 'sessions'
 export const ANSWERS_STORE = 'exercise_answers'
 export const AI_REPORTS_STORE = 'ai_diagnostics'
@@ -49,12 +49,32 @@ export class DatabaseEngine {
           answersStore.createIndex('expectedNote', 'expectedNote', { unique: false })
         }
 
+        let reportsStore: IDBObjectStore
         if (!db.objectStoreNames.contains(AI_REPORTS_STORE)) {
-          db.createObjectStore(AI_REPORTS_STORE, { keyPath: 'id' })
+          reportsStore = db.createObjectStore(AI_REPORTS_STORE, { keyPath: 'id' })
+        } else {
+          reportsStore = transaction.objectStore(AI_REPORTS_STORE)
         }
 
+        if (!reportsStore.indexNames.contains('createdAt')) {
+          reportsStore.createIndex('createdAt', 'createdAt', { unique: false })
+        }
+        if (!reportsStore.indexNames.contains('modeFilter')) {
+          reportsStore.createIndex('modeFilter', 'modeFilter', { unique: false })
+        }
+
+        let consultationsStore: IDBObjectStore
         if (!db.objectStoreNames.contains(AI_CONSULTATIONS_STORE)) {
-          db.createObjectStore(AI_CONSULTATIONS_STORE, { keyPath: 'id' })
+          consultationsStore = db.createObjectStore(AI_CONSULTATIONS_STORE, { keyPath: 'id' })
+        } else {
+          consultationsStore = transaction.objectStore(AI_CONSULTATIONS_STORE)
+        }
+
+        if (!consultationsStore.indexNames.contains('createdAt')) {
+          consultationsStore.createIndex('createdAt', 'createdAt', { unique: false })
+        }
+        if (!consultationsStore.indexNames.contains('modeFilter')) {
+          consultationsStore.createIndex('modeFilter', 'modeFilter', { unique: false })
         }
       }
 
@@ -324,10 +344,6 @@ export class DatabaseEngine {
       throw new Error('El respaldo no contiene colecciones válidas de sesiones o respuestas.')
     }
 
-    if (mode === 'replace') {
-      await this.clearDatabase()
-    }
-
     const validSessions = backup.sessions.filter((s) => isValidSessionRecord(s))
     const validAnswers = backup.answers.filter((a) => isValidAnswerRecord(a))
     const validReports = (backup.aiReports || []).filter((r) => isValidAiReportRecord(r))
@@ -344,6 +360,13 @@ export class DatabaseEngine {
       const answersStore = tx.objectStore(ANSWERS_STORE)
       const reportsStore = tx.objectStore(AI_REPORTS_STORE)
       const consultationsStore = tx.objectStore(AI_CONSULTATIONS_STORE)
+
+      if (mode === 'replace') {
+        sessionsStore.clear()
+        answersStore.clear()
+        reportsStore.clear()
+        consultationsStore.clear()
+      }
 
       validSessions.forEach((s) => sessionsStore.put(s))
       validAnswers.forEach((a) => answersStore.put(a))
