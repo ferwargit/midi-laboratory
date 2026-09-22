@@ -1,4 +1,13 @@
 import React from 'react'
+import {
+  Table,
+  Sparkles,
+  MessageSquare,
+  TrendingUp,
+  Grid3X3,
+  LineChart,
+  History
+} from 'lucide-react'
 import { AnalyticsTabKey } from './types'
 
 interface AnalyticsTabNavProps {
@@ -9,6 +18,21 @@ interface AnalyticsTabNavProps {
   aiHistoryCount: number
 }
 
+const tabDefs: Array<{
+  id: AnalyticsTabKey
+  label: string
+  Icon: React.ComponentType<any>
+  count?: number
+}> = [
+  { id: 'sessions', label: 'Sesiones', Icon: Table, count: 0 },
+  { id: 'ai_report', label: 'Diagnóstico', Icon: Sparkles },
+  { id: 'ai_consultation', label: 'Tutor', Icon: MessageSquare },
+  { id: 'longitudinal', label: 'Longitudinal', Icon: TrendingUp, count: 0 },
+  { id: 'confusions', label: 'Matriz', Icon: Grid3X3 },
+  { id: 'charts', label: 'Curvas', Icon: LineChart },
+  { id: 'ai_history', label: 'Historial', Icon: History, count: 0 }
+]
+
 export function AnalyticsTabNav({
   activeTab,
   onSelectTab,
@@ -16,36 +40,37 @@ export function AnalyticsTabNav({
   longitudinalCount,
   aiHistoryCount
 }: AnalyticsTabNavProps): React.ReactElement {
-  const tabs: Array<{ id: AnalyticsTabKey; label: string }> = [
-    { id: 'sessions', label: `📋 Registro Clínico (${sessionsCount})` },
-    { id: 'ai_report', label: '🧠 Diagnóstico & Prescripción' },
-    { id: 'ai_consultation', label: '💬 Consultas & Tutor' },
-    { id: 'longitudinal', label: `📈 Evolución Test-Retest (${longitudinalCount})` },
-    { id: 'confusions', label: '📊 Matriz de Confusión' },
-    { id: 'charts', label: '📉 Curvas Psicométricas' },
-    { id: 'ai_history', label: `📜 Historial IA (${aiHistoryCount})` }
-  ]
+  const getCount = (id: AnalyticsTabKey): number | undefined => {
+    if (id === 'sessions') return sessionsCount
+    if (id === 'longitudinal') return longitudinalCount
+    if (id === 'ai_history') return aiHistoryCount
+    return undefined
+  }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b border-zinc-800/80 pb-2 font-mono text-xs select-none">
-      {tabs.map((tab) => {
+    <div className="flex flex-wrap items-center gap-1.5 pb-2 select-none">
+      {tabDefs.map((tab) => {
         const active = activeTab === tab.id
+        const count = getCount(tab.id)
+        const Icon = tab.Icon
         return (
           <button
             key={tab.id}
             type="button"
             onClick={(): void => onSelectTab(tab.id)}
-            className={`h-9 px-3.5 rounded-xl font-medium transition-all duration-150 cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 ${
+            className={`h-9 px-3.5 rounded-xl font-medium transition-all duration-150 cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 ${
               active
-                ? tab.id === 'ai_report' ||
-                  tab.id === 'ai_consultation' ||
-                  tab.id === 'longitudinal'
-                  ? 'bg-purple-600 text-white font-bold shadow-[0_0_15px_rgba(168,85,247,0.35)] border border-purple-400/40'
-                  : 'bg-zinc-800 text-zinc-100 font-bold border border-zinc-700 shadow-sm'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
+                ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30 font-medium'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 border-transparent'
             }`}
           >
-            <span>{tab.label}</span>
+            <Icon className="w-4 h-4" />
+            <span className="text-xs">{tab.label}</span>
+            {typeof count === 'number' && (
+              <span className="tabular-nums font-mono text-[10px] text-slate-400 ml-1">
+                {count}
+              </span>
+            )}
           </button>
         )
       })}

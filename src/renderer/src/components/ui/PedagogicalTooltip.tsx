@@ -104,7 +104,7 @@ export function PedagogicalTooltip({
         tabIndex={0}
         aria-expanded={isVisible}
         aria-controls={isVisible ? TOOLTIP_ID : undefined}
-        className={`inline-flex items-center cursor-help group focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 rounded ${className}`}
+        className={`inline-flex items-center cursor-help group focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 rounded ${className}`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}

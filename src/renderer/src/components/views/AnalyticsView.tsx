@@ -314,23 +314,23 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   )
 
   return (
-    <div className="space-y-4 font-sans w-full">
+    <div className="space-y-4 font-sans w-full bg-[#0d0f14] min-h-screen p-4">
       {/* BANNER DE MODO AISLADO ACTIVO */}
       {isolatedSessionIds && (
-        <div className="p-3 bg-linear-to-r from-sky-950 via-purple-950 to-zinc-950 border border-sky-400 rounded-2xl flex justify-between items-center font-mono text-xs shadow-2xl animate-in fade-in">
+        <div className="p-3 bg-amber-950/40 border border-amber-500/40 rounded-xl flex justify-between items-center font-mono text-xs shadow-lg animate-in fade-in">
           <div className="flex items-center gap-2.5">
-            <span className="w-3 h-3 rounded-full bg-sky-400 animate-ping" />
-            <span className="text-zinc-100 font-bold">
-              🔍 MODO AISLADO ACTIVO: Visualizando analítica exclusiva de {isolatedSessionIds.size}{' '}
+            <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
+            <span className="text-amber-200 font-bold">
+              MODO AISLADO ACTIVO: Visualizando analítica exclusiva de {isolatedSessionIds.size}{' '}
               sesión(es) seleccionada(s).
             </span>
           </div>
           <button
             type="button"
             onClick={() => setIsolatedSessionIds(null)}
-            className="px-3 py-1 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold transition-all cursor-pointer shadow-md"
+            className="px-3 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium transition-all cursor-pointer"
           >
-            ✕ Quitar Aislamiento (Ver Todas)
+            Quitar Aislamiento (Ver Todas)
           </button>
         </div>
       )}

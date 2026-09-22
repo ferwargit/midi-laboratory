@@ -36,8 +36,8 @@ describe('AnalyticsFilterBar - Barra de Filtros Multidimensionales y Sub-Grupos'
 
     expect(screen.getByText('Guía Psicoacústica')).toBeDefined()
     expect(screen.getByPlaceholderText(/Buscar por nombre/i)).toBeDefined()
-    expect(screen.getByText('⏱️ Todos los Formatos')).toBeDefined()
-    expect(screen.getByText('🧠 Toda Carga (Pool)')).toBeDefined()
+    expect(screen.getByText('Todos los Formatos')).toBeDefined()
+    expect(screen.getByText('Toda Carga (Pool)')).toBeDefined()
     expect(screen.getByText('⏱️ Cronometrado 3 min')).toBeDefined()
   })
 

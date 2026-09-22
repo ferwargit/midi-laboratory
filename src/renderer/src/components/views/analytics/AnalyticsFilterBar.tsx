@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Search, RotateCcw } from 'lucide-react'
 import {
   AnalyticsModeFilter,
   AnalyticsMasteryFilter,
@@ -91,7 +92,7 @@ export function AnalyticsFilterBar({
 
   return (
     <>
-      <div className="bg-zinc-900/80 backdrop-blur-2xl p-3.5 rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl font-mono text-xs w-full">
+      <div className="bg-slate-900/90 border border-slate-800/80 rounded-xl p-4 space-y-3 font-mono text-xs w-full">
         {/* FILA 1: MODALIDAD PRINCIPAL (INCLUYE REPERTORIO) + GUÍA PSICOACÚSTICA + ESTADO GPU */}
         <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -109,10 +110,10 @@ export function AnalyticsFilterBar({
                 key={val}
                 type="button"
                 onClick={(): void => onSelectModeFilter(val)}
-                className={`px-3 py-1 rounded-xl transition-all cursor-pointer border ${
+                className={`h-9 px-3.5 rounded-xl font-medium transition-all duration-150 cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 ${
                   modeFilter === val
-                    ? 'bg-sky-600 border-sky-400 text-white font-bold shadow-[0_0_12px_rgba(56,189,248,0.3)]'
-                    : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
+                    ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30 font-medium'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 border-transparent'
                 }`}
               >
                 {label}
@@ -153,20 +154,23 @@ export function AnalyticsFilterBar({
 
         {/* FILA 2: BÚSQUEDA, PRESETS, TIMBRES Y MOTORES */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-800/80 text-xs">
-          <input
-            type="text"
-            placeholder="🔍 Buscar por nombre, nota o fecha..."
-            value={searchQuery}
-            onChange={(e): void => onSearchChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
-          />
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, nota o fecha..."
+              value={searchQuery}
+              onChange={(e): void => onSearchChange(e.target.value)}
+              className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs pl-8 pr-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
+            />
+          </div>
 
           <select
             value={selectedPreset}
             onChange={(e): void => onPresetChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
           >
-            <option value="all">🎵 Todos los Presets / Obras</option>
+            <option value="all">Todos los Presets / Obras</option>
             {dynamicPresets.map((p) => (
               <option key={p.id} value={p.name}>
                 {p.name}
@@ -178,9 +182,9 @@ export function AnalyticsFilterBar({
           <select
             value={selectedInstrument}
             onChange={(e): void => onInstrumentChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
           >
-            <option value="all">🎹 Todos los Timbres</option>
+            <option value="all">Todos los Timbres</option>
             {INSTRUMENT_CATALOG.map((inst) => (
               <option key={inst.id} value={inst.id}>
                 {inst.name}
@@ -191,9 +195,9 @@ export function AnalyticsFilterBar({
           <select
             value={selectedStrategy}
             onChange={(e): void => onStrategyChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
           >
-            <option value="all">🧠 Todos los Motores</option>
+            <option value="all">Todos los Motores</option>
             {AVAILABLE_STRATEGIES.map((st) => (
               <option key={st.id} value={st.id}>
                 {st.name}
@@ -207,9 +211,9 @@ export function AnalyticsFilterBar({
           <select
             value={selectedFormat}
             onChange={(e): void => onFormatChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500 font-semibold"
+            className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors font-semibold"
           >
-            <option value="all">⏱️ Todos los Formatos</option>
+            <option value="all">Todos los Formatos</option>
             <optgroup label="⏱️ Cronometrado por Tiempo">
               <option value="time_all">⏱️ Cualquier Tiempo</option>
               <option value="time_1">⏱️ Cronometrado 1 min</option>
@@ -231,9 +235,9 @@ export function AnalyticsFilterBar({
           <select
             value={selectedPoolSize}
             onChange={(e): void => onPoolSizeChange(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
           >
-            <option value="all">🧠 Toda Carga (Pool)</option>
+            <option value="all">Toda Carga (Pool)</option>
             <option value="3">3 notas (1.58 bits)</option>
             <option value="4">4 notas (2.00 bits)</option>
             <option value="5">5 notas (2.32 bits)</option>
@@ -246,9 +250,9 @@ export function AnalyticsFilterBar({
           <select
             value={selectedMastery}
             onChange={(e): void => onMasteryChange(e.target.value as AnalyticsMasteryFilter)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
           >
-            <option value="all">🎯 Todo Nivel de Éxito</option>
+            <option value="all">Todo Nivel de Éxito</option>
             <option value="mastered">🟢 Dominadas (≥{MASTERY_THRESHOLDS.MASTERED_MIN}%)</option>
             <option value="learning">
               🟡 En Progreso ({MASTERY_THRESHOLDS.LEARNING_MIN}-{MASTERY_THRESHOLDS.MASTERED_MIN}%)
@@ -261,9 +265,9 @@ export function AnalyticsFilterBar({
             onChange={(e): void =>
               onInputSourceChange(e.target.value as typeof selectedInputSource)
             }
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
           >
-            <option value="all">🔌 Todas las Entradas</option>
+            <option value="all">Todas las Entradas</option>
             <option value="hardware">🎹 Roland FP-8 Físico</option>
             <option value="virtual">🖱️ Ratón Virtual</option>
           </select>
@@ -271,9 +275,9 @@ export function AnalyticsFilterBar({
           <select
             value={selectedBias}
             onChange={(e): void => onBiasChange(e.target.value as typeof selectedBias)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
           >
-            <option value="all">🎯 Todo Sesgo Tonal</option>
+            <option value="all">Todo Sesgo Tonal</option>
             <option value="sharp">▲ Agudo (+st)</option>
             <option value="flat">▼ Grave (-st)</option>
             <option value="balanced">● Neutro / Equilibrado</option>
@@ -282,9 +286,9 @@ export function AnalyticsFilterBar({
           <select
             value={selectedIsi}
             onChange={(e): void => onIsiChange(e.target.value as typeof selectedIsi)}
-            className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+            className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
           >
-            <option value="all">⏳ Todo Descanso (ISI)</option>
+            <option value="all">Todo Descanso (ISI)</option>
             <option value="massed">⚠️ Práctica Masiva (&lt; 15 min)</option>
             <option value="optimal">🌙 Consolidación Óptima (12h - 48h)</option>
             <option value="spaced">📅 Espaciada Larga (&gt; 48h)</option>
@@ -297,7 +301,7 @@ export function AnalyticsFilterBar({
             className="col-span-2 sm:col-span-1 px-3 py-1.5 rounded-lg bg-zinc-950 hover:bg-rose-950/80 border border-zinc-800 hover:border-rose-700/60 text-zinc-400 hover:text-rose-300 font-bold transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             title="Restablecer todos los filtros a sus valores predeterminados"
           >
-            <span>✕</span>
+            <RotateCcw className="w-3.5 h-3.5" />
             <span>Limpiar</span>
           </button>
         </div>
