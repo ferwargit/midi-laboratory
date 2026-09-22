@@ -1,4 +1,5 @@
 import React, { useMemo, useState, memo } from 'react'
+import { Piano, BarChart3, Zap, Target, Brain } from 'lucide-react'
 import { DbSessionRecord, DbAnswerRecord } from '../../domain/database/types'
 import {
   SessionPsychometrics,
@@ -92,7 +93,7 @@ function AnalyticsChartsComponent({
       <div className="p-4 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-2.5 shadow-2xl">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-base">🎹</span>
+            <Piano className="w-5 h-5 text-cyan-400" />
             <div>
               <span className="font-bold text-zinc-100 text-xs uppercase tracking-wider block">
                 Mapa de Calor Psicométrico por Tono ({activeTestedNotes.length} notas evaluadas):
@@ -150,7 +151,7 @@ function AnalyticsChartsComponent({
       <div className="p-4 bg-linear-to-r from-sky-950/40 via-purple-950/40 to-zinc-900 rounded-2xl border border-sky-500/30 space-y-2.5 shadow-xl">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-base">📊</span>
+            <BarChart3 className="w-5 h-5 text-cyan-400" />
             <span className="font-bold text-sky-300 uppercase tracking-wider">
               Contexto de la Muestra Graficada ({recentSessions.length} sesiones):
             </span>
@@ -164,8 +165,7 @@ function AnalyticsChartsComponent({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-1 font-sans text-xs">
           <div className="p-2 bg-zinc-950/80 rounded-xl border border-sky-800/40 space-y-0.5">
             <strong className="text-sky-400 font-mono text-[11px] flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" /> 🔵 Precisión
-              Cruda:
+              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" /> Precisión Cruda:
             </strong>
             <p className="text-[11px] text-zinc-400 m-0">
               Acierto bruto ($K/N$). Incluye la probabilidad estadística de suerte por descarte.
@@ -174,7 +174,7 @@ function AnalyticsChartsComponent({
 
           <div className="p-2 bg-zinc-950/80 rounded-xl border border-purple-800/40 space-y-0.5">
             <strong className="text-purple-400 font-mono text-[11px] flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block" /> 🟣 Oído Real
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block" /> Oído Real
               (IRT):
             </strong>
             <p className="text-[11px] text-zinc-400 m-0">
@@ -184,8 +184,8 @@ function AnalyticsChartsComponent({
 
           <div className="p-2 bg-zinc-950/80 rounded-xl border border-emerald-800/40 space-y-0.5">
             <strong className="text-emerald-400 font-mono text-[11px] flex items-center gap-1.5">
-              <span className="w-3 h-0.5 border-t-2 border-dashed border-emerald-400 inline-block" />{' '}
-              🟢 Meta ({MASTERY_THRESHOLDS.MASTERED_MIN}%):
+              <span className="w-3 h-0.5 border-t-2 border-dashed border-emerald-400 inline-block" />
+              Meta ({MASTERY_THRESHOLDS.MASTERED_MIN}%):
             </strong>
             <p className="text-[11px] text-zinc-400 m-0">
               Umbral canónico de maestría necesario para considerar el nivel consolidado.
@@ -219,8 +219,8 @@ function AnalyticsChartsComponent({
               >
                 <defs>
                   <linearGradient id="cyanAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
+                    <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.0" />
                   </linearGradient>
 
                   <linearGradient id="purpleAreaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -230,7 +230,14 @@ function AnalyticsChartsComponent({
                 </defs>
 
                 {/* Líneas Guía del Eje Y */}
-                <line x1="45" y1="10" x2="590" y2="10" stroke="#27272a" strokeWidth="1" />
+                <line
+                  x1="45"
+                  y1="10"
+                  x2="590"
+                  y2="10"
+                  className="stroke-slate-800/60"
+                  strokeWidth="1"
+                />
                 <text x="5" y="13" fill="#71717a" fontSize="9" fontFamily="monospace">
                   100%
                 </text>
@@ -261,7 +268,7 @@ function AnalyticsChartsComponent({
                   y1="65"
                   x2="590"
                   y2="65"
-                  stroke="#27272a"
+                  className="stroke-slate-800/60"
                   strokeWidth="1"
                   strokeDasharray="2 2"
                 />
@@ -269,7 +276,14 @@ function AnalyticsChartsComponent({
                   50%
                 </text>
 
-                <line x1="45" y1="115" x2="590" y2="115" stroke="#3f3f46" strokeWidth="1" />
+                <line
+                  x1="45"
+                  y1="115"
+                  x2="590"
+                  y2="115"
+                  className="stroke-slate-800/60"
+                  strokeWidth="1"
+                />
                 <text x="20" y="118" fill="#71717a" fontSize="9" fontFamily="monospace">
                   0%
                 </text>
@@ -319,7 +333,13 @@ function AnalyticsChartsComponent({
                         strokeWidth="2"
                         strokeDasharray="4 4"
                       />
-                      <path d={pathRaw} fill="none" stroke="#38bdf8" strokeWidth="2.5" />
+                      <path
+                        d={pathRaw}
+                        fill="none"
+                        stroke="#22d3ee"
+                        strokeWidth="2.5"
+                        style={{ filter: 'drop-shadow(0 0 4px rgba(34,211,238,0.45))' }}
+                      />
 
                       {pointsRaw.map((p, i) => {
                         const psych = recentPsychometrics[i]
@@ -392,7 +412,7 @@ function AnalyticsChartsComponent({
                     top: '-10px',
                     transform: 'translate(-50%, -100%)'
                   }}
-                  className="p-3 bg-zinc-950/95 border border-sky-500/60 rounded-xl shadow-2xl text-[11px] font-mono space-y-1 z-30 pointer-events-none whitespace-nowrap"
+                  className="tabular-nums p-3 bg-slate-900/95 border border-cyan-500/40 rounded-xl shadow-2xl text-[11px] font-mono space-y-1 z-30 pointer-events-none whitespace-nowrap"
                 >
                   <div className="font-bold text-zinc-100 flex justify-between gap-3 border-b border-zinc-800 pb-1">
                     <span>{hoveredPoint.session.presetName}</span>
@@ -423,7 +443,7 @@ function AnalyticsChartsComponent({
       <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-4 shadow-2xl">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/80 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-base">⚡</span>
+            <Zap className="w-5 h-5 text-cyan-400" />
             <div>
               <span className="font-bold text-sky-400 uppercase tracking-wider text-sm block">
                 Velocidad de Acceso Mental por Tono y por Octava (Latencia TR en Aciertos)
@@ -456,7 +476,14 @@ function AnalyticsChartsComponent({
                 preserveAspectRatio="none"
               >
                 {/* Líneas Guía Horizontales */}
-                <line x1="40" y1="10" x2="880" y2="10" stroke="#27272a" strokeWidth="1" />
+                <line
+                  x1="40"
+                  y1="10"
+                  x2="880"
+                  y2="10"
+                  className="stroke-slate-800/60"
+                  strokeWidth="1"
+                />
                 <text x="5" y="13" fill="#71717a" fontSize="9" fontFamily="monospace">
                   {(maxNoteLatencyMs / 1000).toFixed(1)}s
                 </text>
@@ -486,7 +513,14 @@ function AnalyticsChartsComponent({
                   </>
                 )}
 
-                <line x1="40" y1="115" x2="880" y2="115" stroke="#3f3f46" strokeWidth="1" />
+                <line
+                  x1="40"
+                  y1="115"
+                  x2="880"
+                  y2="115"
+                  className="stroke-slate-800/60"
+                  strokeWidth="1"
+                />
                 <text x="18" y="118" fill="#71717a" fontSize="9" fontFamily="monospace">
                   0s
                 </text>
@@ -525,6 +559,9 @@ function AnalyticsChartsComponent({
                           width={barWidth}
                           height={height}
                           fill={color}
+                          stroke={color}
+                          strokeOpacity="0.9"
+                          strokeWidth="1"
                           rx="4"
                           className="transition-all duration-200 group-hover:brightness-125"
                         />
@@ -567,7 +604,7 @@ function AnalyticsChartsComponent({
                     </span>
                   </div>
                   <div className="text-[10px] text-zinc-400">
-                    ⚡ Tasa de Reflejo Inmediato:{' '}
+                    Tasa de Reflejo Inmediato:{' '}
                     <strong>{hoveredNoteLatency.fastReflexPercent}%</strong> (
                     {hoveredNoteLatency.correctAttempts} aciertos de{' '}
                     {hoveredNoteLatency.totalAttempts})
@@ -600,8 +637,8 @@ function AnalyticsChartsComponent({
                         {oct.avgLatencyMs > 0 ? `${(oct.avgLatencyMs / 1000).toFixed(2)}s` : '-'}
                       </strong>
                       {isFastest && (
-                        <span className="text-[9px] font-bold text-emerald-400 uppercase">
-                          ⚡ Más Rápida
+                        <span className="text-[9px] font-bold text-emerald-400 uppercase flex items-center gap-1">
+                          <Zap className="w-3 h-3" /> Más Rápida
                         </span>
                       )}
                     </div>
@@ -617,7 +654,9 @@ function AnalyticsChartsComponent({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl">
           <div className="flex justify-between items-center text-xs">
-            <span className="font-bold text-amber-400">🎯 SESGO DE DESVIACIÓN (-3st a +3st):</span>
+            <span className="font-bold text-amber-400 flex items-center gap-2">
+              <Target className="w-4 h-4" /> SESGO DE DESVIACIÓN (-3st a +3st):
+            </span>
             <span className="text-zinc-500 text-[10px]">0st = Centro Tonal Exacto</span>
           </div>
 
@@ -641,8 +680,8 @@ function AnalyticsChartsComponent({
                       isExact
                         ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]'
                         : isSharp
-                          ? 'bg-purple-500/80 hover:bg-purple-400'
-                          : 'bg-amber-500/80 hover:bg-amber-400'
+                          ? 'bg-amber-500/80 hover:bg-amber-400'
+                          : 'bg-cyan-500/80 hover:bg-cyan-400'
                     }`}
                     style={{ height: `${Math.max(6, heightPercent)}%` }}
                   />
@@ -659,8 +698,8 @@ function AnalyticsChartsComponent({
 
         <div className="p-5 bg-zinc-950/90 backdrop-blur-2xl rounded-2xl border border-zinc-800/80 space-y-3 shadow-xl text-xs">
           <div className="flex justify-between items-center">
-            <span className="font-bold text-purple-400">
-              🧠 INCERTIDUMBRE Y ENTROPÍA (SHANNON):
+            <span className="font-bold text-purple-400 flex items-center gap-2">
+              <Brain className="w-4 h-4" /> INCERTIDUMBRE Y ENTROPÍA (SHANNON):
             </span>
             <span className="text-zinc-500 text-[10px]">Carga Cognitiva</span>
           </div>

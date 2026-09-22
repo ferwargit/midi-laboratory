@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import { BarChart3, Target, Lightbulb, Zap, Brain, Clock } from 'lucide-react'
 import {
   AnalyticsMetrics,
   AnalyticsModeFilter,
@@ -22,7 +23,7 @@ function getCellPedagogicalExplanation(cell: PitchClassConfusionCell): string {
   }
 
   if (cell.isDiagonal) {
-    return `🎯 Afinación Exacta: Cuando sonó ${cell.expectedName}, la reconociste con precisión en ${cell.count} oportunidad(es) (${cell.percentageOfExpected}% de efectividad).`
+    return `Afinación Exacta: Cuando sonó ${cell.expectedName}, la reconociste con precisión en ${cell.count} oportunidad(es) (${cell.percentageOfExpected}% de efectividad).`
   }
 
   const semitonesDiff = (cell.playedPc - cell.expectedPc + 12) % 12
@@ -32,7 +33,7 @@ function getCellPedagogicalExplanation(cell: PitchClassConfusionCell): string {
       ? `+${signedDiff} semitono(s) hacia lo agudo`
       : `${signedDiff} semitono(s) hacia lo grave`
 
-  return `⚠️ Atracción Tonal: Cuando sonó ${cell.expectedName}, tocaste ${cell.playedName} (${directionText}) en ${cell.count} oportunidad(es) [${cell.percentageOfExpected}% de los ensayos de ${cell.expectedName}]. Esto evidencia anticipación o búsqueda de resolución armónica en frecuencias cercanas.`
+  return `Atracción Tonal: Cuando sonó ${cell.expectedName}, tocaste ${cell.playedName} (${directionText}) en ${cell.count} oportunidad(es) [${cell.percentageOfExpected}% de los ensayos de ${cell.expectedName}]. Esto evidencia anticipación o búsqueda de resolución armónica en frecuencias cercanas.`
 }
 
 export function ConfusionMatrixTab({
@@ -66,10 +67,10 @@ export function ConfusionMatrixTab({
       </div>
 
       {/* 1. MATRIZ 2D INTERACTIVA DE CLASES DE TONO */}
-      <div className="p-4 bg-zinc-950/90 rounded-2xl border border-zinc-800 space-y-3 font-mono">
+      <div className="p-4 bg-slate-900/90 rounded-xl border border-slate-800/80 space-y-3 font-mono">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-base">📊</span>
+            <BarChart3 className="w-5 h-5 text-cyan-400" />
             <span className="font-bold text-sky-400 uppercase tracking-wider">
               Matriz Cromática de Confusión (Filas = Estímulo ➔ Columnas = Tocada):
             </span>
@@ -95,47 +96,47 @@ export function ConfusionMatrixTab({
             <table className="w-full text-center border-collapse text-xs">
               <thead>
                 <tr>
-                  <th className="p-1.5 text-[10px] text-zinc-500 uppercase font-bold text-left">
+                  <th className="p-1.5 text-[10px] text-slate-500 uppercase font-bold text-left">
                     Estímulo \ Tocaste
                   </th>
                   {confusion2D.pitchClasses.map((pc) => (
                     <th
                       key={pc}
-                      className="p-1.5 text-[11px] text-zinc-300 font-bold border-b border-zinc-800"
+                      className="p-1.5 text-[11px] text-slate-300 font-bold border-b border-slate-800/80"
                     >
                       {pc}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-900 font-mono">
+              <tbody className="divide-y divide-slate-800/60 font-mono">
                 {confusion2D.grid.map((row, rowIdx) => {
                   const expectedName = confusion2D.pitchClasses[rowIdx]
                   const rowTotal = confusion2D.totalTestsPerPitchClass[rowIdx]
 
                   return (
-                    <tr key={expectedName} className="hover:bg-zinc-900/30">
-                      <td className="p-1.5 text-left text-sky-300 font-bold text-[11px] border-r border-zinc-800 whitespace-nowrap">
+                    <tr key={expectedName} className="hover:bg-slate-900/40">
+                      <td className="p-1.5 text-left text-sky-300 font-bold text-[11px] border-r border-slate-800/80 whitespace-nowrap">
                         {expectedName}{' '}
-                        <span className="text-[9px] text-zinc-500 font-normal">({rowTotal})</span>
+                        <span className="text-[9px] text-slate-500 font-normal">({rowTotal})</span>
                       </td>
 
                       {row.map((cell) => {
                         const hasValue = cell.count > 0
                         const isDiag = cell.isDiagonal
 
-                        let cellBg = 'bg-zinc-950/40 text-zinc-600'
+                        let cellBg = 'bg-slate-950/40 text-slate-600 border border-slate-800/80'
                         if (isDiag && hasValue) {
                           cellBg =
-                            'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 font-bold shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                            'bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 font-semibold'
                         } else if (!isDiag && hasValue) {
                           const intensityRatio = cell.count / confusion2D.maxOffDiagonalCount
                           cellBg =
                             intensityRatio > 0.6
                               ? 'bg-rose-950 border border-rose-500 text-rose-300 font-bold shadow-[0_0_10px_rgba(244,63,94,0.4)]'
                               : intensityRatio > 0.3
-                                ? 'bg-purple-950 border border-purple-500/60 text-purple-200 font-semibold'
-                                : 'bg-zinc-900 border border-purple-900/50 text-purple-300'
+                                ? 'bg-amber-950/80 border border-amber-500/60 text-amber-200 font-semibold'
+                                : 'bg-slate-900 border border-slate-700/60 text-slate-300'
                         }
 
                         return (
@@ -156,16 +157,20 @@ export function ConfusionMatrixTab({
             </table>
 
             {/* EXPLICACIÓN MUSICAL DINÁMICA AL PASAR EL MOUSE */}
-            <div className="min-h-12 mt-2 p-2 rounded-xl bg-zinc-900/70 border border-zinc-800/80 text-xs flex items-center justify-between text-zinc-300 font-sans px-3">
+            <div className="min-h-12 mt-2 p-2 rounded-xl bg-slate-950/80 border border-cyan-500/30 text-xs flex items-center justify-between text-slate-200 font-sans px-3">
               {hoveredCell && hoveredCell.count > 0 ? (
                 <div className="animate-in fade-in flex items-center gap-2">
-                  <span className="text-base">{hoveredCell.isDiagonal ? '🎯' : '💡'}</span>
+                  {hoveredCell.isDiagonal ? (
+                    <Target className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Lightbulb className="w-4 h-4 text-amber-400" />
+                  )}
                   <span>{getCellPedagogicalExplanation(hoveredCell)}</span>
                 </div>
               ) : (
-                <span className="text-zinc-500 text-[11px] italic">
-                  👉 Pasa el mouse sobre cualquier celda con números para ver la interpretación
-                  musical del error o acierto.
+                <span className="text-slate-500 text-[11px] italic">
+                  Pasa el mouse sobre cualquier celda con números para ver la interpretación musical
+                  del error o acierto.
                 </span>
               )}
             </div>
@@ -212,8 +217,9 @@ export function ConfusionMatrixTab({
           <div className="space-y-3">
             <div>
               <div className="flex justify-between text-[11px] mb-1">
+                <Zap className="w-4 h-4 text-cyan-400" />
                 <span className="text-emerald-400 font-semibold">
-                  ⚡ Reflejo Inmediato ({COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})
+                  Reflejo Inmediato ({COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})
                 </span>
                 <span className="font-bold text-zinc-300">
                   {metrics.fastResponsesCount} respuestas
@@ -231,8 +237,9 @@ export function ConfusionMatrixTab({
 
             <div>
               <div className="flex justify-between text-[11px] mb-1">
+                <Brain className="w-4 h-4 text-amber-400" />
                 <span className="text-amber-400 font-semibold">
-                  🤔 Deducción Activa ({COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL})
+                  Deducción Activa ({COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL})
                 </span>
                 <span className="font-bold text-zinc-300">
                   {metrics.mediumResponsesCount} respuestas
@@ -250,6 +257,7 @@ export function ConfusionMatrixTab({
 
             <div>
               <div className="flex justify-between text-[11px] mb-1">
+                <Clock className="w-4 h-4 text-slate-400" />
                 <span className="text-rose-400 font-semibold">
                   ⏳ Inseguridad ({COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL})
                 </span>
