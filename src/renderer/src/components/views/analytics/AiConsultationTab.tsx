@@ -110,7 +110,7 @@ export function AiConsultationTab({
       </div>
 
       {/* 1. CAJA DE ENTRADA CON BARRA DE ACCIÓN SEPARADA (CERO SOLAPAMIENTO) */}
-      <div className="bg-zinc-950/90 border border-zinc-800/90 rounded-2xl p-3.5 space-y-3 shadow-inner">
+      <div className="bg-slate-900/90 border border-slate-700/60 rounded-xl p-3.5 space-y-3 shadow-inner">
         <textarea
           value={userQuery}
           onChange={(e): void => setUserQuery(e.target.value)}
@@ -158,7 +158,7 @@ export function AiConsultationTab({
               onClick={(): void => {
                 void handleSendQuery(q)
               }}
-              className="px-3 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800/80 border border-zinc-800 text-xs text-zinc-300 hover:text-purple-300 font-sans transition-all cursor-pointer text-left disabled:opacity-40"
+              className="px-3 py-1.5 rounded-xl bg-slate-900/70 hover:bg-slate-800 border border-slate-700 text-xs text-zinc-300 hover:text-cyan-300 font-sans transition-all cursor-pointer text-left disabled:opacity-40"
             >
               💡 {q}
             </button>

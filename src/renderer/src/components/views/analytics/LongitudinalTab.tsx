@@ -157,9 +157,9 @@ export function LongitudinalTab({
               </div>
 
               {/* Cuadrícula Comparativa: Baseline vs Retest vs Deltas */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-zinc-900/70 rounded-xl border border-zinc-800/80 text-[11px] font-mono">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-slate-900/90 rounded-xl border border-slate-800/80 text-[11px] font-mono tabular-nums">
                 {/* 1. Baseline */}
-                <div className="space-y-1.5 p-2.5 bg-zinc-950 rounded-lg border border-zinc-800/60">
+                <div className="space-y-1.5 p-2.5 bg-slate-900/80 rounded-lg border border-slate-800/60">
                   <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold block">
                     1. Baseline (Primer Intento: {baselineDate})
                   </span>
@@ -178,7 +178,7 @@ export function LongitudinalTab({
                 </div>
 
                 {/* 2. Retest */}
-                <div className="space-y-1.5 p-2.5 bg-zinc-950 rounded-lg border border-zinc-800/60">
+                <div className="space-y-1.5 p-2.5 bg-slate-900/80 rounded-lg border border-slate-800/60">
                   <span className="text-[9px] uppercase tracking-wider text-sky-400 font-bold block">
                     2. Retest (Último Intento: {latestDate})
                   </span>
@@ -197,7 +197,7 @@ export function LongitudinalTab({
                 </div>
 
                 {/* 3. Deltas Matemáticos */}
-                <div className="space-y-1.5 p-2.5 bg-zinc-950 rounded-lg border border-zinc-800/60">
+                <div className="space-y-1.5 p-2.5 bg-slate-900/80 rounded-lg border border-slate-800/60">
                   <span className="text-[9px] uppercase tracking-wider text-purple-400 font-bold block">
                     3. Cálculo de Deltas (Δ)
                   </span>

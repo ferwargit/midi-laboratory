@@ -34,7 +34,7 @@ export function AiDiagnosticTab({
   onLoadPrescription
 }: AiDiagnosticTabProps): React.ReactElement {
   return (
-    <Card className="space-y-4 bg-zinc-900/80 backdrop-blur-2xl border-purple-900/40 shadow-2xl">
+    <Card className="space-y-4 bg-slate-900/90 border border-slate-800/80 rounded-xl overflow-hidden">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-zinc-800">
         <div>
           <h3 className="text-base font-bold text-purple-400 m-0 tracking-tight flex items-center gap-2">
@@ -112,7 +112,7 @@ export function AiDiagnosticTab({
 
       {/* Prescripción */}
       {!isAiAnalyzing && currentAiResponse?.prescription && (
-        <div className="p-4 bg-purple-950/30 border border-purple-800/60 rounded-2xl space-y-3.5 shadow-xl">
+        <div className="p-4 bg-slate-900/90 border border-cyan-500/30 rounded-2xl space-y-3.5 shadow-[0_0_20px_rgba(6,182,212,0.25)]">
           <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
             <div>
               <span className="text-xs text-purple-400 font-mono uppercase tracking-wider font-bold block">
@@ -129,13 +129,13 @@ export function AiDiagnosticTab({
             <Button
               variant="success"
               onClick={(): void => onLoadPrescription(currentAiResponse.prescription)}
-              className="shrink-0 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer"
+              className="shrink-0 font-bold text-xs shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer bg-emerald-600 hover:bg-emerald-500 border border-emerald-400/40"
             >
               🚀 Cargar y Ejecutar Ejercicio
             </Button>
           </div>
 
-          <div className="flex flex-wrap gap-2 text-xs font-mono pt-3 border-t border-purple-900/40">
+          <div className="flex flex-wrap gap-2 text-xs font-mono tabular-nums pt-3 border-t border-purple-900/40">
             <span className="px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300">
               Modo:{' '}
               <strong className="text-sky-300">{currentAiResponse.prescription.targetMode}</strong>

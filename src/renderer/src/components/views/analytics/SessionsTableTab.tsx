@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Search, Play, Trash2, X } from 'lucide-react'
 import {
   DetailedSessionAnalysis,
   reconstructSessionConfig,
@@ -108,7 +109,7 @@ export function SessionsTableTab({
 
   return (
     <>
-      <Card className="space-y-3 bg-zinc-900/80 backdrop-blur-2xl border-zinc-800/80 shadow-2xl relative w-full">
+      <Card className="space-y-3 bg-slate-900/90 border border-slate-800/80 rounded-xl overflow-hidden relative w-full">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-zinc-800/80">
           <div>
             <h3 className="text-sm font-bold text-zinc-100 font-mono uppercase tracking-wider m-0">
@@ -162,7 +163,7 @@ export function SessionsTableTab({
 
         {/* BARRA FLOTANTE DE ACCIONES MÚLTIPLES */}
         {selectedIds.size > 0 && (
-          <div className="p-2.5 bg-linear-to-r from-sky-950/90 via-purple-950/90 to-zinc-950 border border-sky-500/50 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3 font-mono text-xs shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="p-2.5 bg-slate-900/90 border border-slate-800/80 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-3 font-mono text-xs shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse" />
               <span className="font-bold text-white">
@@ -205,15 +206,16 @@ export function SessionsTableTab({
                 }}
                 className="font-bold text-xs shadow-md cursor-pointer"
               >
-                🗑️ Eliminar Seleccionadas ({selectedIds.size})
+                <Trash2 className="size-3 inline mr-1" /> Eliminar Seleccionadas ({selectedIds.size}
+                )
               </Button>
 
               <button
                 type="button"
                 onClick={(): void => setSelectedIds(new Set())}
-                className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white text-xs cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white text-xs cursor-pointer flex items-center gap-1"
               >
-                ✕ Desmarcar
+                <X className="size-3" /> Desmarcar
               </button>
             </div>
           </div>
@@ -238,7 +240,7 @@ export function SessionsTableTab({
           </div>
         ) : (
           <div className="overflow-x-auto w-full">
-            <table className={`w-full text-left font-mono ${fontClass}`}>
+            <table className={`w-full text-left font-mono tabular-nums ${fontClass}`}>
               <thead>
                 <tr className="border-b border-zinc-800 text-zinc-500 text-[10px] uppercase tracking-wider select-none">
                   <th className="pb-2.5 pl-2 w-8 text-center">
@@ -495,7 +497,7 @@ export function SessionsTableTab({
                       {/* 4. SCORE CPI */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <span
-                          className={`px-2 py-0.5 rounded-lg border font-mono font-bold whitespace-nowrap ${
+                          className={`px-2 py-0.5 rounded-lg border font-mono tabular-nums font-bold whitespace-nowrap ${
                             item.cpiScore >= 750
                               ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
                               : item.cpiScore >= 450
@@ -520,30 +522,30 @@ export function SessionsTableTab({
                       </td>
 
                       {/* 6. Preguntas */}
-                      <td className="py-3 text-center whitespace-nowrap font-bold">
+                      <td className="py-3 text-center whitespace-nowrap tabular-nums font-mono font-bold">
                         <span className="text-emerald-400">{s.correctAnswers}</span> /{' '}
                         <span>{s.totalQuestions}</span>
                       </td>
 
                       {/* 7. Duración */}
-                      <td className="py-3 text-center text-zinc-300 whitespace-nowrap font-semibold">
+                      <td className="py-3 text-center text-zinc-300 whitespace-nowrap font-semibold tabular-nums font-mono">
                         {formatDuration(s.durationSeconds || 0)}
                       </td>
 
                       {/* 8. Precisión Cruda */}
-                      <td className="py-3 text-center text-zinc-100 font-bold whitespace-nowrap">
+                      <td className="py-3 text-center text-zinc-100 font-bold whitespace-nowrap tabular-nums font-mono">
                         {s.accuracyPercentage}%
                       </td>
 
                       {/* 9. Oído Real IRT */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <span
-                          className={`font-bold ${
+                          className={`px-2 py-0.5 rounded-lg border font-mono tabular-nums font-bold whitespace-nowrap ${
                             item.normalizedAccuracy >= MASTERY_THRESHOLDS.MASTERED_MIN
-                              ? 'text-emerald-400'
+                              ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
                               : item.normalizedAccuracy >= MASTERY_THRESHOLDS.CRITICAL_MAX
-                                ? 'text-amber-400'
-                                : 'text-rose-400'
+                                ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
+                                : 'bg-rose-950/80 border-rose-500/60 text-rose-300'
                           }`}
                         >
                           {item.normalizedAccuracy}%
@@ -553,13 +555,13 @@ export function SessionsTableTab({
                       {/* 10. Reflejo Inmediato */}
                       <td className="py-3 text-center whitespace-nowrap">
                         <span
-                          className={
+                          className={`px-2 py-0.5 rounded-lg border font-mono tabular-nums font-bold whitespace-nowrap ${
                             item.fastPercent >= 60
-                              ? 'text-emerald-400 font-bold'
+                              ? 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
                               : item.fastPercent >= 30
-                                ? 'text-amber-400'
-                                : 'text-zinc-400'
-                          }
+                                ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
+                                : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                          }`}
                         >
                           {item.fastPercent}%
                         </span>
@@ -579,7 +581,7 @@ export function SessionsTableTab({
                       </td>
 
                       {/* 12. Cadencia / RPM */}
-                      <td className="py-3 text-right text-sky-400 font-bold whitespace-nowrap">
+                      <td className="py-3 text-right text-sky-400 font-bold whitespace-nowrap tabular-nums font-mono">
                         {item.responsesPerMinute}{' '}
                         <span className="text-[10px] font-normal text-zinc-500">RPM</span>
                       </td>
@@ -596,7 +598,7 @@ export function SessionsTableTab({
                             className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white text-[11px] font-mono font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1"
                             title="Ver telemetría micro-cronológica pregunta a pregunta"
                           >
-                            <span>🔍</span>
+                            <Search className="size-3" />
                             <span>Detalle</span>
                           </button>
 
@@ -609,7 +611,7 @@ export function SessionsTableTab({
                             className="px-2.5 py-1 rounded-lg bg-sky-950/80 hover:bg-sky-900 border border-sky-600/60 hover:border-sky-400 text-sky-200 text-[11px] font-mono font-bold transition-all cursor-pointer shadow-sm flex items-center gap-1"
                             title={`Clonar y repetir esta sesión idéntica (${s.presetName})`}
                           >
-                            <span>🔁</span>
+                            <Play className="size-3" />
                             <span>Re-testar</span>
                           </button>
 
@@ -622,7 +624,7 @@ export function SessionsTableTab({
                             className="p-1 rounded-lg bg-zinc-900 hover:bg-rose-950/80 border border-zinc-800 hover:border-rose-700/60 text-zinc-400 hover:text-rose-300 transition-all cursor-pointer"
                             title="Eliminar esta sesión de la base de datos"
                           >
-                            🗑️
+                            <Trash2 className="size-3.5" />
                           </button>
                         </div>
                       </td>

@@ -35,7 +35,7 @@ export function AiHistoryTab({
           {filteredReports.map((rep) => (
             <div
               key={rep.id}
-              className="p-5 bg-zinc-950/80 rounded-2xl border border-zinc-800 space-y-3 shadow-md"
+              className="p-5 bg-slate-900/90 rounded-xl border border-slate-800/80 space-y-3 shadow-md"
             >
               <div className="flex justify-between items-start text-xs font-mono">
                 <div>
