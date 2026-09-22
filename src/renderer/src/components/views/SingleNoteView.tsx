@@ -306,13 +306,13 @@ export function SingleNoteView({
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-3 border-t border-zinc-800/80 text-xs font-mono">
             {/* 1. Timbre */}
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Timbre / Instrumento:
               </label>
               <select
                 value={trainer.selectedInstrument.id}
                 onChange={(e): void => trainer.setSelectedInstrumentId(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
               >
                 {INSTRUMENT_CATALOG.map((inst) => (
                   <option key={inst.id} value={inst.id}>
@@ -344,13 +344,13 @@ export function SingleNoteView({
 
             {/* 3. Motor */}
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Motor de Adaptabilidad:
               </label>
               <select
                 value={trainer.selectedStrategyId}
                 onChange={(e): void => trainer.setSelectedStrategyId(e.target.value as StrategyId)}
-                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
               >
                 {AVAILABLE_STRATEGIES.map((st) => (
                   <option key={st.id} value={st.id}>
@@ -362,13 +362,13 @@ export function SingleNoteView({
 
             {/* 4. Avance */}
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Modo de Avance:
               </label>
               <select
                 value={trainer.advanceMode}
                 onChange={(e): void => trainer.setAdvanceMode(e.target.value as AdvanceMode)}
-                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
               >
                 {ADVANCE_MODE_OPTIONS.map((opt) => (
                   <option key={opt.id} value={opt.id}>
@@ -380,7 +380,7 @@ export function SingleNoteView({
 
             {/* 5. Criterio de Fin */}
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Criterio de Fin:
               </label>
               <div className="flex gap-1.5">
@@ -389,7 +389,7 @@ export function SingleNoteView({
                   onChange={(e): void =>
                     trainer.setSessionLimitType(e.target.value as SessionLimitType)
                   }
-                  className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                  className="w-1/2 bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
                 >
                   <option value="questions">Preguntas</option>
                   <option value="time">Por Tiempo</option>
@@ -401,7 +401,7 @@ export function SingleNoteView({
                   <select
                     value={trainer.sessionQuestionsCount}
                     onChange={(e): void => trainer.setSessionQuestionsCount(Number(e.target.value))}
-                    className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                    className="w-1/2 bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
                   >
                     <option value={5}>5 ej.</option>
                     <option value={10}>10 ej.</option>

@@ -203,7 +203,7 @@ export function RepertoireView({
 
             {(trainer.isSessionActive || trainer.isFreeMetronomeActive) &&
             trainer.visualBeatEnabled ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 h-8 max-h-8 flex items-center justify-center">
                 {Array.from({ length: beatsPerMeasure }).map((_, idx) => {
                   const isActive = trainer.activeBeatIndex === idx
                   const isDownbeat = idx === 0
@@ -213,9 +213,9 @@ export function RepertoireView({
                       className={`w-3.5 h-3.5 rounded-full transition-all duration-75 flex items-center justify-center text-[8px] font-bold ${
                         isActive
                           ? isDownbeat
-                            ? 'bg-amber-400 text-zinc-950 scale-125 shadow-[0_0_15px_rgba(251,191,36,1)]'
-                            : 'bg-sky-400 text-zinc-950 scale-110 shadow-[0_0_12px_rgba(56,189,248,0.9)]'
-                          : 'bg-zinc-900 border border-zinc-700/60 text-zinc-500'
+                            ? 'bg-cyan-400 text-zinc-950 scale-125 shadow-[0_0_12px_rgba(6,182,212,0.6)]'
+                            : 'bg-amber-400 text-zinc-950 scale-110 shadow-[0_0_12px_rgba(251,191,36,0.6)]'
+                          : 'bg-slate-400 border border-slate-600/60 text-slate-700'
                       }`}
                       title={isDownbeat ? 'Tiempo 1 Fuerte' : `Tiempo ${idx + 1} Débil`}
                     >
@@ -284,29 +284,29 @@ export function RepertoireView({
 
       {/* 4. DECK DE CONFIGURACIÓN */}
       {!trainer.isSessionActive && (
-        <Card className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 p-4 space-y-4 rounded-2xl font-mono text-xs">
+        <Card className="bg-slate-900/90 border border-slate-800/80 p-4 space-y-4 rounded-xl font-mono text-xs">
           {/* FILA 1: MANO, RANGO Y ENCADENAMIENTO */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Mano / Pentagrama a Estudiar:
               </label>
-              <div className="flex gap-1">
+              <div className="flex gap-1 bg-slate-900/60 rounded-lg p-1 border border-slate-800">
                 {(
                   [
-                    ['RH', 'Mano Derecha (MD)'],
-                    ['LH', 'Mano Izquierda (MI)'],
-                    ['both', 'Ambas Manos']
+                    ['RH', 'MD'],
+                    ['LH', 'MI'],
+                    ['both', 'Both']
                   ] as [HandSelection, string][]
                 ).map(([hand, label]) => (
                   <button
                     key={hand}
                     type="button"
                     onClick={(): void => trainer.setSelectedHand(hand)}
-                    className={`flex-1 py-1.5 px-2 rounded-lg border text-xs font-semibold cursor-pointer transition-all ${
+                    className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold cursor-pointer transition-all active:scale-[0.98] ${
                       trainer.selectedHand === hand
-                        ? 'bg-purple-950/80 border-purple-500 text-purple-200 font-bold shadow-sm'
-                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:bg-zinc-900'
+                        ? 'bg-cyan-500/20 border border-cyan-500/50 text-cyan-300 shadow-sm'
+                        : 'bg-transparent border border-transparent text-slate-300 hover:bg-slate-800/60'
                     }`}
                   >
                     {label}
@@ -358,24 +358,24 @@ export function RepertoireView({
             </div>
 
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Estrategia de Encadenamiento:
               </label>
-              <div className="flex gap-1">
+              <div className="flex gap-1 bg-slate-900/60 rounded-lg p-1 border border-slate-800">
                 {(
                   [
-                    ['forward', '➡️ Hacia Adelante'],
-                    ['backward', '⬅️ Hacia Atrás']
+                    ['forward', 'Forward'],
+                    ['backward', 'Backward']
                   ] as [ChainingDirection, string][]
                 ).map(([dir, label]) => (
                   <button
                     key={dir}
                     type="button"
                     onClick={(): void => trainer.setChainingDirection(dir)}
-                    className={`flex-1 py-1.5 px-2 rounded-lg border text-xs font-semibold cursor-pointer transition-all ${
+                    className={`flex-1 py-1.5 px-2 rounded-md text-xs font-semibold cursor-pointer transition-all active:scale-[0.98] ${
                       trainer.chainingDirection === dir
-                        ? 'bg-sky-950/80 border-sky-500 text-sky-200 font-bold shadow-sm'
-                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:bg-zinc-900'
+                        ? 'bg-purple-500/20 border border-purple-500/50 text-purple-300 shadow-sm'
+                        : 'bg-transparent border border-transparent text-slate-300 hover:bg-slate-800/60'
                     }`}
                   >
                     {label}
@@ -389,7 +389,7 @@ export function RepertoireView({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-zinc-800/80">
             {/* Modo Rítmico */}
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Modo Rítmico:
               </label>
               <select
@@ -397,7 +397,7 @@ export function RepertoireView({
                 onChange={(e): void =>
                   trainer.setRhythmMode(e.target.value as RhythmEvaluationMode)
                 }
-                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-purple-500 font-semibold"
+                className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none font-semibold"
               >
                 <option value="free_rubato">1: 🟢 Isócrono (Notas Iguales)</option>
                 <option value="relative_proportional">2: 🟡 Proporcional (IOI)</option>
@@ -459,7 +459,7 @@ export function RepertoireView({
                     <select
                       value={trainer.restingMeasures}
                       onChange={(e): void => trainer.setRestingMeasures(Number(e.target.value))}
-                      className="bg-zinc-950 border border-zinc-800 text-[10px] text-amber-300 rounded px-1"
+                      className="bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-[10px] px-2 py-1 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                       title="Compases de descanso / respiración entre repeticiones"
                     >
                       <option value={1}>1 C. Pausa</option>
@@ -469,6 +469,13 @@ export function RepertoireView({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(): void => trainer.setStudyBpm(Math.max(40, trainer.studyBpm - 1))}
+                  className="px-2 py-1 rounded-md bg-slate-800 border border-slate-700 text-cyan-300 text-xs font-mono hover:bg-slate-700"
+                >
+                  -1
+                </button>
                 <input
                   type="range"
                   min={40}
@@ -476,24 +483,30 @@ export function RepertoireView({
                   step={2}
                   value={trainer.studyBpm}
                   onChange={(e): void => trainer.setStudyBpm(Number(e.target.value))}
-                  className="flex-1 accent-emerald-500 cursor-pointer"
+                  className="flex-1 accent-cyan-500 cursor-pointer"
                 />
-                <span className="text-emerald-400 font-bold text-xs shrink-0">
-                  {trainer.studyBpm}{' '}
-                  <span className="text-[10px] text-zinc-400 font-normal">({msPerBeat}ms)</span>
+                <button
+                  type="button"
+                  onClick={(): void => trainer.setStudyBpm(Math.min(140, trainer.studyBpm + 1))}
+                  className="px-2 py-1 rounded-md bg-slate-800 border border-slate-700 text-cyan-300 text-xs font-mono hover:bg-slate-700"
+                >
+                  +1
+                </button>
+                <span className="tabular-nums font-mono text-cyan-400 font-semibold text-xs shrink-0">
+                  {trainer.studyBpm} BPM (~{msPerBeat}ms/negra)
                 </span>
               </div>
             </div>
 
             {/* Streak Target */}
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Streak de Retención:
               </label>
               <select
                 value={trainer.streakTarget}
                 onChange={(e): void => trainer.setStreakTarget(Number(e.target.value))}
-                className="w-full bg-zinc-950 border border-zinc-800 text-amber-300 font-bold rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none font-bold"
               >
                 <option value={1}>1x acierto (Rápido)</option>
                 <option value={2}>2x aciertos (Intermedio)</option>

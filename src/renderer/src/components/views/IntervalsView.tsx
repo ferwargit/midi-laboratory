@@ -234,7 +234,7 @@ export function IntervalsView({
 
           <div className="grid grid-cols-3 gap-3 pt-3 border-t border-zinc-800/80 text-xs font-mono">
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Dirección del Intervalo:
               </label>
               <select
@@ -242,7 +242,7 @@ export function IntervalsView({
                 onChange={(e): void =>
                   trainer.setDirectionMode(e.target.value as 'ascending' | 'descending' | 'both')
                 }
-                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
               >
                 <option value="ascending">⬆️ Solo Ascendente</option>
                 <option value="descending">⬇️ Solo Descendente</option>
@@ -251,13 +251,13 @@ export function IntervalsView({
             </div>
 
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Modo de Avance:
               </label>
               <select
                 value={trainer.advanceMode}
                 onChange={(e): void => trainer.setAdvanceMode(e.target.value as AdvanceMode)}
-                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
               >
                 {ADVANCE_MODE_OPTIONS.map((opt) => (
                   <option key={opt.id} value={opt.id}>
@@ -268,7 +268,7 @@ export function IntervalsView({
             </div>
 
             <div>
-              <label className="block text-xs uppercase text-zinc-400 mb-1 font-bold">
+              <label className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase mb-2 block">
                 Criterio de Fin:
               </label>
               <div className="flex gap-1.5">
@@ -277,7 +277,7 @@ export function IntervalsView({
                   onChange={(e): void =>
                     trainer.setSessionLimitType(e.target.value as SessionLimitType)
                   }
-                  className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                  className="w-1/2 bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
                 >
                   <option value="questions">Preguntas</option>
                   <option value="time">Por Tiempo</option>
@@ -288,7 +288,7 @@ export function IntervalsView({
                   <select
                     value={trainer.sessionQuestionsCount}
                     onChange={(e): void => trainer.setSessionQuestionsCount(Number(e.target.value))}
-                    className="w-1/2 bg-zinc-950 border border-zinc-800 text-zinc-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-sky-500"
+                    className="w-1/2 bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
                   >
                     <option value={5}>5 ej.</option>
                     <option value={10}>10 ej.</option>
