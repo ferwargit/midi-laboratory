@@ -45,7 +45,7 @@ export function SingleNoteView({
       attempts: p.attempts
     }))
 
-  const getSessionProgressLabel = () => {
+  const getSessionProgressLabel = (): React.ReactNode => {
     if (trainer.sessionLimitType === 'time') {
       return (
         <span className="flex items-center gap-1">

@@ -19,7 +19,7 @@ export function Card({
 
   return (
     <div
-      className={`bg-linear-to-b from-slate-900/95 to-slate-950/95 border rounded-xl transition-all duration-150 ease-out active:scale-[0.99] ${glowStyles[glow]} ${className}`}
+      className={`bg-linear-to-b from-slate-900/95 to-slate-950/95 border rounded-xl transition-all duration-150 ease-out ${glowStyles[glow]} ${className}`}
       {...props}
     >
       {children}

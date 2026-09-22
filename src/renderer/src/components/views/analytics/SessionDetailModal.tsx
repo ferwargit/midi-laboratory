@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { DbSessionRecord, DbAnswerRecord } from '../../../domain/database/types'
 import {
   analyzeSessionTimeline,
@@ -82,8 +83,8 @@ export function SessionDetailModal({
   if (!isOpen || !session) return null
 
   if (!analysis) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
+    return createPortal(
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
         <div
           role="dialog"
           aria-modal="true"
@@ -107,7 +108,8 @@ export function SessionDetailModal({
             </Button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     )
   }
 
@@ -123,8 +125,8 @@ export function SessionDetailModal({
 
   const tickStep = totalQ <= 20 ? 1 : totalQ <= 40 ? 2 : totalQ <= 70 ? 5 : 10
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
       <div
         role="dialog"
         aria-modal="true"
@@ -783,4 +785,6 @@ export function SessionDetailModal({
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }
