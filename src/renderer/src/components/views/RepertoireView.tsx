@@ -9,6 +9,11 @@ import { PianoKeyboard, KeyboardVisualTheme } from '../trainer/PianoKeyboard'
 import { RepertoireFeedbackPanel } from '../trainer/RepertoireFeedbackPanel'
 import { RepertoireSummaryCard } from '../trainer/RepertoireSummaryCard'
 import { Ghost, Sparkles, Palette } from 'lucide-react'
+import {
+  SESSION_HEADER_CLASS,
+  SESSION_TITLE_CLASS,
+  SESSION_SUBTITLE_CLASS
+} from './sessionHeaderStyles'
 
 interface RepertoireViewProps {
   trainer: UseRepertoireTrainerReturn
@@ -73,16 +78,18 @@ export function RepertoireView({
   return (
     <div className="space-y-3 font-sans">
       {/* 1. CABECERA DINÁMICA */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-lg gap-2">
-        <div className="flex items-center gap-3 font-mono">
-          <span className="px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-800 text-purple-300 text-xs font-bold">
+      <div
+        className={`bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-lg ${SESSION_HEADER_CLASS}`}
+      >
+        <div className="flex items-center gap-3 font-mono min-w-0">
+          <span className="px-2 py-0.5 rounded-md bg-purple-950/80 border border-purple-800 text-purple-300 text-xs font-bold shrink-0">
             MODO 04
           </span>
-          <div>
-            <span className="text-xs md:text-sm text-zinc-100 font-bold block">
+          <div className="min-w-0">
+            <span className={SESSION_TITLE_CLASS}>
               {trainer.currentScore?.title || 'Cargar Partitura (.musicxml / MuseScore 4)'}
             </span>
-            <span className="text-[10px] text-zinc-400">
+            <span className={SESSION_SUBTITLE_CLASS}>
               {trainer.currentScore?.composer || 'Félix Dumont'} •{' '}
               {trainer.currentScore?.timeSignature.beats}/
               {trainer.currentScore?.timeSignature.beatType} • {trainer.studyBpm} BPM (~{msPerBeat}{' '}
@@ -91,7 +98,7 @@ export function RepertoireView({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             size="sm"
             variant="secondary"
@@ -164,21 +171,21 @@ export function RepertoireView({
 
       {/* 3. PIANO HERO CON TEMPORIZADOR VISUAL Y METRÓNOMO LIBRE */}
       <div className="space-y-1.5">
-        <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1 gap-2 flex-wrap sm:flex-nowrap">
+        <div className="h-10 min-h-[40px] max-h-10 flex items-center justify-between mb-3 text-xs font-mono text-zinc-400 px-1 gap-2">
           {/* Lado izquierdo: Título */}
-          <span className="truncate">
+          <span className="truncate min-w-0">
             {trainer.isSessionActive
               ? `🎹 ENTRADA ROLAND FP-8 (${trainer.selectedHand === 'RH' ? 'MANO DERECHA' : trainer.selectedHand === 'LH' ? 'MANO IZQUIERDA' : 'AMBAS MANOS'}):`
               : 'TECLADO DE PRÁCTICA AUDIOMOTORA (TOCA EN TU ROLAND FP-8 O CLIC VIRTUAL):'}
           </span>
 
           {/* 🔴 ⚪ CENTRO: METRÓNOMO / BEAT VISUAL (ACTIVO EN SESIÓN Y EN PRÁCTICA LIBRE) */}
-          <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-md select-none">
+          <div className="flex items-center gap-2 px-3 py-1 h-8 shrink-0 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-md select-none">
             {!trainer.isSessionActive ? (
               <button
                 type="button"
                 onClick={trainer.toggleFreeMetronome}
-                className={`flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-lg cursor-pointer transition-all ${
+                className={`flex items-center gap-1.5 h-8 text-xs font-bold px-2 py-0.5 rounded-lg cursor-pointer transition-all ${
                   trainer.isFreeMetronomeActive
                     ? 'bg-amber-950/80 border border-amber-500 text-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.5)]'
                     : 'bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white'

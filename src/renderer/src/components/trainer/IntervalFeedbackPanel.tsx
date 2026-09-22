@@ -18,6 +18,14 @@ interface IntervalFeedbackPanelProps {
   onAdvanceNext?: () => void
 }
 
+const OLED_CONTAINER =
+  'min-h-[112px] w-full bg-slate-950/90 border border-slate-800/80 rounded-xl p-4 flex items-center justify-between relative overflow-hidden select-none shadow-inner'
+
+const CHIP_EXPECTED = 'border-cyan-500/30 bg-cyan-950/20 text-cyan-300 font-mono tabular-nums'
+const CHIP_CORRECT =
+  'border-emerald-500/30 bg-emerald-950/20 text-emerald-300 font-mono tabular-nums'
+const CHIP_DEVIATION = 'border-amber-500/30 bg-amber-950/20 text-amber-300 font-mono tabular-nums'
+
 export function IntervalFeedbackPanel({
   isSessionActive,
   stimulus,
@@ -30,7 +38,7 @@ export function IntervalFeedbackPanel({
   if (!isSessionActive) return null
 
   return (
-    <div className="h-28 w-full bg-zinc-950/90 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between relative overflow-hidden select-none shadow-inner">
+    <div className={OLED_CONTAINER}>
       {!lastResult ? (
         <div className="w-full flex items-center justify-center gap-3">
           <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping shrink-0" />
@@ -52,7 +60,7 @@ export function IntervalFeedbackPanel({
             </span>
             <span className="text-[11px] text-zinc-400 font-mono">
               Dirección:{' '}
-              <strong className="text-sky-300">
+              <strong className="text-cyan-300 tabular-nums">
                 {stimulus?.direction === 'ascending'
                   ? '⬆️ Ascendente (Grave ➔ Aguda)'
                   : '⬇️ Descendente (Aguda ➔ Grave)'}
@@ -65,38 +73,38 @@ export function IntervalFeedbackPanel({
           <div className="flex flex-col gap-1.5 text-left">
             <div className="flex items-center gap-2">
               <span
-                className={`text-base font-bold ${
+                className={`text-base font-bold tabular-nums ${
                   lastResult.isExactMatch
                     ? 'text-emerald-400'
                     : lastResult.isTransposedCorrect
-                      ? 'text-sky-400'
-                      : 'text-red-400'
+                      ? 'text-cyan-400'
+                      : 'text-amber-400'
                 }`}
               >
                 {lastResult.feedbackMessage}
               </span>
-              <span className="text-zinc-500 text-[10px] font-mono">
+              <span className="text-zinc-500 text-[10px] font-mono tabular-nums">
                 ({(lastResult.responseTimeMs / 1000).toFixed(2)}s)
               </span>
             </div>
 
             <div className="flex items-center gap-2 text-xs font-mono">
-              <span className="px-2.5 py-1 rounded bg-zinc-900 border border-sky-800/80 text-sky-200">
+              <span
+                className={`px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${CHIP_EXPECTED}`}
+              >
                 🎯 Intervalo Esperado:{' '}
-                <strong>
+                <strong className="text-white tabular-nums">
                   {getIntervalDefinition(lastResult.expectedStimulus.semitones).fullName} (
                   {lastResult.expectedStimulus.semitones}st)
                 </strong>
               </span>
               <span
-                className={`px-2.5 py-1 rounded border ${
-                  lastResult.isIntervalCorrect
-                    ? 'bg-zinc-900 border-emerald-800/80 text-emerald-200'
-                    : 'bg-zinc-900 border-red-800/80 text-red-200'
+                className={`px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${
+                  lastResult.isIntervalCorrect ? CHIP_CORRECT : CHIP_DEVIATION
                 }`}
               >
                 🎹 Tocaste:{' '}
-                <strong>
+                <strong className="text-white tabular-nums">
                   {getIntervalDefinition(lastResult.playedSemitones).shortName} (
                   {lastResult.playedSemitones}st)
                 </strong>
@@ -117,7 +125,7 @@ export function IntervalFeedbackPanel({
                   <span>Siguiente Intervalo ➔</span>
                 </Button>
                 <span className="block text-[10px] text-zinc-400 font-mono">
-                  o presiona <strong className="text-sky-400 font-bold">Espacio</strong>
+                  o presiona <strong className="text-cyan-400 font-bold">Espacio</strong>
                 </span>
               </div>
             ) : (

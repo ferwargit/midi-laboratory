@@ -13,6 +13,14 @@ interface SequenceFeedbackPanelProps {
   onAdvanceNext?: () => void
 }
 
+const OLED_CONTAINER =
+  'min-h-[112px] w-full bg-slate-950/90 border border-slate-800/80 rounded-xl p-4 flex items-center justify-between relative overflow-hidden select-none shadow-inner'
+
+const CHIP_EXPECTED = 'border-cyan-500/30 bg-cyan-950/20 text-cyan-300 font-mono tabular-nums'
+const CHIP_CORRECT =
+  'border-emerald-500/30 bg-emerald-950/20 text-emerald-300 font-mono tabular-nums'
+const CHIP_DEVIATION = 'border-amber-500/30 bg-amber-950/20 text-amber-300 font-mono tabular-nums'
+
 export function SequenceFeedbackPanel({
   isSessionActive,
   expectedLength,
@@ -24,9 +32,9 @@ export function SequenceFeedbackPanel({
   if (!isSessionActive) return null
 
   return (
-    <div className="h-28 w-full bg-zinc-950/90 border border-zinc-800 rounded-lg p-3 flex flex-col items-center justify-center relative overflow-hidden select-none">
+    <div className={OLED_CONTAINER}>
       {!lastResult ? (
-        <div className="text-center space-y-2">
+        <div className="w-full flex flex-col items-center justify-center gap-3">
           <div className="text-amber-400 text-xs md:text-sm font-semibold tracking-wide flex items-center justify-center gap-2">
             <Play className="w-4 h-4 text-amber-400 animate-pulse" />
             <span>Escuchá la melodía de {expectedLength} notas y tocalas en orden:</span>
@@ -38,9 +46,9 @@ export function SequenceFeedbackPanel({
               return (
                 <div
                   key={idx}
-                  className={`w-12 h-9 rounded border flex items-center justify-center font-bold text-xs transition-all ${
+                  className={`w-12 h-9 rounded-lg border flex items-center justify-center font-bold text-xs transition-all ${
                     isFilled
-                      ? 'bg-sky-950/90 border-sky-400 text-sky-200 shadow-md scale-105'
+                      ? `${CHIP_EXPECTED} shadow-md scale-105`
                       : 'bg-zinc-900/60 border-zinc-800 text-zinc-600'
                   }`}
                 >
@@ -52,33 +60,49 @@ export function SequenceFeedbackPanel({
         </div>
       ) : (
         <div className="w-full flex items-center justify-between px-3">
-          <div className="text-left space-y-1">
+          <div className="text-left space-y-1.5">
             <div
-              className={`text-base font-bold ${
+              className={`text-base font-bold tabular-nums ${
                 lastResult.isExactMatch
                   ? 'text-emerald-400'
                   : lastResult.isContourCorrect
-                    ? 'text-sky-400'
+                    ? 'text-cyan-400'
                     : 'text-amber-400'
               }`}
             >
               {lastResult.feedbackMessage}
             </div>
 
-            <div className="flex gap-1 text-xs">
-              {lastResult.noteByNoteEvaluation.map((item, idx) => (
+            <div className="flex items-center gap-2">
+              {lastResult.isContourCorrect && (
                 <span
-                  key={idx}
-                  className={`px-2 py-0.5 rounded border text-[10px] font-mono ${
-                    item.isCorrect
-                      ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300'
-                      : 'bg-red-950/60 border-red-700 text-red-300'
-                  }`}
+                  className={`px-2 py-0.5 rounded-lg border text-[10px] font-mono ${CHIP_EXPECTED}`}
                 >
-                  {midiNoteToName(item.expected)}{' '}
-                  {item.played !== null && !item.isCorrect && `(❌ ${midiNoteToName(item.played)})`}
+                  🎵 Contorno melódico correcto
                 </span>
-              ))}
+              )}
+
+              <div className="flex gap-1 text-xs">
+                {lastResult.noteByNoteEvaluation.map((item, idx) => (
+                  <span
+                    key={idx}
+                    className={`px-2 py-0.5 rounded-lg border text-[10px] font-mono flex items-center gap-1.5 ${
+                      item.isCorrect ? CHIP_CORRECT : CHIP_DEVIATION
+                    }`}
+                  >
+                    <strong className="text-white tabular-nums">
+                      {midiNoteToName(item.expected)}
+                    </strong>
+                    {item.played !== null && !item.isCorrect && (
+                      <span
+                        className={item.isCorrect ? 'text-emerald-400/70' : 'text-amber-400/70'}
+                      >
+                        ❌ {midiNoteToName(item.played)}
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 

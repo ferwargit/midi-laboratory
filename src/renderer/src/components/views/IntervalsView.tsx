@@ -9,6 +9,11 @@ import { PianoKeyboard, KeyboardVisualTheme } from '../trainer/PianoKeyboard'
 import { IntervalFeedbackPanel } from '../trainer/IntervalFeedbackPanel'
 import { IntervalSummaryCard } from '../trainer/IntervalSummaryCard'
 import { Ghost, Sparkles, Palette } from 'lucide-react'
+import {
+  SESSION_HEADER_CLASS,
+  SESSION_TITLE_CLASS,
+  SESSION_SUBTITLE_CLASS
+} from './sessionHeaderStyles'
 
 interface IntervalsViewProps {
   trainer: UseIntervalTrainerReturn
@@ -63,16 +68,21 @@ export function IntervalsView({
   return (
     <div className="space-y-3">
       {/* CABECERA DINÁMICA */}
-      <div className="flex justify-between items-center bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-lg h-14">
-        <div className="flex items-center gap-3 font-mono">
-          <span className="px-2 py-0.5 rounded-md bg-sky-950/80 border border-sky-800 text-sky-300 text-xs font-bold">
+      <div
+        className={`bg-zinc-900/60 backdrop-blur-xl border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-lg ${SESSION_HEADER_CLASS}`}
+      >
+        <div className="flex items-center gap-3 font-mono min-w-0">
+          <span className="px-2 py-0.5 rounded-md bg-sky-950/80 border border-sky-800 text-sky-300 text-xs font-bold shrink-0">
             MODO 02
           </span>
-          <span className="text-xs md:text-sm text-zinc-200 font-semibold">
-            {trainer.isSessionActive
-              ? getSessionProgressLabel()
-              : `Reconocimiento Interválico (${trainer.activeIntervals.length} activos)`}
-          </span>
+          <div className="min-w-0">
+            <span className={SESSION_TITLE_CLASS}>Reconocimiento Interválico</span>
+            <span className={SESSION_SUBTITLE_CLASS}>
+              {trainer.isSessionActive
+                ? getSessionProgressLabel()
+                : `${trainer.activeIntervals.length} intervalos activos`}
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -113,7 +123,7 @@ export function IntervalsView({
 
       {/* PIANO HERO CON SELECTOR DE TEMA VISUAL */}
       <div className="space-y-1.5">
-        <div className="flex justify-between items-center text-xs font-mono text-zinc-400 px-1">
+        <div className="h-10 min-h-[40px] max-h-10 flex items-center justify-between mb-3 text-xs font-mono text-zinc-400 px-1">
           <span>
             {trainer.isSessionActive
               ? trainer.waitingNoteStep === 1
