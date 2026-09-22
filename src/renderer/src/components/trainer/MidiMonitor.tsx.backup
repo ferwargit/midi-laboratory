@@ -9,21 +9,21 @@ function MidiMonitorComponent({ logs }: MidiMonitorProps): React.ReactElement {
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'auto' })
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
 
-  const getLogBadgeStyle = (type: MidiLogEntry['type']): string => {
+  const getLogStyle = (type: MidiLogEntry['type']): string => {
     switch (type) {
-      case 'IN':
-        return 'bg-cyan-950/40 text-cyan-400 border border-cyan-500/30 font-mono'
-      case 'OUT':
-        return 'bg-purple-950/40 text-purple-400 border border-purple-500/30 font-mono'
-      case 'EVAL':
-        return 'bg-amber-950/40 text-amber-400 border border-amber-500/30 font-mono'
       case 'AI':
-        return 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/30 font-mono'
+        return 'text-purple-400 font-medium'
+      case 'EVAL':
+        return 'text-amber-300 font-medium'
+      case 'OUT':
+        return 'text-sky-400'
+      case 'IN':
+        return 'text-emerald-400'
       default:
-        return 'bg-zinc-950/40 text-zinc-400 border border-zinc-500/30 font-mono'
+        return 'text-zinc-400'
     }
   }
 
@@ -37,16 +37,12 @@ function MidiMonitorComponent({ logs }: MidiMonitorProps): React.ReactElement {
       </div>
       <div className="h-40 overflow-y-auto font-mono text-xs space-y-1 bg-zinc-950 p-2.5 rounded border border-zinc-900">
         {logs.length === 0 ? (
-          <div className="text-zinc-600 italic">Esperando eventos en el bus MIDI...</div>
+          <div className="text-zinc-600 italic">Esperando inicio de sesión...</div>
         ) : (
           logs.map((log) => (
-            <div key={log.id} className="flex items-start gap-2">
-              <span className="text-zinc-600 shrink-0 font-mono">{log.time}</span>
-              <span
-                className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${getLogBadgeStyle(log.type)}`}
-              >
-                {log.type}
-              </span>
+            <div key={log.id} className={`${getLogStyle(log.type)} flex items-start gap-2`}>
+              <span className="text-zinc-600 shrink-0">[{log.time}]</span>
+              <span className="shrink-0 font-bold opacity-80">[{log.type}]</span>
               <span className="break-all">{log.message}</span>
             </div>
           ))

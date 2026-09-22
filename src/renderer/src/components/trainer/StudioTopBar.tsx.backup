@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState } from 'react'
 import { VisualCueMode } from '../../domain/exercise/visualAudioSync'
 import {
   Music,
@@ -30,7 +30,7 @@ interface StudioTopBarProps {
   onSelectOutput: (id: string) => void
 }
 
-function StudioTopBarImpl({
+export function StudioTopBar({
   appMode,
   onSelectMode,
   isSessionActive,
@@ -45,32 +45,7 @@ function StudioTopBarImpl({
   onSelectOutput
 }: StudioTopBarProps): React.ReactElement {
   const [isMidiMenuOpen, setIsMidiMenuOpen] = useState(false)
-  const midiMenuRef = useRef<HTMLDivElement>(null)
   const isOk = status.toLowerCase().includes('conectado')
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && isMidiMenuOpen) {
-        setIsMidiMenuOpen(false)
-      }
-    }
-
-    const handleClickOutside = (e: MouseEvent): void => {
-      if (midiMenuRef.current && !midiMenuRef.current.contains(e.target as Node)) {
-        setIsMidiMenuOpen(false)
-      }
-    }
-
-    if (isMidiMenuOpen) {
-      document.addEventListener('keydown', handleEscape)
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape)
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [isMidiMenuOpen])
 
   const currentInName = inputs.find((i) => i.id === selectedInputId)?.name || 'Sin Entrada'
   const currentOutName = outputs.find((o) => o.id === selectedOutputId)?.name || 'Sin Salida'
@@ -174,7 +149,7 @@ function StudioTopBarImpl({
         </div>
 
         {/* Popover de Puertos MIDI */}
-        <div ref={midiMenuRef} className="relative">
+        <div className="relative">
           <button
             type="button"
             onClick={(): void => setIsMidiMenuOpen(!isMidiMenuOpen)}
@@ -248,5 +223,3 @@ function StudioTopBarImpl({
     </header>
   )
 }
-
-export const StudioTopBar = React.memo(StudioTopBarImpl)

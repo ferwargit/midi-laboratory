@@ -19,7 +19,7 @@ interface StudioBottomDockProps {
   onOpenResetModal: () => void
 }
 
-function StudioBottomDockImpl({
+export function StudioBottomDock({
   logs,
   onOpenResetModal
 }: StudioBottomDockProps): React.ReactElement {
@@ -102,33 +102,29 @@ function StudioBottomDockImpl({
         <div className="flex items-center gap-4 text-zinc-400 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span className="text-zinc-500">SESIONES:</span>
-            <strong className="text-zinc-200 tabular-nums font-mono">
-              {summary.totalSessions}
-            </strong>
+            <strong className="text-zinc-200">{summary.totalSessions}</strong>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-zinc-500">EJERCICIOS:</span>
-            <strong className="text-zinc-200 tabular-nums font-mono">
-              {summary.totalExercises}
-            </strong>
+            <strong className="text-zinc-200">{summary.totalExercises}</strong>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-zinc-500">PRECISIÓN GLOBAL:</span>
             <strong
-              className={`${
+              className={
                 summary.overallAccuracy >= MASTERY_THRESHOLDS.MASTERED_MIN
                   ? 'text-emerald-400'
                   : summary.overallAccuracy >= MASTERY_THRESHOLDS.CRITICAL_MAX
                     ? 'text-amber-400'
                     : 'text-rose-400'
-              } tabular-nums font-mono`}
+              }
             >
               {summary.overallAccuracy}%
             </strong>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-zinc-500">TIEMPO MEDIO:</span>
-            <strong className="text-zinc-200 tabular-nums font-mono">
+            <strong className="text-zinc-200">
               {(summary.overallAvgTimeMs / 1000).toFixed(2)}s
             </strong>
           </div>
@@ -206,5 +202,3 @@ function StudioBottomDockImpl({
     </footer>
   )
 }
-
-export const StudioBottomDock = React.memo(StudioBottomDockImpl)
