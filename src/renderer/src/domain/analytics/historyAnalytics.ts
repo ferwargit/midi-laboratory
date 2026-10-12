@@ -14,7 +14,7 @@ export * from './confusionMatrix'
 export * from './sessionFilters'
 export * from './longitudinal'
 
-import { COGNITIVE_LATENCY_THRESHOLDS } from './thresholds'
+import { getLatencyThresholds } from './thresholds'
 import {
   AnalyticsFilterOptions,
   AnalyticsMetrics,
@@ -28,7 +28,10 @@ import {
   resolveNominalPoolSize,
   resolveSessionDominantBias,
   resolveSessionFormat,
-  resolveSessionInputMethod
+  resolveSessionInputMethod,
+  isIntervalSession,
+  isSequenceSession,
+  isRepertoireSession
 } from './sessionClassification'
 import { computeLongitudinalComparisons } from './longitudinal'
 import { filterSessionsAdvanced, filterSessionsByMode } from './sessionFilters'
@@ -107,9 +110,20 @@ export function computeAnalyticsMetrics(
     let sSharp = 0
     let sFlat = 0
 
+    const sessionMode =
+      session.targetMode ||
+      (isIntervalSession(session)
+        ? 'intervals'
+        : isSequenceSession(session)
+          ? 'sequences'
+          : isRepertoireSession(session)
+            ? 'repertoire'
+            : 'single_note')
+    const thresholds = getLatencyThresholds(sessionMode)
+
     sAnswers.forEach((ans) => {
-      if (ans.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) sFast++
-      else if (ans.responseTimeMs <= COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_MAX_MS) sMed++
+      if (ans.responseTimeMs < thresholds.FAST_MAX_MS) sFast++
+      else if (ans.responseTimeMs <= thresholds.MEDIUM_MAX_MS) sMed++
       else sSlow++
 
       if (!ans.isCorrect) {
@@ -161,12 +175,27 @@ export function computeAnalyticsMetrics(
     }
   })
 
+  // Create a session lookup for per-answer modality resolution
+  const sessionById = new Map(filteredSessions.map((s) => [s.id, s]))
+
   for (const ans of filteredAnswers) {
     if (ans.isCorrect) totalCorrect++
     totalTime += ans.responseTimeMs
 
-    if (ans.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) fastCount++
-    else if (ans.responseTimeMs <= COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_MAX_MS) medCount++
+    const session = sessionById.get(ans.sessionId)
+    const sessionMode =
+      session?.targetMode ||
+      (session && isIntervalSession(session)
+        ? 'intervals'
+        : session && isSequenceSession(session)
+          ? 'sequences'
+          : session && isRepertoireSession(session)
+            ? 'repertoire'
+            : 'single_note')
+    const thresholds = getLatencyThresholds(sessionMode)
+
+    if (ans.responseTimeMs < thresholds.FAST_MAX_MS) fastCount++
+    else if (ans.responseTimeMs <= thresholds.MEDIUM_MAX_MS) medCount++
     else slowCount++
 
     if (!ans.isCorrect) {

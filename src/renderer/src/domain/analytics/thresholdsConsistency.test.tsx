@@ -4,6 +4,8 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import {
   COGNITIVE_LATENCY_THRESHOLDS,
+  COGNITIVE_LATENCY_THRESHOLDS_BY_MODE,
+  getLatencyThresholds,
   MASTERY_THRESHOLDS,
   computeAnalyticsMetrics
 } from './historyAnalytics'
@@ -106,6 +108,34 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
     expect(screen.queryByText(/< 1.2s/i)).toBeNull()
   })
 
+  it('ConfusionMatrixTab con modeFilter="intervals" debe renderizar etiquetas de umbrales calibrados para intervalos', () => {
+    const intervalsSession: DbSessionRecord = {
+      ...mockSession,
+      id: 's_intervals_test',
+      targetMode: 'intervals',
+      presetName: 'Intervalos Test'
+    }
+    const intervalsAnswers: DbAnswerRecord[] = mockAnswers.map((a, i) => ({
+      ...a,
+      id: `a_int_${i}`,
+      sessionId: 's_intervals_test'
+    }))
+    const metrics = computeAnalyticsMetrics([intervalsSession], intervalsAnswers, 'intervals')
+
+    render(<ConfusionMatrixTab modeFilter="intervals" metrics={metrics} />)
+
+    expect(
+      screen.getByText(
+        new RegExp(`Reflejo Inmediato \\(${COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.FAST_LABEL}\\)`, 'i')
+      )
+    ).toBeDefined()
+    expect(
+      screen.getByText(
+        new RegExp(`Deducción Activa \\(${COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.MEDIUM_LABEL}\\)`, 'i')
+      )
+    ).toBeDefined()
+  })
+
   it('LatencySpectrumDiagram debe renderizar las etiquetas calibradas desde la SSOT', () => {
     render(<LatencySpectrumDiagram />)
 
@@ -151,6 +181,54 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
     const prompt = buildUserPrompt(metrics)
     // Validación usando la constante central
     expect(prompt).toContain(`Respuestas Rápidas (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})`)
+  })
+})
+
+describe('thresholdsByModality - Umbrales de Latencia Calibrados por Modalidad', () => {
+  it('COGNITIVE_LATENCY_THRESHOLDS_BY_MODE debe contener las cuatro modalidades con valores calibrados', () => {
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.single_note.FAST_MAX_MS).toBe(1400)
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.single_note.MEDIUM_MAX_MS).toBe(2800)
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.single_note.FAST_LABEL).toBe('< 1.4s')
+
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.FAST_MAX_MS).toBe(2400)
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.MEDIUM_MAX_MS).toBe(3800)
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.FAST_LABEL).toBe('< 2.4s')
+
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.sequences.FAST_MAX_MS).toBe(3500)
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.sequences.MEDIUM_MAX_MS).toBe(5000)
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.sequences.FAST_LABEL).toBe('< 3.5s')
+
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.repertoire.FAST_MAX_MS).toBe(2500)
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.repertoire.MEDIUM_MAX_MS).toBe(4000)
+    expect(COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.repertoire.FAST_LABEL).toBe('< 2.5s')
+  })
+
+  it('getLatencyThresholds debe resolver la configuración correcta para cada modalidad conocida', () => {
+    expect(getLatencyThresholds('single_note').FAST_MAX_MS).toBe(1400)
+    expect(getLatencyThresholds('intervals').FAST_MAX_MS).toBe(2400)
+    expect(getLatencyThresholds('sequences').FAST_MAX_MS).toBe(3500)
+    expect(getLatencyThresholds('repertoire').FAST_MAX_MS).toBe(2500)
+  })
+
+  it('getLatencyThresholds debe hacer fallback a single_note para modo desconocido', () => {
+    expect(getLatencyThresholds('unknown_mode').FAST_MAX_MS).toBe(1400)
+    expect(getLatencyThresholds('invalid').FAST_LABEL).toBe('< 1.4s')
+    expect(getLatencyThresholds('').FAST_MAX_MS).toBe(1400)
+    expect(getLatencyThresholds(undefined).FAST_MAX_MS).toBe(1400)
+  })
+
+  it('getLatencyThresholds debe ser case-insensitive', () => {
+    expect(getLatencyThresholds('INTERVALS').FAST_MAX_MS).toBe(2400)
+    expect(getLatencyThresholds('SeQuEnCeS').FAST_MAX_MS).toBe(3500)
+  })
+
+  it('getLatencyThresholds debe manejar espacios en blanco alrededor del modo', () => {
+    expect(getLatencyThresholds(' intervals ').FAST_MAX_MS).toBe(2400)
+    expect(getLatencyThresholds(' intervals ').FAST_LABEL).toBe('< 2.4s')
+    expect(getLatencyThresholds(' Sequences ').FAST_MAX_MS).toBe(3500)
+    expect(getLatencyThresholds(' Sequences ').FAST_LABEL).toBe('< 3.5s')
+    expect(getLatencyThresholds('\trepertoire\n').FAST_MAX_MS).toBe(2500)
+    expect(getLatencyThresholds('\trepertoire\n').FAST_LABEL).toBe('< 2.5s')
   })
 })
 

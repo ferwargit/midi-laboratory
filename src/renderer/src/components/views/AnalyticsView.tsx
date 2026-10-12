@@ -397,6 +397,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
           onIsolateSessions={(ids) => setIsolatedSessionIds(new Set(ids))}
           isIsolatedMode={isolatedSessionIds !== null}
           onClearIsolation={() => setIsolatedSessionIds(null)}
+          modeFilter={modeFilter}
         />
       )}
 

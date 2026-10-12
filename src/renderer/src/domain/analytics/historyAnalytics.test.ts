@@ -858,4 +858,248 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
       expect(comps[0].totalAttempts).toBe(20)
     })
   })
+
+  describe('analyzeSessionTimeline - Umbrales de Latencia por Modalidad', () => {
+    const makeAnswer = (
+      id: string,
+      sessionId: string,
+      responseTimeMs: number,
+      isCorrect = true
+    ): DbAnswerRecord => ({
+      id,
+      sessionId,
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 60,
+      isCorrect,
+      semitoneDistance: 0,
+      responseTimeMs,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: new Date().toISOString()
+    })
+
+    it('intervals: respuesta a 2100ms debe clasificarse como fastReflex (< 2400ms)', () => {
+      const session: DbSessionRecord = {
+        ...sInterval,
+        id: 's_int_test',
+        targetMode: 'intervals'
+      }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('a1', 's_int_test', 2100)
+      ]
+      const timeline = analyzeSessionTimeline(session, answers)
+      expect(timeline.fastReflexCount).toBe(1)
+    })
+
+    it('intervals: respuesta a 2500ms debe clasificarse como medium (2400-3800ms)', () => {
+      const session: DbSessionRecord = {
+        ...sInterval,
+        id: 's_int_test2',
+        targetMode: 'intervals'
+      }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('a1', 's_int_test2', 2500)
+      ]
+      const timeline = analyzeSessionTimeline(session, answers)
+      expect(timeline.fastReflexCount).toBe(0)
+      // Note: fastReflexCount only counts fast; medium/slow not directly exposed in timeline
+    })
+
+    it('sequences: respuesta a 3000ms debe clasificarse como fastReflex (< 3500ms)', () => {
+      const session: DbSessionRecord = {
+        ...sSequence,
+        id: 's_seq_test',
+        targetMode: 'sequences'
+      }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('a1', 's_seq_test', 3000)
+      ]
+      const timeline = analyzeSessionTimeline(session, answers)
+      expect(timeline.fastReflexCount).toBe(1)
+    })
+
+    it('repertoire: respuesta a 2300ms debe clasificarse como fastReflex (< 2500ms)', () => {
+      const session: DbSessionRecord = {
+        ...sNotePiano,
+        id: 's_rep_test',
+        targetMode: 'repertoire',
+        presetName: 'Repertorio Test'
+      }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('a1', 's_rep_test', 2300)
+      ]
+      const timeline = analyzeSessionTimeline(session, answers)
+      expect(timeline.fastReflexCount).toBe(1)
+    })
+
+    it('sin targetMode: debe hacer fallback a single_note (1400ms)', () => {
+      const session: DbSessionRecord = {
+        ...sNotePiano,
+        id: 's_no_mode',
+        targetMode: undefined as any
+      }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('a1', 's_no_mode', 2100) // Would be fast in intervals, slow in single_note
+      ]
+      const timeline = analyzeSessionTimeline(session, answers)
+      expect(timeline.fastReflexCount).toBe(0) // 2100 > 1400 (single_note fallback)
+    })
+  })
+
+  describe('computeAnalyticsMetrics - Umbrales de Latencia por Modalidad en Sesiones', () => {
+    const makeAnswer = (
+      id: string,
+      sessionId: string,
+      responseTimeMs: number,
+      isCorrect = true
+    ): DbAnswerRecord => ({
+      id,
+      sessionId,
+      questionIndex: 1,
+      expectedNote: 60,
+      playedNote: 60,
+      isCorrect,
+      semitoneDistance: 0,
+      responseTimeMs,
+      velocity: 90,
+      reasonTelemetry: '',
+      createdAt: new Date().toISOString()
+    })
+
+    it('intervals: 3 respuestas en 2350, 3100, 4200ms → fast=1, medium=1, slow=1', () => {
+      const session: DbSessionRecord = {
+        ...sInterval,
+        id: 's_int_metrics',
+        targetMode: 'intervals',
+        totalQuestions: 3,
+        correctAnswers: 3,
+        accuracyPercentage: 100,
+        avgResponseTimeMs: 3200,
+        durationSeconds: 30
+      }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('a1', 's_int_metrics', 2350), // fast (< 2400)
+        makeAnswer('a2', 's_int_metrics', 3100), // medium (2400-3800)
+        makeAnswer('a3', 's_int_metrics', 4200)  // slow (> 3800)
+      ]
+      const metrics = computeAnalyticsMetrics([session], answers, 'all')
+      expect(metrics.sessionPsychometricsList[0].fastPercent).toBe(33) // ~1/3
+      expect(metrics.sessionPsychometricsList[0].mediumPercent).toBe(33)
+      expect(metrics.sessionPsychometricsList[0].slowPercent).toBe(33)
+    })
+
+    it('sequences: 3 respuestas en 3400, 4200, 5500ms → fast=1, medium=1, slow=1', () => {
+      const session: DbSessionRecord = {
+        ...sSequence,
+        id: 's_seq_metrics',
+        targetMode: 'sequences',
+        totalQuestions: 3,
+        correctAnswers: 3,
+        accuracyPercentage: 100,
+        avgResponseTimeMs: 4300,
+        durationSeconds: 30
+      }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('a1', 's_seq_metrics', 3400), // fast (< 3500)
+        makeAnswer('a2', 's_seq_metrics', 4200), // medium (3500-5000)
+        makeAnswer('a3', 's_seq_metrics', 5500)  // slow (> 5000)
+      ]
+      const metrics = computeAnalyticsMetrics([session], answers, 'all')
+      expect(metrics.sessionPsychometricsList[0].fastPercent).toBe(33)
+      expect(metrics.sessionPsychometricsList[0].mediumPercent).toBe(33)
+      expect(metrics.sessionPsychometricsList[0].slowPercent).toBe(33)
+    })
+
+    it('sequences: 10 respuestas con distribución 3-4-3 → fastPercent 30%, mediumPercent 40%, slowPercent 30% (W2)', () => {
+      const session: DbSessionRecord = {
+        ...sSequence,
+        id: 's_seq_10res',
+        targetMode: 'sequences',
+        totalQuestions: 10,
+        correctAnswers: 10,
+        accuracyPercentage: 100,
+        avgResponseTimeMs: 4300,
+        durationSeconds: 30
+      }
+      const answers: DbAnswerRecord[] = [
+        // 3 respuestas fast (< 3500ms)
+        makeAnswer('a1', 's_seq_10res', 3000),
+        makeAnswer('a2', 's_seq_10res', 3100),
+        makeAnswer('a3', 's_seq_10res', 3200),
+        // 4 respuestas medium (3500-5000ms)
+        makeAnswer('a4', 's_seq_10res', 3500),
+        makeAnswer('a5', 's_seq_10res', 3800),
+        makeAnswer('a6', 's_seq_10res', 4000),
+        makeAnswer('a7', 's_seq_10res', 4200),
+        // 3 respuestas slow (> 5000ms)
+        makeAnswer('a8', 's_seq_10res', 5001),
+        makeAnswer('a9', 's_seq_10res', 5500),
+        makeAnswer('a10', 's_seq_10res', 6000)
+      ]
+      const metrics = computeAnalyticsMetrics([session], answers, 'all')
+      expect(metrics.sessionPsychometricsList[0].fastPercent).toBe(30)
+      expect(metrics.sessionPsychometricsList[0].mediumPercent).toBe(40)
+      expect(metrics.sessionPsychometricsList[0].slowPercent).toBe(30)
+    })
+
+    it('repertoire: 3 respuestas en 2400, 3300, 4500ms → fast=1, medium=1, slow=1', () => {
+      const session: DbSessionRecord = {
+        ...sNotePiano,
+        id: 's_rep_metrics',
+        targetMode: 'repertoire',
+        presetName: 'Repertorio Test',
+        totalQuestions: 3,
+        correctAnswers: 3,
+        accuracyPercentage: 100,
+        avgResponseTimeMs: 3400,
+        durationSeconds: 30
+      }
+      const answers: DbAnswerRecord[] = [
+        makeAnswer('a1', 's_rep_metrics', 2400), // fast (< 2500)
+        makeAnswer('a2', 's_rep_metrics', 3300), // medium (2500-4000)
+        makeAnswer('a3', 's_rep_metrics', 4500)  // slow (> 4000)
+      ]
+      const metrics = computeAnalyticsMetrics([session], answers, 'all')
+      expect(metrics.sessionPsychometricsList[0].fastPercent).toBe(33)
+      expect(metrics.sessionPsychometricsList[0].mediumPercent).toBe(33)
+      expect(metrics.sessionPsychometricsList[0].slowPercent).toBe(33)
+    })
+
+    it('agregado multi-modalidad: suma respuestas usando umbrales de cada sesión', () => {
+      const intSession: DbSessionRecord = {
+        ...sInterval,
+        id: 's_int_agg',
+        targetMode: 'intervals',
+        totalQuestions: 2,
+        correctAnswers: 2,
+        accuracyPercentage: 100,
+        avgResponseTimeMs: 2500,
+        durationSeconds: 30
+      }
+      const seqSession: DbSessionRecord = {
+        ...sSequence,
+        id: 's_seq_agg',
+        targetMode: 'sequences',
+        totalQuestions: 2,
+        correctAnswers: 2,
+        accuracyPercentage: 100,
+        avgResponseTimeMs: 4000,
+        durationSeconds: 30
+      }
+      const answers: DbAnswerRecord[] = [
+        // intervals session: 2100ms (fast for intervals), 2500ms (medium for intervals)
+        makeAnswer('a1', 's_int_agg', 2100),
+        makeAnswer('a2', 's_int_agg', 2500),
+        // sequences session: 3000ms (fast for sequences), 4000ms (medium for sequences)
+        makeAnswer('a3', 's_seq_agg', 3000),
+        makeAnswer('a4', 's_seq_agg', 4000)
+      ]
+      const metrics = computeAnalyticsMetrics([intSession, seqSession], answers, 'all')
+      // Aggregate should use per-session thresholds
+      expect(metrics.fastResponsesCount).toBe(2) // 2100 (int) + 3000 (seq)
+      expect(metrics.mediumResponsesCount).toBe(2) // 2500 (int) + 4000 (seq)
+      expect(metrics.slowResponsesCount).toBe(0)
+    })
+  })
 })

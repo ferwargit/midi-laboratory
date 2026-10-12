@@ -114,6 +114,7 @@ describe('SessionsTableTab - Interacciones CRUD, Detalle, Aislamiento y Zoom', (
         onDeleteSession={vi.fn()}
         onDeleteSessions={vi.fn()}
         onCompareSessionsWithAi={vi.fn()}
+        modeFilter="single_note"
       />
     )
 
@@ -136,6 +137,7 @@ describe('SessionsTableTab - Interacciones CRUD, Detalle, Aislamiento y Zoom', (
         onDeleteSession={vi.fn()}
         onDeleteSessions={vi.fn()}
         onCompareSessionsWithAi={vi.fn()}
+        modeFilter="single_note"
       />
     )
 
@@ -163,6 +165,7 @@ describe('SessionsTableTab - Interacciones CRUD, Detalle, Aislamiento y Zoom', (
         onDeleteSessions={vi.fn()}
         onCompareSessionsWithAi={vi.fn()}
         onIsolateSessions={onIsolateSessions}
+        modeFilter="single_note"
       />
     )
 
@@ -193,6 +196,7 @@ describe('SessionsTableTab - Interacciones CRUD, Detalle, Aislamiento y Zoom', (
         onDeleteSession={vi.fn()}
         onDeleteSessions={vi.fn()}
         onCompareSessionsWithAi={vi.fn()}
+        modeFilter="single_note"
       />
     )
 
@@ -219,6 +223,7 @@ describe('SessionsTableTab - Interacciones CRUD, Detalle, Aislamiento y Zoom', (
         onDeleteSession={onDeleteSession}
         onDeleteSessions={vi.fn()}
         onCompareSessionsWithAi={vi.fn()}
+        modeFilter="single_note"
       />
     )
 
@@ -235,5 +240,76 @@ describe('SessionsTableTab - Interacciones CRUD, Detalle, Aislamiento y Zoom', (
     })
 
     expect(onDeleteSession).toHaveBeenCalledWith('s_ui_1')
+  })
+
+  it('debe mostrar la etiqueta FAST_LABEL correcta según modeFilter', () => {
+    const { rerender } = render(
+      <SessionsTableTab
+        displayedList={mockAnalysisList}
+        answers={mockAnswers}
+        sortKey="date"
+        sortDirection="desc"
+        onSortClick={vi.fn()}
+        onLoadPrescription={vi.fn()}
+        onDeleteSession={vi.fn()}
+        onDeleteSessions={vi.fn()}
+        onCompareSessionsWithAi={vi.fn()}
+        modeFilter="single_note"
+      />
+    )
+
+    // single_note: < 1.4s
+    expect(screen.getByText(/Reflejo \(< 1\.4s\)/i)).toBeDefined()
+
+    // intervals: < 2.4s
+    rerender(
+      <SessionsTableTab
+        displayedList={mockAnalysisList}
+        answers={mockAnswers}
+        sortKey="date"
+        sortDirection="desc"
+        onSortClick={vi.fn()}
+        onLoadPrescription={vi.fn()}
+        onDeleteSession={vi.fn()}
+        onDeleteSessions={vi.fn()}
+        onCompareSessionsWithAi={vi.fn()}
+        modeFilter="intervals"
+      />
+    )
+    expect(screen.getByText(/Reflejo \(< 2\.4s\)/i)).toBeDefined()
+
+    // sequences: < 3.5s
+    rerender(
+      <SessionsTableTab
+        displayedList={mockAnalysisList}
+        answers={mockAnswers}
+        sortKey="date"
+        sortDirection="desc"
+        onSortClick={vi.fn()}
+        onLoadPrescription={vi.fn()}
+        onDeleteSession={vi.fn()}
+        onDeleteSessions={vi.fn()}
+        onCompareSessionsWithAi={vi.fn()}
+        modeFilter="sequences"
+      />
+    )
+    expect(screen.getByText(/Reflejo \(< 3\.5s\)/i)).toBeDefined()
+
+    // repertoire: < 2.5s
+    rerender(
+      <SessionsTableTab
+        displayedList={mockAnalysisList}
+        answers={mockAnswers}
+        sortKey="date"
+        sortDirection="desc"
+        onSortClick={vi.fn()}
+        onLoadPrescription={vi.fn()}
+        onDeleteSession={vi.fn()}
+        onDeleteSessions={vi.fn()}
+        onCompareSessionsWithAi={vi.fn()}
+        modeFilter="repertoire"
+      />
+    )
+    expect(screen.getByText(/Reflejo \(< 2\.5s\)/i)).toBeDefined()
   })
 })

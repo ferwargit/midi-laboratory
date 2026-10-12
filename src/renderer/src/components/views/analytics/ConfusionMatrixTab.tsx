@@ -3,7 +3,7 @@ import { BarChart3, Target, Lightbulb, Zap, Brain, Clock } from 'lucide-react'
 import {
   AnalyticsMetrics,
   AnalyticsModeFilter,
-  COGNITIVE_LATENCY_THRESHOLDS,
+  getLatencyThresholds,
   computePitchClassConfusionMatrix,
   PitchClassConfusionCell
 } from '../../../domain/analytics/historyAnalytics'
@@ -43,6 +43,8 @@ export function ConfusionMatrixTab({
   totalFilteredSessions = 0
 }: ConfusionMatrixTabProps): React.ReactElement {
   const [hoveredCell, setHoveredCell] = useState<PitchClassConfusionCell | null>(null)
+
+  const thresholds = getLatencyThresholds(modeFilter)
 
   const confusion2D = useMemo(() => {
     return computePitchClassConfusionMatrix(answers)
@@ -219,7 +221,7 @@ export function ConfusionMatrixTab({
               <div className="flex justify-between text-[11px] mb-1">
                 <Zap className="w-4 h-4 text-cyan-400" />
                 <span className="text-emerald-400 font-semibold">
-                  Reflejo Inmediato ({COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})
+                  Reflejo Inmediato ({thresholds.FAST_LABEL})
                 </span>
                 <span className="font-bold text-zinc-300">
                   {metrics.fastResponsesCount} respuestas
@@ -239,7 +241,7 @@ export function ConfusionMatrixTab({
               <div className="flex justify-between text-[11px] mb-1">
                 <Brain className="w-4 h-4 text-amber-400" />
                 <span className="text-amber-400 font-semibold">
-                  Deducción Activa ({COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL})
+                  Deducción Activa ({thresholds.MEDIUM_LABEL})
                 </span>
                 <span className="font-bold text-zinc-300">
                   {metrics.mediumResponsesCount} respuestas
@@ -259,7 +261,7 @@ export function ConfusionMatrixTab({
               <div className="flex justify-between text-[11px] mb-1">
                 <Clock className="w-4 h-4 text-slate-400" />
                 <span className="text-rose-400 font-semibold">
-                  ⏳ Inseguridad ({COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL})
+                  ⏳ Inseguridad ({thresholds.SLOW_LABEL})
                 </span>
                 <span className="font-bold text-zinc-300">
                   {metrics.slowResponsesCount} respuestas

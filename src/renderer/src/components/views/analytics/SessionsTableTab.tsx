@@ -3,9 +3,10 @@ import { Search, Play, Trash2, X } from 'lucide-react'
 import {
   DetailedSessionAnalysis,
   reconstructSessionConfig,
-  COGNITIVE_LATENCY_THRESHOLDS,
+  getLatencyThresholds,
   MASTERY_THRESHOLDS,
-  ISI_THRESHOLDS
+  ISI_THRESHOLDS,
+  AnalyticsModeFilter
 } from '../../../domain/analytics/historyAnalytics'
 import { DbAnswerRecord, DbSessionRecord } from '../../../domain/database/types'
 import { INSTRUMENT_CATALOG } from '../../../domain/music/instruments'
@@ -32,6 +33,7 @@ interface SessionsTableTabProps {
   onIsolateSessions?: (sessionIds: string[]) => void
   isIsolatedMode?: boolean
   onClearIsolation?: () => void
+  modeFilter: AnalyticsModeFilter
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -53,8 +55,11 @@ export function SessionsTableTab({
   onCompareSessionsWithAi,
   onIsolateSessions,
   isIsolatedMode = false,
-  onClearIsolation
+  onClearIsolation,
+  modeFilter
 }: SessionsTableTabProps): React.ReactElement {
+  const thresholds = getLatencyThresholds(modeFilter)
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [sessionToDeleteSingle, setSessionToDeleteSingle] = useState<string | null>(null)
@@ -355,7 +360,7 @@ export function SessionsTableTab({
                   >
                     <div className="flex items-center justify-center">
                       <PedagogicalTooltip conceptId="cognitive_latency">
-                        <span>Reflejo ({COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})</span>
+                        <span>Reflejo ({thresholds.FAST_LABEL})</span>
                       </PedagogicalTooltip>
                       {renderSortIndicator('fastPercent')}
                     </div>

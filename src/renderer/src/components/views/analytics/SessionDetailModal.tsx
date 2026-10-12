@@ -8,7 +8,7 @@ import {
   calculateSessionCPI,
   resolveNominalPoolSize,
   resolveSessionInputMethod,
-  COGNITIVE_LATENCY_THRESHOLDS,
+  getLatencyThresholds,
   MASTERY_THRESHOLDS
 } from '../../../domain/analytics/historyAnalytics'
 import { PianoKeyboard } from '../../trainer/PianoKeyboard'
@@ -107,6 +107,11 @@ export function SessionDetailModal({
   const notePerformances = useMemo(() => {
     return computeNotePerformancesFromAnswers(sessionAnswers)
   }, [sessionAnswers])
+
+  const thresholds = useMemo(() => {
+    if (!session) return getLatencyThresholds()
+    return getLatencyThresholds(session.targetMode)
+  }, [session])
 
   if (!isOpen || !session) return null
 
@@ -346,14 +351,14 @@ export function SessionDetailModal({
                         {(maxTime / 1000).toFixed(1)}s
                       </text>
 
-                      {/* Umbral de Reflejo Inmediato 1.4s */}
-                      {COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS <= maxTime && (
+                      {/* Umbral de Reflejo Inmediato (por modalidad) */}
+                      {thresholds.FAST_MAX_MS <= maxTime && (
                         <>
                           <line
                             x1={xStart - 15}
-                            y1={getY(COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS)}
+                            y1={getY(thresholds.FAST_MAX_MS)}
                             x2={xEnd + 10}
-                            y2={getY(COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS)}
+                            y2={getY(thresholds.FAST_MAX_MS)}
                             stroke="#10b981"
                             strokeWidth="1.5"
                             strokeDasharray="4 4"
@@ -361,13 +366,13 @@ export function SessionDetailModal({
                           />
                           <text
                             x="5"
-                            y={getY(COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) + 3}
+                            y={getY(thresholds.FAST_MAX_MS) + 3}
                             fill="#34d399"
                             fontSize={9}
                             fontFamily="monospace"
                             fontWeight="bold"
                           >
-                            1.4s
+                            {thresholds.FAST_LABEL}
                           </text>
                         </>
                       )}

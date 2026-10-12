@@ -1,6 +1,6 @@
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 import { midiNoteToName } from '../music/noteUtils'
-import { COGNITIVE_LATENCY_THRESHOLDS } from './thresholds'
+import { getLatencyThresholds } from './thresholds'
 import { QuestionTelemetryPoint, SessionTimelineAnalysis } from './types'
 
 export function analyzeSessionTimeline(
@@ -9,6 +9,8 @@ export function analyzeSessionTimeline(
 ): SessionTimelineAnalysis {
   const sorted = [...sessionAnswers].sort((a, b) => a.questionIndex - b.questionIndex)
   const total = sorted.length
+
+  const thresholds = getLatencyThresholds(session.targetMode)
 
   const activeNotes = Array.from(new Set(sorted.map((a) => a.expectedNote))).sort((a, b) => a - b)
   let correctCount = 0
@@ -29,7 +31,7 @@ export function analyzeSessionTimeline(
     else errorCount++
 
     totalLatency += a.responseTimeMs
-    if (a.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) fastCount++
+    if (a.responseTimeMs < thresholds.FAST_MAX_MS) fastCount++
 
     const preListens = a.preAnswerListens || 1
     totalPreListens += preListens

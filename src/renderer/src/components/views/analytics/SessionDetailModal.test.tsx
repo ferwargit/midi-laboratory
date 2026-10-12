@@ -6,7 +6,8 @@ import { DbSessionRecord, DbAnswerRecord } from '../../../domain/database/types'
 import {
   calculateSessionCPI,
   resolveNominalPoolSize,
-  resolveSessionInputMethod
+  resolveSessionInputMethod,
+  getLatencyThresholds
 } from '../../../domain/analytics/historyAnalytics'
 
 const session: DbSessionRecord = {
@@ -244,5 +245,37 @@ describe('SessionDetailModal - Coherencia Score CPI con la tabla (F5-09)', () =>
     // Verificar que NO es el valor divergente de la fórmula local (correctAnswers * 12 + totalQuestions * 2)
     const divergentValue = session.correctAnswers * 12 + session.totalQuestions * 2
     expect(displayedValue).not.toBe(divergentValue)
+  })
+})
+
+describe('SessionDetailModal - Umbrales de Latencia por Modalidad en Gráfico SVG', () => {
+  it('intervals: umbral FAST_MAX_MS = 2400ms, FAST_LABEL = < 2.4s', () => {
+    const thresholds = getLatencyThresholds('intervals')
+    expect(thresholds.FAST_MAX_MS).toBe(2400)
+    expect(thresholds.FAST_LABEL).toBe('< 2.4s')
+  })
+
+  it('sequences: umbral FAST_MAX_MS = 3500ms, FAST_LABEL = < 3.5s', () => {
+    const thresholds = getLatencyThresholds('sequences')
+    expect(thresholds.FAST_MAX_MS).toBe(3500)
+    expect(thresholds.FAST_LABEL).toBe('< 3.5s')
+  })
+
+  it('repertoire: umbral FAST_MAX_MS = 2500ms, FAST_LABEL = < 2.5s', () => {
+    const thresholds = getLatencyThresholds('repertoire')
+    expect(thresholds.FAST_MAX_MS).toBe(2500)
+    expect(thresholds.FAST_LABEL).toBe('< 2.5s')
+  })
+
+  it('single_note (fallback): umbral FAST_MAX_MS = 1400ms, FAST_LABEL = < 1.4s', () => {
+    const thresholds = getLatencyThresholds('single_note')
+    expect(thresholds.FAST_MAX_MS).toBe(1400)
+    expect(thresholds.FAST_LABEL).toBe('< 1.4s')
+  })
+
+  it('sin targetMode: debe hacer fallback a single_note (1400ms)', () => {
+    const thresholds = getLatencyThresholds(undefined as any)
+    expect(thresholds.FAST_MAX_MS).toBe(1400)
+    expect(thresholds.FAST_LABEL).toBe('< 1.4s')
   })
 })
