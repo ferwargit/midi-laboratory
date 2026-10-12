@@ -52,6 +52,10 @@ export function resolveSessionFormat(session: DbSessionRecord): SessionFormatInf
  * no aplicaba piso. Se unifica la resolución por regex numérica exacta y se
  * aplica `Math.max(2, ...)` a toda rama derivada, garantizando
  * `poolSize >= 2` (y por tanto `chanceBaseline <= 0.5`) aguas abajo.
+ *
+ * Fix pool-size-filter-for-intervals-and-presets: añadido soporte para
+ * nomenclatura de intervalos "Intervalos (N activos)" y presets nivel 1.x
+ * (contraste, referencia, cromático completo).
  */
 export function resolveNominalPoolSize(
   session: DbSessionRecord,
@@ -59,6 +63,25 @@ export function resolveNominalPoolSize(
 ): number {
   const name = (session.presetName || '').toLowerCase()
 
+  // 1. Regex inclusiva para capturar pool numérico entre paréntesis:
+  // "Intervalos (6 activos)" → 6, "Intervalos (4 notas)" → 4, etc.
+  const poolMatch = name.match(/\((\d+)\s*(?:activos|notas|tonos|intervalos)?\)/i)
+  if (poolMatch) {
+    return Math.max(2, parseInt(poolMatch[1], 10))
+  }
+
+  // 2. Presets de intervalos nivel 1.x (DEBEN ir ANTES del match genérico 'nivel')
+  if (name.includes('nivel 1.0') || name.includes('contraste')) return 2
+  if (name.includes('nivel 1.1') || name.includes('nivel 1.2') || name.includes('referencia'))
+    return 5
+  if (
+    name.includes('nivel 1.3') ||
+    name.includes('nivel 1.4') ||
+    name.includes('cromático completo')
+  )
+    return 12
+
+  // 3. Niveles enteros 1/2/3/4 (existente)
   const match = name.match(/nivel\s*(\d+)/i)
   if (match) {
     const level = parseInt(match[1], 10)
@@ -68,13 +91,16 @@ export function resolveNominalPoolSize(
     if (level === 4 || name.includes('cromático')) return 13
   }
 
+  // 4. Pentatónica (existente)
   if (name.includes('pentatónica')) return 6
 
+  // 5. Notas personalizadas (existente)
   const custom = name.match(/notas\s*(?:personalizadas)?\s*\((\d+)\)/i)
   if (custom) {
     return Math.max(2, parseInt(custom[1], 10))
   }
 
+  // 6. Default: empiricalUniqueCount con piso 2
   return Math.max(2, empiricalUniqueCount)
 }
 

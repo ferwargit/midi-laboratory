@@ -318,6 +318,76 @@ describe('sessionFilters - filterSessionsAdvanced', () => {
     })
   })
 
+  describe('6. Carga / Tamaño de Pool - Intervalos', () => {
+    const sessions = [
+      makeSession({
+        id: 'pool_int_6',
+        strategyId: 'intervals_v1',
+        presetName: 'Intervalos (6 activos)'
+      }),
+      makeSession({
+        id: 'pool_int_4',
+        strategyId: 'intervals_v1',
+        presetName: 'Intervalos (4 activos)'
+      }),
+      makeSession({
+        id: 'pool_int_12',
+        strategyId: 'intervals_v1',
+        presetName: 'Intervalos (12 activos)'
+      })
+    ]
+
+    const answers: DbAnswerRecord[] = [
+      // pool_int_6: 6 notas únicas
+      makeAnswer({ id: 'a_int6_1', sessionId: 'pool_int_6', playedNote: 60 }),
+      makeAnswer({ id: 'a_int6_2', sessionId: 'pool_int_6', playedNote: 62 }),
+      makeAnswer({ id: 'a_int6_3', sessionId: 'pool_int_6', playedNote: 64 }),
+      makeAnswer({ id: 'a_int6_4', sessionId: 'pool_int_6', playedNote: 65 }),
+      makeAnswer({ id: 'a_int6_5', sessionId: 'pool_int_6', playedNote: 67 }),
+      makeAnswer({ id: 'a_int6_6', sessionId: 'pool_int_6', playedNote: 69 }),
+      // pool_int_4: 4 notas únicas
+      makeAnswer({ id: 'a_int4_1', sessionId: 'pool_int_4', playedNote: 60 }),
+      makeAnswer({ id: 'a_int4_2', sessionId: 'pool_int_4', playedNote: 62 }),
+      makeAnswer({ id: 'a_int4_3', sessionId: 'pool_int_4', playedNote: 64 }),
+      makeAnswer({ id: 'a_int4_4', sessionId: 'pool_int_4', playedNote: 65 }),
+      // pool_int_12: 12 notas únicas (cromático)
+      makeAnswer({ id: 'a_int12_1', sessionId: 'pool_int_12', playedNote: 60 }),
+      makeAnswer({ id: 'a_int12_2', sessionId: 'pool_int_12', playedNote: 61 }),
+      makeAnswer({ id: 'a_int12_3', sessionId: 'pool_int_12', playedNote: 62 }),
+      makeAnswer({ id: 'a_int12_4', sessionId: 'pool_int_12', playedNote: 63 }),
+      makeAnswer({ id: 'a_int12_5', sessionId: 'pool_int_12', playedNote: 64 }),
+      makeAnswer({ id: 'a_int12_6', sessionId: 'pool_int_12', playedNote: 65 }),
+      makeAnswer({ id: 'a_int12_7', sessionId: 'pool_int_12', playedNote: 66 }),
+      makeAnswer({ id: 'a_int12_8', sessionId: 'pool_int_12', playedNote: 67 }),
+      makeAnswer({ id: 'a_int12_9', sessionId: 'pool_int_12', playedNote: 68 }),
+      makeAnswer({ id: 'a_int12_10', sessionId: 'pool_int_12', playedNote: 69 }),
+      makeAnswer({ id: 'a_int12_11', sessionId: 'pool_int_12', playedNote: 70 }),
+      makeAnswer({ id: 'a_int12_12', sessionId: 'pool_int_12', playedNote: 71 })
+    ]
+
+    it('poolSizeFilter "6" retorna solo la sesión Intervalos (6 activos)', () => {
+      const out = filterSessionsAdvanced(sessions, { mode: 'all', poolSizeFilter: '6' }, answers)
+      expect(out.map((s) => s.id)).toEqual(['pool_int_6'])
+    })
+
+    it('poolSizeFilter "4" retorna solo la sesión Intervalos (4 activos)', () => {
+      const out = filterSessionsAdvanced(sessions, { mode: 'all', poolSizeFilter: '4' }, answers)
+      expect(out.map((s) => s.id)).toEqual(['pool_int_4'])
+    })
+
+    it('poolSizeFilter "12" retorna solo la sesión Intervalos (12 activos)', () => {
+      const out = filterSessionsAdvanced(sessions, { mode: 'all', poolSizeFilter: '12' }, answers)
+      expect(out.map((s) => s.id)).toEqual(['pool_int_12'])
+    })
+
+    it('sin answers, poolSizeFilter usa fallback (puede devolver 0 sesiones si no matchea)', () => {
+      // Sin answers, empiricalUniqueCount = 0 → default pool 2
+      // Estas sesiones tienen pool 6, 4, 12 → no matchean pool 2
+      const out = filterSessionsAdvanced(sessions, { mode: 'all', poolSizeFilter: '2' })
+      expect(out).toHaveLength(0)
+    })
+  })
+
   describe('7. Nivel de Dominio', () => {
     const sessions = [
       makeSession({ id: 'dom_90', accuracyPercentage: 90 }),

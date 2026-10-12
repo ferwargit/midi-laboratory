@@ -27,6 +27,22 @@ export function filterSessionsAdvanced(
   // cuando estas no se proporcionan, según la Decisión 2 de design.md.
   const hasAnswers = answers.length > 0
 
+  // Calcular empiricalUniqueCount por sesión (notas únicas respondidas) para
+  // consistencia entre la columna visual CARGA (POOL) y el predicado de filtro.
+  // Fix pool-size-filter-for-intervals-and-presets.
+  const empiricalUniqueCountMap = new Map<string, number>()
+  if (hasAnswers) {
+    const sessionAnswers = new Map<string, Set<number>>()
+    for (const ans of answers) {
+      const set = sessionAnswers.get(ans.sessionId) || new Set<number>()
+      set.add(ans.playedNote)
+      sessionAnswers.set(ans.sessionId, set)
+    }
+    for (const [sessionId, noteSet] of sessionAnswers) {
+      empiricalUniqueCountMap.set(sessionId, noteSet.size)
+    }
+  }
+
   return sessions.filter((s) => {
     // 1. Modalidad Estricta
     if (filters.mode === 'single_note' && !isSingleNoteSession(s)) return false
@@ -114,7 +130,8 @@ export function filterSessionsAdvanced(
     // 6. Carga / Tamaño de Pool
     if (filters.poolSizeFilter && filters.poolSizeFilter !== 'all') {
       const targetPool = parseInt(filters.poolSizeFilter, 10)
-      const nominalPool = resolveNominalPoolSize(s, 0)
+      const empiricalCount = empiricalUniqueCountMap.get(s.id) || 0
+      const nominalPool = resolveNominalPoolSize(s, empiricalCount)
       if (nominalPool !== targetPool) return false
     }
 
