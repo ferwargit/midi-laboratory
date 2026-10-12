@@ -3,6 +3,11 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { SessionDetailModal } from './SessionDetailModal'
 import { clampChartTooltipLeftEdge, CHART_TOOLTIP_WIDTH } from './chartTooltipPlacement'
 import { DbSessionRecord, DbAnswerRecord } from '../../../domain/database/types'
+import {
+  calculateSessionCPI,
+  resolveNominalPoolSize,
+  resolveSessionInputMethod
+} from '../../../domain/analytics/historyAnalytics'
 
 const session: DbSessionRecord = {
   id: 'session-1',
@@ -153,5 +158,91 @@ describe('clampChartTooltipLeftEdge - Contención horizontal (F5-09)', () => {
 
     expect(left).toBe(8)
     expect(left).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('SessionDetailModal - Coherencia Score CPI con la tabla (F5-09)', () => {
+  // Sesión de ejemplo: 'Nivel 2 (C a G)', 60 preguntas en 180s, 97% precisión, Roland FP-8
+  const session: DbSessionRecord = {
+    id: 'session-cpi-test',
+    createdAt: '2026-09-20T12:00:00.000Z',
+    strategyId: 'note-mastery',
+    instrumentId: 'piano',
+    presetName: 'Nivel 2 (C a G)',
+    totalQuestions: 60,
+    correctAnswers: 58,
+    accuracyPercentage: 97,
+    avgResponseTimeMs: 1000,
+    durationSeconds: 180,
+    targetMode: 'single_note'
+  }
+
+  function buildHardwareAnswers(count: number): DbAnswerRecord[] {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `answer-${i}`,
+      sessionId: session.id,
+      questionIndex: i + 1,
+      expectedNote: 60 + (i % 5),
+      playedNote: 60 + (i % 5),
+      isCorrect: i < 58,
+      semitoneDistance: 0,
+      responseTimeMs: 900 + (i % 10) * 100,
+      velocity: 80,
+      reasonTelemetry: 'manual',
+      createdAt: '2026-09-20T12:00:00.000Z',
+      inputSource: 'midi_hardware',
+      preAnswerListens: 1,
+      postErrorListens: 0,
+      postErrorDwellTimeMs: 0
+    }))
+  }
+
+  it('el badge de cabecera Score CPI muestra el valor canónico de calculateSessionCPI (sin discrepancia con la tabla)', () => {
+    const answers = buildHardwareAnswers(60)
+
+    // Calcular el CPI canónico con los mismos parámetros que la tabla
+    const uniqueExpected = new Set(answers.map((a) => a.expectedNote))
+    const poolSize = resolveNominalPoolSize(session, uniqueExpected.size)
+    const chanceBaseline = 1 / poolSize
+    const rawAccuracy = session.accuracyPercentage / 100
+    const normalizedAccuracy =
+      rawAccuracy <= chanceBaseline
+        ? 0
+        : Math.round(((rawAccuracy - chanceBaseline) / (1 - chanceBaseline)) * 100)
+    const entropyBits = Number(Math.log2(poolSize).toFixed(2))
+    const responsesPerMinute = Number(
+      ((session.totalQuestions / Math.max(1, session.durationSeconds)) * 60).toFixed(1)
+    )
+    const inputMethod = resolveSessionInputMethod(session, answers)
+    const expectedCpi = calculateSessionCPI(
+      normalizedAccuracy,
+      entropyBits,
+      responsesPerMinute,
+      session.avgResponseTimeMs,
+      inputMethod
+    )
+
+    render(
+      <SessionDetailModal
+        session={session}
+        answers={answers}
+        isOpen={true}
+        onClose={noop}
+        onReTest={noop}
+      />
+    )
+
+    // Buscar el badge de Score CPI en la cabecera
+    const cpiBadge = screen.getByText(/Score CPI:/)
+    expect(cpiBadge).not.toBeNull()
+
+    // El valor mostrado debe ser exactamente el canónico (no la fórmula local divergente)
+    const cpiText = cpiBadge.textContent || ''
+    const displayedValue = parseInt(cpiText.replace(/[^0-9]/g, ''), 10)
+
+    expect(displayedValue).toBe(expectedCpi)
+    // Verificar que NO es el valor divergente de la fórmula local (correctAnswers * 12 + totalQuestions * 2)
+    const divergentValue = session.correctAnswers * 12 + session.totalQuestions * 2
+    expect(displayedValue).not.toBe(divergentValue)
   })
 })

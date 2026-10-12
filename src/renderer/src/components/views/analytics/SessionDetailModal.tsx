@@ -5,6 +5,9 @@ import {
   analyzeSessionTimeline,
   computeNotePerformancesFromAnswers,
   reconstructSessionConfig,
+  calculateSessionCPI,
+  resolveNominalPoolSize,
+  resolveSessionInputMethod,
   COGNITIVE_LATENCY_THRESHOLDS,
   MASTERY_THRESHOLDS
 } from '../../../domain/analytics/historyAnalytics'
@@ -74,6 +77,31 @@ export function SessionDetailModal({
   const analysis = useMemo(() => {
     if (!session || sessionAnswers.length === 0) return null
     return analyzeSessionTimeline(session, sessionAnswers)
+  }, [session, sessionAnswers])
+
+  const cpiParams = useMemo(() => {
+    if (!session || sessionAnswers.length === 0) return null
+    const uniqueExpected = new Set(sessionAnswers.map((a) => a.expectedNote))
+    const poolSize = resolveNominalPoolSize(session, uniqueExpected.size)
+    const chanceBaseline = 1 / poolSize
+    const rawAccuracy = session.accuracyPercentage / 100
+    const normalizedAccuracy =
+      rawAccuracy <= chanceBaseline
+        ? 0
+        : Math.round(((rawAccuracy - chanceBaseline) / (1 - chanceBaseline)) * 100)
+    const entropyBits = Number(Math.log2(poolSize).toFixed(2))
+    const responsesPerMinute = Number(
+      ((session.totalQuestions / Math.max(1, session.durationSeconds)) * 60).toFixed(1)
+    )
+    const inputMethod = resolveSessionInputMethod(session, sessionAnswers)
+    const cpiScore = calculateSessionCPI(
+      normalizedAccuracy,
+      entropyBits,
+      responsesPerMinute,
+      session.avgResponseTimeMs,
+      inputMethod
+    )
+    return { normalizedAccuracy, entropyBits, responsesPerMinute, inputMethod, cpiScore }
   }, [session, sessionAnswers])
 
   const notePerformances = useMemo(() => {
@@ -149,10 +177,12 @@ export function SessionDetailModal({
                 </span>
                 <span className="px-2.5 py-0.5 rounded-lg bg-purple-950/70 border border-purple-800 text-xs font-mono text-purple-300 font-bold">
                   Score CPI:{' '}
-                  {analysis.session.accuracyPercentage >= MASTERY_THRESHOLDS.MASTERED_MIN
+                  {cpiParams && cpiParams.cpiScore >= 750
                     ? '🌟'
-                    : '🔥'}{' '}
-                  {analysis.session.correctAnswers * 12 + analysis.totalQuestions * 2} pts
+                    : cpiParams && cpiParams.cpiScore >= 450
+                      ? '🔥'
+                      : ''}{' '}
+                  {cpiParams ? cpiParams.cpiScore : 0} pts
                 </span>
               </div>
               <span className="text-xs text-zinc-400 font-mono mt-1 block">
