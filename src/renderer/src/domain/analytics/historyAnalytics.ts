@@ -150,7 +150,8 @@ export function computeAnalyticsMetrics(
       entropyBits,
       responsesPerMinute,
       session.avgResponseTimeMs,
-      inputMethod
+      inputMethod,
+      sessionMode
     )
 
     return {

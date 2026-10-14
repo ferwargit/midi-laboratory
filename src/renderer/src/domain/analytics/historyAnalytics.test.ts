@@ -390,6 +390,30 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
     })
   })
 
+  describe('calculateSessionCPI - Escalado por Modalidad', () => {
+    it('debe mantener retrocompatibilidad exacta con single_note (sin modo o modo explícito)', () => {
+      // Valor esperado con los parámetros originales (single_note)
+      const expectedScore = calculateSessionCPI(90, 2.0, 20, 1000, 'hardware', 'single_note')
+      
+      // Sin modo → debe usar single_note por defecto
+      const defaultScore = calculateSessionCPI(90, 2.0, 20, 1000, 'hardware')
+      
+      // Con modo explícito 'single_note' → debe coincidir
+      const explicitScore = calculateSessionCPI(90, 2.0, 20, 1000, 'hardware', 'single_note')
+      
+      expect(defaultScore).toBe(expectedScore)
+      expect(explicitScore).toBe(expectedScore)
+    })
+
+    it('debe corregir penalización matemática en intervalos (CPI > 800 con 2100ms y 15.3 RPM)', () => {
+      // Escenario del problema: 90% precisión, 2 bits entropía, 15.3 RPM, 2100ms, hardware, intervals
+      // Antes: speedFactor ~ 0.72 → CPI ~ 356
+      // Ahora: con config intervals (2.4s, 10 RPM) → speedFactor ~ 1.5 → CPI > 800
+      const cpi = calculateSessionCPI(90, 2.0, 15.3, 2100, 'hardware', 'intervals')
+      expect(cpi).toBeGreaterThan(800)
+    })
+  })
+
   describe('Filtros Avanzados y Clasificadores', () => {
     it('filterSessionsByMode segmenta sin colisiones', () => {
       const all = [sNotePiano, sNoteFlute, sInterval, sSequence]

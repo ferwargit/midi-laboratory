@@ -9,7 +9,10 @@ import {
   resolveNominalPoolSize,
   resolveSessionInputMethod,
   getLatencyThresholds,
-  MASTERY_THRESHOLDS
+  MASTERY_THRESHOLDS,
+  isIntervalSession,
+  isSequenceSession,
+  isRepertoireSession
 } from '../../../domain/analytics/historyAnalytics'
 import { PianoKeyboard } from '../../trainer/PianoKeyboard'
 import { generateMidiRange } from '../../../domain/music/noteUtils'
@@ -94,12 +97,25 @@ export function SessionDetailModal({
       ((session.totalQuestions / Math.max(1, session.durationSeconds)) * 60).toFixed(1)
     )
     const inputMethod = resolveSessionInputMethod(session, sessionAnswers)
+    
+    // Resolver sessionMode igual que en historyAnalytics.ts
+    const sessionMode =
+      session.targetMode ||
+      (isIntervalSession(session)
+        ? 'intervals'
+        : isSequenceSession(session)
+          ? 'sequences'
+          : isRepertoireSession(session)
+            ? 'repertoire'
+            : 'single_note')
+    
     const cpiScore = calculateSessionCPI(
       normalizedAccuracy,
       entropyBits,
       responsesPerMinute,
       session.avgResponseTimeMs,
-      inputMethod
+      inputMethod,
+      sessionMode
     )
     return { normalizedAccuracy, entropyBits, responsesPerMinute, inputMethod, cpiScore }
   }, [session, sessionAnswers])

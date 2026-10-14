@@ -69,3 +69,38 @@ export const ISI_THRESHOLDS = {
 } as const
 
 export const BIAS_DOMINANCE_RATIO = 1.4 as const
+
+/**
+ * Configuración canónica para la normalización del Score CPI por modalidad.
+ * Cada modalidad define su propia línea base de velocidad refleja (latencia objetivo + cadencia objetivo),
+ * eliminando la penalización artificial de comparar todas las modalidades contra la base de Nota Individual.
+ */
+export interface CPIModalityConfig {
+  targetLatencySec: number
+  targetRpm: number
+}
+
+export type CPIModalityKey = ModalityKey | 'global'
+
+export const CPI_CONFIG_BY_MODE: Record<CPIModalityKey, CPIModalityConfig> = {
+  single_note: {
+    targetLatencySec: 1.5,
+    targetRpm: 15.0
+  },
+  intervals: {
+    targetLatencySec: 2.4,
+    targetRpm: 10.0
+  },
+  sequences: {
+    targetLatencySec: 3.5,
+    targetRpm: 7.0
+  },
+  repertoire: {
+    targetLatencySec: 2.5,
+    targetRpm: 8.0
+  },
+  global: {
+    targetLatencySec: 1.5,
+    targetRpm: 15.0
+  }
+} as const
