@@ -97,7 +97,7 @@ export function SessionDetailModal({
       ((session.totalQuestions / Math.max(1, session.durationSeconds)) * 60).toFixed(1)
     )
     const inputMethod = resolveSessionInputMethod(session, sessionAnswers)
-    
+
     // Resolver sessionMode igual que en historyAnalytics.ts
     const sessionMode =
       session.targetMode ||
@@ -108,7 +108,7 @@ export function SessionDetailModal({
           : isRepertoireSession(session)
             ? 'repertoire'
             : 'single_note')
-    
+
     const cpiScore = calculateSessionCPI(
       normalizedAccuracy,
       entropyBits,
@@ -133,7 +133,7 @@ export function SessionDetailModal({
 
   if (!analysis) {
     return createPortal(
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
+      <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
         <div
           role="dialog"
           aria-modal="true"
@@ -164,7 +164,14 @@ export function SessionDetailModal({
 
   const questions = analysis.questions
   const totalQ = questions.length
-  const maxTime = Math.max(3500, ...questions.map((q) => q.responseTimeMs))
+
+  // Headroom del 15%: garantiza un margen superior sobre la respuesta más lenta para
+  // que el punto más alto no toque yTop y los marcadores '👂 xN' respiren por debajo.
+  // El redondeo a múltiplos de 500ms produce una etiqueta de eje graduada limpia.
+  const minBaseline = Math.max(3500, Math.ceil((thresholds.FAST_MAX_MS * 1.4) / 500) * 500)
+  const maxResponse = Math.max(...questions.map((q) => q.responseTimeMs), 0)
+  const targetTime = Math.max(minBaseline, maxResponse * 1.15)
+  const maxTime = Math.ceil(targetTime / 500) * 500
 
   const handleReTestClick = (): void => {
     const config = reconstructSessionConfig(session, answers)
@@ -175,7 +182,7 @@ export function SessionDetailModal({
   const tickStep = totalQ <= 20 ? 1 : totalQ <= 40 ? 2 : totalQ <= 70 ? 5 : 10
 
   const modalContent = (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-9999 flex items-center justify-center bg-black/85 backdrop-blur-lg p-3 md:p-6 animate-in fade-in duration-150">
       <div
         role="dialog"
         aria-modal="true"
@@ -363,7 +370,14 @@ export function SessionDetailModal({
                         stroke="#27272a"
                         strokeWidth="1"
                       />
-                      <text x="5" y={yTop + 3} fill="#71717a" fontSize={9} fontFamily="monospace">
+                      <text
+                        x="5"
+                        y={yTop + 3}
+                        data-testid="session-timeline-axis-top-label"
+                        fill="#71717a"
+                        fontSize={9}
+                        fontFamily="monospace"
+                      >
                         {(maxTime / 1000).toFixed(1)}s
                       </text>
 
@@ -496,6 +510,7 @@ export function SessionDetailModal({
                                     cx={p.x}
                                     cy={p.y}
                                     r={totalQ > 50 ? 3.5 : 4.5}
+                                    data-testid={`session-timeline-point-${p.idx}`}
                                     fill={color}
                                     stroke="#09090b"
                                     strokeWidth={1.5}
@@ -564,7 +579,7 @@ export function SessionDetailModal({
                     top: '-15px',
                     transform: 'translateY(-100%)'
                   }}
-                  className="p-3 bg-zinc-950/95 border border-sky-400 rounded-xl shadow-2xl text-xs font-mono space-y-1.5 z-30 pointer-events-none w-[260px]"
+                  className="p-3 bg-zinc-950/95 border border-sky-400 rounded-xl shadow-2xl text-xs font-mono space-y-1.5 z-30 pointer-events-none w-65"
                 >
                   <div className="font-bold text-zinc-100 flex justify-between gap-4 border-b border-zinc-800 pb-1">
                     <span>Pregunta #{hoveredPoint.qIndex}</span>

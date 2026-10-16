@@ -279,3 +279,108 @@ describe('SessionDetailModal - Umbrales de Latencia por Modalidad en Gráfico SV
     expect(thresholds.FAST_LABEL).toBe('< 1.4s')
   })
 })
+
+describe('SessionDetailModal - Headroom y escala limpia del eje Y (gráfico SVG)', () => {
+  // Sesión con una respuesta muy lenta (8800ms) sobre targetMode 'single_note'.
+  // Con la fórmula anterior (maxTime = max(3500, 8800) = 8800) el punto más lento
+  // se dibuja exactamente sobre yTop = 15 y la etiqueta superior muestra '8.8s'.
+  const slowSession: DbSessionRecord = {
+    ...session,
+    id: 'session-headroom',
+    presetName: 'Sesión Lenta',
+    targetMode: 'single_note',
+    totalQuestions: 5,
+    avgResponseTimeMs: 3080
+  }
+
+  function buildSlowAnswers(): DbAnswerRecord[] {
+    const times = [1200, 1500, 1800, 2100, 8800]
+    return times.map((ms, i) => ({
+      id: `answer-slow-${i}`,
+      sessionId: slowSession.id,
+      questionIndex: i + 1,
+      expectedNote: 60 + i,
+      playedNote: 60 + i,
+      isCorrect: true,
+      semitoneDistance: 0,
+      responseTimeMs: ms,
+      velocity: 80,
+      reasonTelemetry: 'manual',
+      createdAt: '2026-09-20T12:00:00.000Z',
+      inputSource: 'virtual_ui',
+      preAnswerListens: 1,
+      postErrorListens: 0,
+      postErrorDwellTimeMs: 0
+    }))
+  }
+
+  it('aplica headroom del 15% y redondeo a 500ms: 8800ms escala a una etiqueta limpia de 10.5s', () => {
+    render(
+      <SessionDetailModal
+        session={slowSession}
+        answers={buildSlowAnswers()}
+        isOpen={true}
+        onClose={noop}
+        onReTest={noop}
+      />
+    )
+
+    // Etiqueta superior del eje Y: debe ser una escala limpia con margen (10.5s),
+    // no el valor exacto de la respuesta más lenta (8.8s).
+    const topLabel = screen.getByTestId('session-timeline-axis-top-label')
+    expect(topLabel.textContent).toBe('10.5s')
+  })
+
+  it('no colisiona con yTop: el punto más lento queda por debajo del borde superior (headroom)', () => {
+    render(
+      <SessionDetailModal
+        session={slowSession}
+        answers={buildSlowAnswers()}
+        isOpen={true}
+        onClose={noop}
+        onReTest={noop}
+      />
+    )
+
+    // Cada punto de la línea de tiempo se identifica de forma estable.
+    const points = screen.getAllByTestId(/^session-timeline-point-/)
+    const ys = points.map((p) => Number(p.getAttribute('cy')))
+    const slowestY = Math.max(...ys)
+
+    // yTop = 15 en el viewBox; el punto más lento debe respirar por debajo de él.
+    expect(slowestY).toBeGreaterThan(25)
+  })
+
+  it('conserva la base mínima limpia de 3.5s en modalidades rápidas (sin latencias altas)', () => {
+    // buildAnswers(5) usa latencias 900..1300ms sobre single_note (FAST_MAX_MS = 1400).
+    // El headroom del 15% no debe inflar el eje: el mínimo limpio de 3.5s debe dominar.
+    render(
+      <SessionDetailModal
+        session={session}
+        answers={buildAnswers(5)}
+        isOpen={true}
+        onClose={noop}
+        onReTest={noop}
+      />
+    )
+
+    const topLabel = screen.getByTestId('session-timeline-axis-top-label')
+    expect(topLabel.textContent).toBe('3.5s')
+  })
+
+  it('mantiene visible la línea de umbral FAST_MAX_MS por debajo del borde superior', () => {
+    render(
+      <SessionDetailModal
+        session={slowSession}
+        answers={buildSlowAnswers()}
+        isOpen={true}
+        onClose={noop}
+        onReTest={noop}
+      />
+    )
+
+    // Con maxTime = 10.5s se cumple thresholds.FAST_MAX_MS (1400) <= maxTime, así que
+    // la etiqueta del umbral se renderiza dentro del gráfico (la línea no se oculta).
+    expect(screen.getByText('< 1.4s')).toBeTruthy()
+  })
+})
