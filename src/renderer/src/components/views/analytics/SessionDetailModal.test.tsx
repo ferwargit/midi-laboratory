@@ -274,7 +274,7 @@ describe('SessionDetailModal - Umbrales de Latencia por Modalidad en Gráfico SV
   })
 
   it('sin targetMode: debe hacer fallback a single_note (1400ms)', () => {
-    const thresholds = getLatencyThresholds(undefined as any)
+    const thresholds = getLatencyThresholds(undefined)
     expect(thresholds.FAST_MAX_MS).toBe(1400)
     expect(thresholds.FAST_LABEL).toBe('< 1.4s')
   })

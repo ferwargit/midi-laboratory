@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
@@ -14,6 +14,8 @@ import { AnalyticsKpiCards } from '../../components/views/analytics/AnalyticsKpi
 import { AnalyticsMetrics } from './historyAnalytics'
 import { LatencySpectrumDiagram } from '../../components/views/guide/LatencySpectrumDiagram'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
+import { getConcept } from './pedagogicalDictionary'
+import { fireEvent } from '@testing-library/react'
 import { buildUserPrompt } from '../ai/promptBuilder'
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 
@@ -126,12 +128,18 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
 
     expect(
       screen.getByText(
-        new RegExp(`Reflejo Inmediato \\(${COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.FAST_LABEL}\\)`, 'i')
+        new RegExp(
+          `Reflejo Inmediato \\(${COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.FAST_LABEL}\\)`,
+          'i'
+        )
       )
     ).toBeDefined()
     expect(
       screen.getByText(
-        new RegExp(`Deducción Activa \\(${COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.MEDIUM_LABEL}\\)`, 'i')
+        new RegExp(
+          `Deducción Activa \\(${COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.MEDIUM_LABEL}\\)`,
+          'i'
+        )
       )
     ).toBeDefined()
   })
@@ -259,5 +267,165 @@ describe('AnalyticsView - Pipeline de Dominio Puro (F-01, spec 05)', () => {
     expect(viewSource).toMatch(/inputSource:\s*selectedInputSource/)
     expect(viewSource).toMatch(/biasFilter:\s*selectedBias/)
     expect(viewSource).toMatch(/isiFilter:\s*selectedIsi/)
+  })
+})
+
+describe('SSOT Propagation - Diccionario Pedagógico e Informes sincronizados por modalidad', () => {
+  const MODALITIES = ['single_note', 'intervals', 'sequences', 'repertoire'] as const
+
+  const buildIntervalsMetrics = (): AnalyticsMetrics => ({
+    modeFilter: 'intervals',
+    filteredSessionsCount: 1,
+    totalAnswers: 10,
+    totalCorrect: 9,
+    overallAccuracy: 90,
+    normalizedOverallAccuracy: 90,
+    avgEntropyBits: 1.58,
+    avgResponseTimeMs: 2000,
+    fastResponsesCount: 8,
+    mediumResponsesCount: 1,
+    slowResponsesCount: 1,
+    sharpBiasCount: 0,
+    flatBiasCount: 0,
+    topConfusions: [],
+    mostDifficultNotes: [],
+    strongestNotes: [],
+    sessionPsychometricsList: [],
+    longitudinalComparisons: []
+  })
+
+  afterEach(() => {
+    vi.doUnmock('./thresholds')
+    vi.resetModules()
+  })
+
+  it('getConcept("cognitive_latency").formulaOrCalculation contiene las etiquetas FAST y MEDIUM de las 4 modalidades', () => {
+    const concept = getConcept('cognitive_latency')
+    expect(concept).not.toBeNull()
+    for (const mode of MODALITIES) {
+      expect(concept!.formulaOrCalculation).toContain(
+        COGNITIVE_LATENCY_THRESHOLDS_BY_MODE[mode].FAST_LABEL
+      )
+      expect(concept!.formulaOrCalculation).toContain(
+        COGNITIVE_LATENCY_THRESHOLDS_BY_MODE[mode].MEDIUM_LABEL
+      )
+    }
+  })
+
+  it('el concepto de latencia cita el fundamento psicométrico Donders/Sternberg', () => {
+    const concept = getConcept('cognitive_latency')
+    expect(concept).not.toBeNull()
+    const explanation = `${concept!.formulaOrCalculation} ${concept!.practicalTakeaway}`
+    expect(explanation).toMatch(/Donders/i)
+    expect(explanation).toMatch(/Sternberg/i)
+    expect(explanation).toMatch(/emisión acústica/i)
+    expect(explanation).toMatch(/ejecución motora secuencial/i)
+  })
+
+  it('generateDiagnosticReport con modeFilter="intervals" interpola la etiqueta FAST de intervals', () => {
+    const report = generateDiagnosticReport(buildIntervalsMetrics())
+    expect(report.cognitiveLatencyAnalysis).toContain(getLatencyThresholds('intervals').FAST_LABEL)
+    expect(report.cognitiveLatencyAnalysis).not.toContain(
+      COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.single_note.FAST_LABEL
+    )
+  })
+
+  it('generateDiagnosticReport sin datos no se rompe y degrada con plan accionable', () => {
+    const emptyMetrics: AnalyticsMetrics = {
+      ...buildIntervalsMetrics(),
+      modeFilter: 'all',
+      filteredSessionsCount: 0,
+      totalAnswers: 0,
+      totalCorrect: 0,
+      overallAccuracy: 0,
+      normalizedOverallAccuracy: 0,
+      avgEntropyBits: 0,
+      avgResponseTimeMs: 0,
+      fastResponsesCount: 0,
+      mediumResponsesCount: 0,
+      slowResponsesCount: 0,
+      topConfusions: [],
+      mostDifficultNotes: [],
+      strongestNotes: [],
+      sessionPsychometricsList: [],
+      longitudinalComparisons: []
+    }
+
+    expect(() => generateDiagnosticReport(emptyMetrics)).not.toThrow()
+    const report = generateDiagnosticReport(emptyMetrics)
+    expect(report.executiveSummary).toContain('No se registran sesiones')
+    expect(report.cognitiveLatencyAnalysis).toContain('Sin datos')
+    expect(report.concreteActionPlan.length).toBeGreaterThan(0)
+  })
+
+  it('un cambio en la SSOT se propaga automáticamente al diccionario y al informe', async () => {
+    vi.resetModules()
+    vi.doMock('./thresholds', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('./thresholds')>()
+      const mockedByMode = {
+        ...actual.COGNITIVE_LATENCY_THRESHOLDS_BY_MODE,
+        intervals: {
+          ...actual.COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals,
+          FAST_LABEL: '< 9.9s'
+        }
+      }
+      return {
+        ...actual,
+        COGNITIVE_LATENCY_THRESHOLDS_BY_MODE: mockedByMode,
+        // Simula una edición real de la SSOT: el resolver lee el objeto alterado
+        getLatencyThresholds: (mode?: string) => {
+          if (!mode) return mockedByMode.single_note
+          const normalized = mode.trim().toLowerCase() as keyof typeof mockedByMode
+          return mockedByMode[normalized] ?? mockedByMode.single_note
+        }
+      }
+    })
+
+    try {
+      const { getConcept: getConceptMocked } = await import('./pedagogicalDictionary')
+      const { generateDiagnosticReport: generateReportMocked } =
+        await import('./diagnosticReportGenerator')
+
+      const concept = getConceptMocked('cognitive_latency')
+      expect(concept?.formulaOrCalculation).toContain('< 9.9s')
+
+      const report = generateReportMocked(buildIntervalsMetrics())
+      expect(report.cognitiveLatencyAnalysis).toContain('< 9.9s')
+    } finally {
+      vi.doUnmock('./thresholds')
+      vi.resetModules()
+    }
+  })
+
+  it('LatencySpectrumDiagram muestra la escala de la modalidad seleccionada', () => {
+    render(<LatencySpectrumDiagram />)
+
+    // Estado inicial: single_note
+    expect(
+      screen.getByText(
+        new RegExp(`Zona 1 \\(${getLatencyThresholds('single_note').FAST_LABEL}\\)`, 'i')
+      )
+    ).toBeDefined()
+
+    // Al seleccionar Intervalos, la escala deriva de la SSOT de esa modalidad
+    fireEvent.click(screen.getByRole('button', { name: /Intervalos/i }))
+    expect(
+      screen.getByText(
+        new RegExp(`Zona 1 \\(${COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.FAST_LABEL}\\)`, 'i')
+      )
+    ).toBeDefined()
+    expect(
+      screen.getByText(
+        new RegExp(`${COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.SLOW_LABEL}\\+`, 'i')
+      )
+    ).toBeDefined()
+    expect(
+      screen.queryByText(
+        new RegExp(
+          `Zona 1 \\(${COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.single_note.FAST_LABEL}\\)`,
+          'i'
+        )
+      )
+    ).toBeNull()
   })
 })

@@ -21,7 +21,7 @@ interface AnalyticsTabNavProps {
 const tabDefs: Array<{
   id: AnalyticsTabKey
   label: string
-  Icon: React.ComponentType<any>
+  Icon: React.ComponentType<{ className?: string }>
   count?: number
 }> = [
   { id: 'sessions', label: 'Sesiones', Icon: Table, count: 0 },

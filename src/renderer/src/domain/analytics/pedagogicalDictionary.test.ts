@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { PEDAGOGICAL_DICTIONARY, getConcept } from './pedagogicalDictionary'
+import { COGNITIVE_LATENCY_THRESHOLDS_BY_MODE } from './thresholds'
 
 describe('pedagogicalDictionary - Diccionario y Modelos Psicoacústicos Centralizados', () => {
   it('todos los conceptos deben tener campos completos y no vacíos', () => {
@@ -21,8 +22,16 @@ describe('pedagogicalDictionary - Diccionario y Modelos Psicoacústicos Centrali
     expect(irt?.formulaOrCalculation).toContain('Acierto - c')
 
     const latency = getConcept('cognitive_latency')
-    // Umbral calibrado psicoacústicamente a < 1.4s
-    expect(latency?.practicalTakeaway).toContain('< 1.4s')
+    // Etiquetas interpoladas dinámicamente desde la SSOT por modalidad
+    expect(latency?.practicalTakeaway).toContain(
+      COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.single_note.FAST_LABEL
+    )
+    expect(latency?.practicalTakeaway).toContain(
+      COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.intervals.MEDIUM_LABEL
+    )
+    expect(latency?.practicalTakeaway).toContain(
+      COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.sequences.MEDIUM_LABEL
+    )
   })
 
   it('debe devolver null si el concepto no existe', () => {

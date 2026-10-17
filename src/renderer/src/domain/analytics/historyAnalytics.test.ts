@@ -394,13 +394,13 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
     it('debe mantener retrocompatibilidad exacta con single_note (sin modo o modo explícito)', () => {
       // Valor esperado con los parámetros originales (single_note)
       const expectedScore = calculateSessionCPI(90, 2.0, 20, 1000, 'hardware', 'single_note')
-      
+
       // Sin modo → debe usar single_note por defecto
       const defaultScore = calculateSessionCPI(90, 2.0, 20, 1000, 'hardware')
-      
+
       // Con modo explícito 'single_note' → debe coincidir
       const explicitScore = calculateSessionCPI(90, 2.0, 20, 1000, 'hardware', 'single_note')
-      
+
       expect(defaultScore).toBe(expectedScore)
       expect(explicitScore).toBe(expectedScore)
     })
@@ -909,9 +909,7 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
         id: 's_int_test',
         targetMode: 'intervals'
       }
-      const answers: DbAnswerRecord[] = [
-        makeAnswer('a1', 's_int_test', 2100)
-      ]
+      const answers: DbAnswerRecord[] = [makeAnswer('a1', 's_int_test', 2100)]
       const timeline = analyzeSessionTimeline(session, answers)
       expect(timeline.fastReflexCount).toBe(1)
     })
@@ -922,9 +920,7 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
         id: 's_int_test2',
         targetMode: 'intervals'
       }
-      const answers: DbAnswerRecord[] = [
-        makeAnswer('a1', 's_int_test2', 2500)
-      ]
+      const answers: DbAnswerRecord[] = [makeAnswer('a1', 's_int_test2', 2500)]
       const timeline = analyzeSessionTimeline(session, answers)
       expect(timeline.fastReflexCount).toBe(0)
       // Note: fastReflexCount only counts fast; medium/slow not directly exposed in timeline
@@ -936,9 +932,7 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
         id: 's_seq_test',
         targetMode: 'sequences'
       }
-      const answers: DbAnswerRecord[] = [
-        makeAnswer('a1', 's_seq_test', 3000)
-      ]
+      const answers: DbAnswerRecord[] = [makeAnswer('a1', 's_seq_test', 3000)]
       const timeline = analyzeSessionTimeline(session, answers)
       expect(timeline.fastReflexCount).toBe(1)
     })
@@ -950,9 +944,7 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
         targetMode: 'repertoire',
         presetName: 'Repertorio Test'
       }
-      const answers: DbAnswerRecord[] = [
-        makeAnswer('a1', 's_rep_test', 2300)
-      ]
+      const answers: DbAnswerRecord[] = [makeAnswer('a1', 's_rep_test', 2300)]
       const timeline = analyzeSessionTimeline(session, answers)
       expect(timeline.fastReflexCount).toBe(1)
     })
@@ -961,7 +953,7 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
       const session: DbSessionRecord = {
         ...sNotePiano,
         id: 's_no_mode',
-        targetMode: undefined as any
+        targetMode: undefined
       }
       const answers: DbAnswerRecord[] = [
         makeAnswer('a1', 's_no_mode', 2100) // Would be fast in intervals, slow in single_note
@@ -1005,7 +997,7 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
       const answers: DbAnswerRecord[] = [
         makeAnswer('a1', 's_int_metrics', 2350), // fast (< 2400)
         makeAnswer('a2', 's_int_metrics', 3100), // medium (2400-3800)
-        makeAnswer('a3', 's_int_metrics', 4200)  // slow (> 3800)
+        makeAnswer('a3', 's_int_metrics', 4200) // slow (> 3800)
       ]
       const metrics = computeAnalyticsMetrics([session], answers, 'all')
       expect(metrics.sessionPsychometricsList[0].fastPercent).toBe(33) // ~1/3
@@ -1027,7 +1019,7 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
       const answers: DbAnswerRecord[] = [
         makeAnswer('a1', 's_seq_metrics', 3400), // fast (< 3500)
         makeAnswer('a2', 's_seq_metrics', 4200), // medium (3500-5000)
-        makeAnswer('a3', 's_seq_metrics', 5500)  // slow (> 5000)
+        makeAnswer('a3', 's_seq_metrics', 5500) // slow (> 5000)
       ]
       const metrics = computeAnalyticsMetrics([session], answers, 'all')
       expect(metrics.sessionPsychometricsList[0].fastPercent).toBe(33)
@@ -1082,7 +1074,7 @@ describe('historyAnalytics - Psicometría, Micro-Telemetría, Matriz 2D y Filtro
       const answers: DbAnswerRecord[] = [
         makeAnswer('a1', 's_rep_metrics', 2400), // fast (< 2500)
         makeAnswer('a2', 's_rep_metrics', 3300), // medium (2500-4000)
-        makeAnswer('a3', 's_rep_metrics', 4500)  // slow (> 4000)
+        makeAnswer('a3', 's_rep_metrics', 4500) // slow (> 4000)
       ]
       const metrics = computeAnalyticsMetrics([session], answers, 'all')
       expect(metrics.sessionPsychometricsList[0].fastPercent).toBe(33)
