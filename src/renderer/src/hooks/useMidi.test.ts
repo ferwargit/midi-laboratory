@@ -368,6 +368,126 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
     vi.useRealTimers()
   })
 
+  it('el tick del metrónomo (Canal 10) no debe contaminar la pista visual de estímulo', async () => {
+    vi.useFakeTimers()
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // Tick de downbeat del metrónomo: GM 76, Canal 10
+    act(() => {
+      result.current.sendNote(76, 120, 115, 10)
+    })
+
+    // El puerto recibe el Note On del Canal 10 con normalidad (0x99 = 0x90 | 9)
+    expect(mockOutput.send).toHaveBeenCalledWith([0x99, 76, 115])
+    // Pero la pista visual de estímulo NO se contamina
+    expect(result.current.activeStimulusNotes).not.toContain(76)
+
+    // Antes de la liberación programada (120 ms) tampoco
+    act(() => {
+      vi.advanceTimersByTime(100)
+    })
+    expect(result.current.activeStimulusNotes).not.toContain(76)
+
+    // El Note Off programado del Canal 10 se emite igualmente (0x89 = 0x80 | 9)
+    act(() => {
+      vi.advanceTimersByTime(20)
+    })
+    expect(mockOutput.send).toHaveBeenCalledWith([0x89, 76, 0])
+    expect(result.current.activeStimulusNotes).not.toContain(76)
+
+    vi.useRealTimers()
+  })
+
+  it('la nota de piano (Canal 1) sigue iluminando como estímulo y se retira tras el Note Off', async () => {
+    vi.useFakeTimers()
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    act(() => {
+      result.current.sendNote(60, 400, 100, 1)
+    })
+    expect(result.current.activeStimulusNotes).toContain(60)
+
+    // Durante la articulación (400 ms) la nota permanece registrada
+    act(() => {
+      vi.advanceTimersByTime(399)
+    })
+    expect(result.current.activeStimulusNotes).toContain(60)
+
+    // Tras el Note Off programado se retira
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(result.current.activeStimulusNotes).not.toContain(60)
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 60, 0])
+
+    vi.useRealTimers()
+  })
+
+  it('la nota homónima en canal distinto es independiente: claves 1_60 y 10_60 coexisten y solo el Canal 1 registra estímulo', async () => {
+    vi.useFakeTimers()
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // t=0: nota 60 en el Canal melódico (piano)
+    act(() => {
+      result.current.sendNote(60, 400, 100, 1)
+    })
+    expect(mockOutput.send).toHaveBeenCalledWith([0x90, 60, 100])
+    expect(result.current.activeStimulusNotes).toEqual([60])
+
+    // t=200: la misma nota 60 en el Canal 10 (metrónomo), con su propio temporizador
+    act(() => {
+      vi.advanceTimersByTime(200)
+      result.current.sendNote(60, 400, 100, 10)
+    })
+    expect(mockOutput.send).toHaveBeenCalledWith([0x99, 60, 100])
+    // El Canal 10 NO registra estímulo: la pista visual sigue siendo solo la del Canal 1
+    expect(result.current.activeStimulusNotes).toEqual([60])
+
+    // t=400: el Note Off del Canal 1 llega en su tiempo propio (400 ms desde SU envío),
+    // prueba de que el envío del Canal 10 no canceló su temporizador (claves independientes)
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 60, 0])
+    expect(result.current.activeStimulusNotes).toEqual([])
+
+    // t=600: el Note Off del Canal 10 llega 400 ms después de SU envío (temporizador propio)
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    expect(mockOutput.send).toHaveBeenCalledWith([0x89, 60, 0])
+    expect(result.current.activeStimulusNotes).toEqual([])
+
+    vi.useRealTimers()
+  })
+
   it('detecta desconexión física de hardware y dispara onDeviceDisconnected', async () => {
     const { access } = createMockMidiAccess()
     ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi

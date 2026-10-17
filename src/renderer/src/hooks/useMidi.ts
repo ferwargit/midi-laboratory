@@ -41,6 +41,11 @@ export interface UseMidiReturn {
 
 const ACTIVE_MIDI_CHANNELS = [1, 10] as const
 
+// Canal melódico canónico (Piano Acústico). Solo sus notas constituyen pista
+// visual de estímulo (activeStimulusNotes); el Canal 10 (Metrónomo GM) suena
+// pero nunca ilumina el teclado.
+const MELODIC_CHANNEL = 1
+
 export function useMidi({
   onNoteOn,
   onNoteOff,
@@ -310,6 +315,7 @@ export function useMidi({
 
       const chByte = (channel - 1) & 0x0f
       const timerKey = `${channel}_${noteNumber}` // 👈 Clave única por canal y nota
+      const isMelodicStimulus = channel === MELODIC_CHANNEL
 
       if (stimulusTimersRef.current.has(timerKey)) {
         clearTimeout(stimulusTimersRef.current.get(timerKey)!)
@@ -322,7 +328,9 @@ export function useMidi({
 
       // Note ON
       outputPort.send([0x90 | chByte, noteNumber, velocity])
-      setActiveStimulusNotes((prev) => (prev.includes(noteNumber) ? prev : [...prev, noteNumber]))
+      if (isMelodicStimulus) {
+        setActiveStimulusNotes((prev) => (prev.includes(noteNumber) ? prev : [...prev, noteNumber]))
+      }
 
       // Note OFF programado
       const timer = setTimeout(() => {
@@ -331,7 +339,9 @@ export function useMidi({
         } catch {
           // No-op
         }
-        setActiveStimulusNotes((prev) => prev.filter((n) => n !== noteNumber))
+        if (isMelodicStimulus) {
+          setActiveStimulusNotes((prev) => prev.filter((n) => n !== noteNumber))
+        }
         stimulusTimersRef.current.delete(timerKey)
       }, durationMs)
 
