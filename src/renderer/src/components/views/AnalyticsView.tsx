@@ -65,6 +65,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
   const [selectedBias, setSelectedBias] = useState<'all' | 'sharp' | 'flat' | 'balanced'>('all')
   const [selectedPoolSize, setSelectedPoolSize] = useState<string>('all')
   const [selectedIsi, setSelectedIsi] = useState<'all' | 'massed' | 'optimal' | 'spaced'>('all')
+  const [selectedDirection, setSelectedDirection] = useState<
+    'all' | 'ascending' | 'descending' | 'harmonic'
+  >('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
 
   // Estado de Aislamiento de Selección Manual
@@ -114,6 +117,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     setSelectedBias('all')
     setSelectedPoolSize('all')
     setSelectedIsi('all')
+    setSelectedDirection('all')
     setIsolatedSessionIds(null)
   }
 
@@ -152,6 +156,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         biasFilter: selectedBias,
         poolSizeFilter: selectedPoolSize,
         isiFilter: selectedIsi,
+        directionFilter: selectedDirection,
         searchQuery
       },
       answers
@@ -241,6 +246,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
     selectedBias,
     selectedPoolSize,
     selectedIsi,
+    selectedDirection,
     searchQuery,
     isolatedSessionIds,
     metrics,
@@ -346,6 +352,9 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         modeFilter={modeFilter}
         onSelectModeFilter={(m): void => {
           setIsolatedSessionIds(null)
+          // Reset de dirección al abandonar Intervalos: un filtro oculto pero
+          // activo sería invisible para el usuario (design D4).
+          if (m !== 'intervals') setSelectedDirection('all')
           setModeFilter(m, sessions, answers)
         }}
         isLmStudioOnline={isLmStudioOnline}
@@ -370,6 +379,8 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         onPoolSizeChange={setSelectedPoolSize}
         selectedIsi={selectedIsi}
         onIsiChange={setSelectedIsi}
+        selectedDirection={selectedDirection}
+        onDirectionChange={setSelectedDirection}
         onResetAllFilters={handleResetAllFilters}
       />
 

@@ -28,6 +28,8 @@ describe('AnalyticsFilterBar - Barra de Filtros Multidimensionales y Sub-Grupos'
     onPoolSizeChange: vi.fn(),
     selectedIsi: 'all' as const,
     onIsiChange: vi.fn(),
+    selectedDirection: 'all' as const,
+    onDirectionChange: vi.fn(),
     onResetAllFilters: vi.fn()
   }
 
@@ -69,5 +71,35 @@ describe('AnalyticsFilterBar - Barra de Filtros Multidimensionales y Sub-Grupos'
     expect(resetBtn.hasAttribute('disabled')).toBe(false)
     fireEvent.click(resetBtn)
     expect(onResetAllFilters).toHaveBeenCalledTimes(1)
+  })
+
+  it('el selector de Dirección del Intervalo solo es visible en modalidad intervals', () => {
+    const { unmount } = render(<AnalyticsFilterBar {...defaultProps} />)
+
+    expect(screen.queryByText('Todas las Direcciones')).toBeNull()
+
+    unmount()
+    render(<AnalyticsFilterBar {...defaultProps} modeFilter="intervals" />)
+
+    expect(screen.getByText('Todas las Direcciones')).toBeDefined()
+    expect(screen.getByText('⬆️ Solo Ascendente')).toBeDefined()
+    expect(screen.getByText('⬇️ Solo Descendente')).toBeDefined()
+    expect(screen.getByText('🎼 Harmónico/Mixto')).toBeDefined()
+  })
+
+  it('al cambiar la dirección debe invocar onDirectionChange', () => {
+    const onDirectionChange = vi.fn()
+    render(
+      <AnalyticsFilterBar
+        {...defaultProps}
+        modeFilter="intervals"
+        onDirectionChange={onDirectionChange}
+      />
+    )
+
+    const select = screen.getByDisplayValue('Todas las Direcciones')
+    fireEvent.change(select, { target: { value: 'ascending' } })
+
+    expect(onDirectionChange).toHaveBeenCalledWith('ascending')
   })
 })

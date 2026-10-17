@@ -13,6 +13,21 @@ import {
   resolveSessionInputMethod
 } from './sessionClassification'
 
+/**
+ * Extrae la dirección del estímulo grabada en la telemetría de una respuesta
+ * de intervalos. El entrenador persiste `reasonTelemetry` con el formato
+ * `"N st (ascending|descending|harmonic)"` (useIntervalTrainer), la misma
+ * convención de parseo que canonicaliza la spec 05 para `longitudinal.ts`.
+ * Devuelve `null` cuando la telemetría no contiene dirección parseable
+ * (respuestas legacy o de otras modalidades).
+ */
+function parseStimulusDirection(
+  reasonTelemetry: string
+): 'ascending' | 'descending' | 'harmonic' | null {
+  const match = reasonTelemetry.match(/\((ascending|descending|harmonic)\)/i)
+  return match ? (match[1].toLowerCase() as 'ascending' | 'descending' | 'harmonic') : null
+}
+
 export function filterSessionsAdvanced(
   sessions: DbSessionRecord[],
   filters: AnalyticsFilterOptions,
@@ -40,6 +55,22 @@ export function filterSessionsAdvanced(
     }
     for (const [sessionId, noteSet] of sessionAnswers) {
       empiricalUniqueCountMap.set(sessionId, noteSet.size)
+    }
+  }
+
+  // Mapa de direcciones de estímulo por sesión (derivadas de reasonTelemetry),
+  // precomputado fuera del bucle siguiendo el patrón de empiricalUniqueCountMap.
+  // Solo las sesiones de Intervalos registran dirección en su telemetría.
+  const needsDirectionFilter = !!filters.directionFilter && filters.directionFilter !== 'all'
+  const directionTarget = needsDirectionFilter ? filters.directionFilter : undefined
+  const sessionDirectionsMap = new Map<string, Set<string>>()
+  if (needsDirectionFilter && hasAnswers) {
+    for (const ans of answers) {
+      const direction = parseStimulusDirection(ans.reasonTelemetry)
+      if (!direction) continue
+      const set = sessionDirectionsMap.get(ans.sessionId) || new Set<string>()
+      set.add(direction)
+      sessionDirectionsMap.set(ans.sessionId, set)
     }
   }
 
@@ -181,6 +212,23 @@ export function filterSessionsAdvanced(
       )
         return false
       if (filters.isiFilter === 'spaced' && !(gap > ISI_THRESHOLDS.OPTIMAL_MAX_MS)) return false
+    }
+
+    // 12. Dirección del Intervalo (estímulo puro, semántica de uniformidad)
+    // Sin respuestas no hay telemetría de dirección: no-op seguro. Una sesión
+    // coincide con una dirección X solo si es de Intervalos, tiene al menos
+    // una respuesta con dirección parseable y TODAS las parseables son X;
+    // una sesión en modo 'both' (mixta) no coincide con ninguna dirección.
+    if (directionTarget && hasAnswers) {
+      const directions = sessionDirectionsMap.get(s.id)
+      if (
+        !isIntervalSession(s) ||
+        !directions ||
+        directions.size !== 1 ||
+        !directions.has(directionTarget)
+      ) {
+        return false
+      }
     }
 
     return true

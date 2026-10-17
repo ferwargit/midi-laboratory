@@ -14,6 +14,7 @@ export interface AnalyticsFilterOptions {
   biasFilter?: 'all' | 'sharp' | 'flat' | 'balanced'
   poolSizeFilter?: string
   isiFilter?: 'all' | 'massed' | 'optimal' | 'spaced'
+  directionFilter?: 'all' | 'ascending' | 'descending' | 'harmonic'
   searchQuery?: string
 }
 

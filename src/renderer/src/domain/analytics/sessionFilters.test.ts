@@ -577,6 +577,116 @@ describe('sessionFilters - filterSessionsAdvanced', () => {
     })
   })
 
+  describe('12. Filtro de Dirección del Intervalo', () => {
+    const sessions = [
+      makeSession({ id: 'dir_asc', targetMode: 'intervals', presetName: 'Intervalos Nivel 1.1' }),
+      makeSession({ id: 'dir_desc', targetMode: 'intervals', presetName: 'Intervalos Nivel 1.1' }),
+      makeSession({ id: 'dir_harm', targetMode: 'intervals', presetName: 'Intervalos Nivel 1.1' }),
+      makeSession({ id: 'dir_both', targetMode: 'intervals', presetName: 'Intervalos Nivel 1.1' }),
+      makeSession({ id: 'dir_void', targetMode: 'intervals', presetName: 'Intervalos Nivel 1.1' }),
+      makeSession({ id: 'dir_note', targetMode: 'single_note', presetName: 'Nivel 1 (C, D, E)' })
+    ]
+
+    const answers: DbAnswerRecord[] = [
+      makeAnswer({ id: 'd_a1', sessionId: 'dir_asc', reasonTelemetry: '4 st (ascending)' }),
+      makeAnswer({ id: 'd_a2', sessionId: 'dir_asc', reasonTelemetry: '7 st (ascending)' }),
+      makeAnswer({ id: 'd_d1', sessionId: 'dir_desc', reasonTelemetry: '4 st (descending)' }),
+      makeAnswer({ id: 'd_d2', sessionId: 'dir_desc', reasonTelemetry: '2 st (descending)' }),
+      makeAnswer({ id: 'd_h1', sessionId: 'dir_harm', reasonTelemetry: '7 st (harmonic)' }),
+      makeAnswer({ id: 'd_h2', sessionId: 'dir_harm', reasonTelemetry: '5 st (harmonic)' }),
+      makeAnswer({ id: 'd_b1', sessionId: 'dir_both', reasonTelemetry: '4 st (ascending)' }),
+      makeAnswer({ id: 'd_b2', sessionId: 'dir_both', reasonTelemetry: '4 st (descending)' }),
+      makeAnswer({ id: 'd_v1', sessionId: 'dir_void', reasonTelemetry: '' }),
+      makeAnswer({ id: 'd_n1', sessionId: 'dir_note', reasonTelemetry: '4 st (ascending)' })
+    ]
+
+    it('ascending mantiene solo la sesión con estímulos puramente ascendentes', () => {
+      const out = filterSessionsAdvanced(
+        sessions,
+        { mode: 'all', directionFilter: 'ascending' },
+        answers
+      )
+      expect(out.map((s) => s.id)).toEqual(['dir_asc'])
+    })
+
+    it('descending mantiene solo la sesión con estímulos puramente descendentes', () => {
+      const out = filterSessionsAdvanced(
+        sessions,
+        { mode: 'all', directionFilter: 'descending' },
+        answers
+      )
+      expect(out.map((s) => s.id)).toEqual(['dir_desc'])
+    })
+
+    it('harmonic mantiene solo la sesión con estímulos puramente armónicos', () => {
+      const out = filterSessionsAdvanced(
+        sessions,
+        { mode: 'all', directionFilter: 'harmonic' },
+        answers
+      )
+      expect(out.map((s) => s.id)).toEqual(['dir_harm'])
+    })
+
+    it('directionFilter all no filtra por dirección', () => {
+      const out = filterSessionsAdvanced(sessions, { mode: 'all', directionFilter: 'all' }, answers)
+      expect(out.map((s) => s.id)).toEqual([
+        'dir_asc',
+        'dir_desc',
+        'dir_harm',
+        'dir_both',
+        'dir_void',
+        'dir_note'
+      ])
+    })
+
+    it('una sesión en modo both (respuestas mixtas) no coincide con ninguna dirección específica', () => {
+      const asc = filterSessionsAdvanced(
+        sessions,
+        { mode: 'all', directionFilter: 'ascending' },
+        answers
+      ).map((s) => s.id)
+      const desc = filterSessionsAdvanced(
+        sessions,
+        { mode: 'all', directionFilter: 'descending' },
+        answers
+      ).map((s) => s.id)
+      expect(asc).not.toContain('dir_both')
+      expect(desc).not.toContain('dir_both')
+    })
+
+    it('sin respuestas el filtro es no-op seguro', () => {
+      const out = filterSessionsAdvanced(sessions, { mode: 'all', directionFilter: 'ascending' })
+      expect(out).toHaveLength(6)
+    })
+
+    it('respuestas sin dirección parseable (telemetría vacía) excluyen la sesión con filtro activo', () => {
+      const out = filterSessionsAdvanced(
+        sessions,
+        { mode: 'all', directionFilter: 'ascending' },
+        answers
+      )
+      expect(out.map((s) => s.id)).not.toContain('dir_void')
+    })
+
+    it('una sesión no-intervalos queda excluida con filtro activo', () => {
+      const out = filterSessionsAdvanced(
+        sessions,
+        { mode: 'all', directionFilter: 'ascending' },
+        answers
+      )
+      expect(out.map((s) => s.id)).not.toContain('dir_note')
+    })
+
+    it('se combina conjuntamente con el filtro de modalidad intervals', () => {
+      const out = filterSessionsAdvanced(
+        sessions,
+        { mode: 'intervals', directionFilter: 'descending' },
+        answers
+      )
+      expect(out.map((s) => s.id)).toEqual(['dir_desc'])
+    })
+  })
+
   describe('Combinación de filtros', () => {
     it('encadena instrumento, estrategia y búsqueda de forma conjunta', () => {
       const sessions = [

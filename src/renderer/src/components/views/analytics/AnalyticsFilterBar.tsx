@@ -37,6 +37,8 @@ interface AnalyticsFilterBarProps {
   onPoolSizeChange: (p: string) => void
   selectedIsi: 'all' | 'massed' | 'optimal' | 'spaced'
   onIsiChange: (isi: 'all' | 'massed' | 'optimal' | 'spaced') => void
+  selectedDirection: 'all' | 'ascending' | 'descending' | 'harmonic'
+  onDirectionChange: (d: 'all' | 'ascending' | 'descending' | 'harmonic') => void
   onResetAllFilters: () => void
 }
 
@@ -65,6 +67,8 @@ export function AnalyticsFilterBar({
   onPoolSizeChange,
   selectedIsi,
   onIsiChange,
+  selectedDirection,
+  onDirectionChange,
   onResetAllFilters
 }: AnalyticsFilterBarProps): React.ReactElement {
   const [isGuideOpen, setIsGuideOpen] = useState(false)
@@ -79,7 +83,8 @@ export function AnalyticsFilterBar({
     selectedInputSource !== 'all' ||
     selectedBias !== 'all' ||
     selectedPoolSize !== 'all' ||
-    selectedIsi !== 'all'
+    selectedIsi !== 'all' ||
+    selectedDirection !== 'all'
 
   const dynamicPresets =
     modeFilter === 'intervals'
@@ -206,8 +211,12 @@ export function AnalyticsFilterBar({
           </select>
         </div>
 
-        {/* FILA 3: FORMATO, CARGA, MAESTRÍA, ENTRADA, SESGO, DESCANSO ISI Y LIMPIEZA */}
-        <div className="grid grid-cols-2 sm:grid-cols-7 gap-2 pt-1 text-xs">
+        {/* FILA 3: FORMATO, CARGA, MAESTRÍA, ENTRADA, SESGO, DESCANSO ISI, DIRECCIÓN (SOLO INTERVALOS) Y LIMPIEZA */}
+        <div
+          className={`grid grid-cols-2 gap-2 pt-1 text-xs ${
+            modeFilter === 'intervals' ? 'sm:grid-cols-8' : 'sm:grid-cols-7'
+          }`}
+        >
           <select
             value={selectedFormat}
             onChange={(e): void => onFormatChange(e.target.value)}
@@ -293,6 +302,21 @@ export function AnalyticsFilterBar({
             <option value="optimal">🌙 Consolidación Óptima (12h - 48h)</option>
             <option value="spaced">📅 Espaciada Larga (&gt; 48h)</option>
           </select>
+
+          {modeFilter === 'intervals' && (
+            <select
+              value={selectedDirection}
+              onChange={(e): void =>
+                onDirectionChange(e.target.value as 'all' | 'ascending' | 'descending' | 'harmonic')
+              }
+              className="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg text-slate-200 text-xs px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition-colors"
+            >
+              <option value="all">Todas las Direcciones</option>
+              <option value="ascending">⬆️ Solo Ascendente</option>
+              <option value="descending">⬇️ Solo Descendente</option>
+              <option value="harmonic">🎼 Harmónico/Mixto</option>
+            </select>
+          )}
 
           <button
             type="button"

@@ -1,0 +1,20 @@
+# Tasks
+
+## 1. Dominio: tipo y motor de filtrado (TDD)
+
+- [x] 1.1 Escribir primero las pruebas en Rojo en `src/renderer/src/domain/analytics/sessionFilters.test.ts`: nueva suite "Filtro de Dirección del Intervalo" con casos — (a) sesiones de intervalos con telemetría `N st (ascending)` / `N st (descending)` / `N st (harmonic)` se segregan correctamente con `directionFilter: 'ascending' | 'descending' | 'harmonic'`; (b) `directionFilter: 'all'` no filtra; (c) una sesión en modo `both` (respuestas mixtas ascendente+descendente) NO coincide con ninguna dirección específica (semántica de uniformidad, design D2); (d) sin respuestas el filtro es no-op (design D5); (e) respuestas sin dirección parseable (telemetría vacía) excluyen la sesión con filtro activo; (f) una sesión no-intervalos queda excluida con filtro activo. Verificación: `npx vitest run src/renderer/src/domain/analytics/sessionFilters.test.ts` falla en Rojo.
+- [x] 1.2 Añadir `directionFilter?: 'all' | 'ascending' | 'descending' | 'harmonic'` a la interfaz `AnalyticsFilterOptions` en `src/renderer/src/domain/analytics/types.ts`. Verificación: `npm run typecheck` compila sin errores nuevos.
+- [x] 1.3 Implementar en `src/renderer/src/domain/analytics/sessionFilters.ts` el predicado de dirección: parser de `reasonTelemetry` con `/\((ascending|descending|harmonic)\)/i`, mapa precomputado `sessionId → direcciones parseables` fuera del bucle (patrón `empiricalUniqueCountMap`, design D6), compuerta `isIntervalSession` y semántica de uniformidad (design D2). Verificación: la suite de 1.1 pasa en Verde.
+- [x] 1.4 Formatear los archivos del grupo con Prettier (`npx prettier --write src/renderer/src/domain/analytics/types.ts src/renderer/src/domain/analytics/sessionFilters.ts src/renderer/src/domain/analytics/sessionFilters.test.ts`). Verificación: `npm run typecheck` y `npx vitest run src/renderer/src/domain/analytics/sessionFilters.test.ts` en Verde.
+
+## 2. UI: selector condicional y cableado
+
+- [x] 2.1 Actualizar el mock de props por defecto en `src/renderer/src/components/views/analytics/AnalyticsFilterBar.test.tsx` con `selectedDirection: 'all'` y `onDirectionChange` (viability del nuevo contrato de props). Verificación: `npx vitest run src/renderer/src/components/views/analytics/AnalyticsFilterBar.test.tsx` en Verde tras el cambio de tipo.
+- [x] 2.2 Añadir en `AnalyticsFilterBar.tsx` las props `selectedDirection` / `onDirectionChange` y el `<select>` "Dirección del Intervalo" con opciones `all` (Todas las Direcciones), `ascending` (Solo Ascendente), `descending` (Solo Descendente), `harmonic` (Harmónico/Mixto), renderizado exclusivamente cuando `modeFilter === 'intervals'`; incluir `selectedDirection !== 'all'` en `hasActiveFilters`. Verificación: test en `AnalyticsFilterBar.test.tsx` que afirma visibilidad condicional (visible con `modeFilter='intervals'`, ausente con `modeFilter='all'`) y que seleccionar una opción invoca `onDirectionChange`.
+- [x] 2.3 Cablear en `AnalyticsView.tsx`: estado `selectedDirection`, inclusión de `directionFilter: selectedDirection` en la llamada a `filterSessionsAdvanced`, paso de props a `AnalyticsFilterBar`, reset a `'all'` en `handleResetAllFilters` y reset automático al cambiar `modeFilter` fuera de `intervals` (design D4). Verificación: `npm run typecheck` en Verde y test de flujo existente de analítica sin regresión.
+- [x] 2.4 Formatear los archivos del grupo con Prettier (`npx prettier --write src/renderer/src/components/views/analytics/AnalyticsFilterBar.tsx src/renderer/src/components/views/analytics/AnalyticsFilterBar.test.tsx src/renderer/src/components/views/AnalyticsView.tsx`). Verificación: diff de Prettier vacío en segunda pasada.
+
+## 3. Verificación integral
+
+- [x] 3.1 Ejecutar la batería completa: `npm run typecheck` y `npm run test` — todos los tests en Verde, sin regresiones en los 35 sitios consumidores del barrel `historyAnalytics.ts`. Verificación: salida de ambos comandos sin errores.
+- [x] 3.2 Validar el cambio en OpenSpec: `openspec validate add-interval-direction-filter --strict`. Verificación: validación estricta sin errores.
