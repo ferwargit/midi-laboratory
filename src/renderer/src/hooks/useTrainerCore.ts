@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { AdvanceMode, SessionLimitType } from '../domain/exercise/types'
 import { DbAnswerRecord, DbSessionRecord } from '../domain/database/types'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
@@ -528,50 +528,93 @@ export function useTrainerCore<TResult>({
     setIsWaitingManualAdvanceState(false)
   }, [cleanupTimers])
 
-  return {
-    sessionLimitType,
-    setSessionLimitType,
-    sessionQuestionsCount,
-    setSessionQuestionsCount,
-    sessionDurationMinutes,
-    setSessionDurationMinutes,
-    timeRemainingSeconds,
-    setTimeRemainingSeconds,
-    sessionElapsedSeconds,
-    advanceMode,
-    setAdvanceMode,
-    get isSessionActive() {
-      return isSessionActiveRef.current
-    },
-    isSessionFinished,
-    isWaitingManualAdvance,
-    isWaitingAnswer,
-    setIsWaitingAnswer,
-    currentQuestionIndex,
-    get sessionId() {
-      return sessionIdRef.current
-    },
-    lastResult,
-    setLastResult,
-    sessionHistory,
-    setSessionHistory,
-    get answersBuffer() {
-      return answersBufferRef.current
-    },
-    get questionToken() {
-      return questionTokenRef.current
-    },
-    saveError,
-    clearSaveError,
-    generateQuestionToken,
-    recordPreAnswerRepeat,
-    recordPostErrorRepeat,
-    startCoreSession,
-    advanceToNextQuestion,
-    recordAnswer,
-    stopCoreSession,
-    resetCoreToConfig,
-    cleanupTimers,
-    finalizeAndSaveSession
-  }
+  // Estabilidad referencial del retorno (auditoría V8, F12.3/R1): el objeto
+  // UseTrainerCoreReturn se memoiza con las dependencias reactivas reales, de
+  // modo que los callbacks de los plug-ins de entrenador con `core` en sus deps
+  // dejen de invalidarse en cada ciclo de render. Los getters en vivo sobre
+  // refs (isSessionActive, sessionId, answersBuffer, questionToken) NO figuran
+  // en las deps: se leen en el momento del acceso y toda transición que los
+  // muta va emparejada con un setState que dispara el re-render.
+  return useMemo(
+    () => ({
+      sessionLimitType,
+      setSessionLimitType,
+      sessionQuestionsCount,
+      setSessionQuestionsCount,
+      sessionDurationMinutes,
+      setSessionDurationMinutes,
+      timeRemainingSeconds,
+      setTimeRemainingSeconds,
+      sessionElapsedSeconds,
+      advanceMode,
+      setAdvanceMode,
+      get isSessionActive() {
+        return isSessionActiveRef.current
+      },
+      isSessionFinished,
+      isWaitingManualAdvance,
+      isWaitingAnswer,
+      setIsWaitingAnswer,
+      currentQuestionIndex,
+      get sessionId() {
+        return sessionIdRef.current
+      },
+      lastResult,
+      setLastResult,
+      sessionHistory,
+      setSessionHistory,
+      get answersBuffer() {
+        return answersBufferRef.current
+      },
+      get questionToken() {
+        return questionTokenRef.current
+      },
+      saveError,
+      clearSaveError,
+      generateQuestionToken,
+      recordPreAnswerRepeat,
+      recordPostErrorRepeat,
+      startCoreSession,
+      advanceToNextQuestion,
+      recordAnswer,
+      stopCoreSession,
+      resetCoreToConfig,
+      cleanupTimers,
+      finalizeAndSaveSession
+    }),
+    [
+      sessionLimitType,
+      setSessionLimitType,
+      sessionQuestionsCount,
+      setSessionQuestionsCount,
+      sessionDurationMinutes,
+      setSessionDurationMinutes,
+      timeRemainingSeconds,
+      setTimeRemainingSeconds,
+      sessionElapsedSeconds,
+      advanceMode,
+      setAdvanceMode,
+      isSessionFinished,
+      isWaitingManualAdvance,
+      isWaitingAnswer,
+      setIsWaitingAnswer,
+      currentQuestionIndex,
+      lastResult,
+      setLastResult,
+      sessionHistory,
+      setSessionHistory,
+      saveError,
+      clearSaveError,
+      generateQuestionToken,
+      recordPreAnswerRepeat,
+      recordPostErrorRepeat,
+      startCoreSession,
+      advanceToNextQuestion,
+      recordAnswer,
+      stopCoreSession,
+      resetCoreToConfig,
+      cleanupTimers,
+      finalizeAndSaveSession
+    ]
+  )
 }

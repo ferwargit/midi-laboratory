@@ -475,3 +475,29 @@ describe('useSingleNoteTrainer - Suite Completa y Acumulativa', () => {
     })
   })
 })
+
+describe('useSingleNoteTrainer - Cascada de Memoización (F12.3/R1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('dos re-renders sin cambios de estado preservan la identidad del objeto retornado y de sus callbacks clave', () => {
+    const onPlayStimulus = vi.fn()
+    const onInstrumentChanged = vi.fn()
+
+    const { result, rerender } = renderHook(() =>
+      useSingleNoteTrainer({
+        onPlayStimulus,
+        onInstrumentChanged
+      })
+    )
+
+    const first = result.current
+    rerender()
+
+    expect(result.current).toBe(first)
+    expect(result.current.startSession).toBe(first.startSession)
+    expect(result.current.stopSession).toBe(first.stopSession)
+    expect(result.current.handleUserNotePlayed).toBe(first.handleUserNotePlayed)
+  })
+})
