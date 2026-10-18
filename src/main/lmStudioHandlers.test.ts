@@ -82,6 +82,36 @@ describe('lmStudioHandlers - Validación de baseUrl antes de la red (hallazgo F5
       messages: [{ role: 'user', content: 'hola' }]
     }
 
+    it('rechaza un payload malformado con error controlado y NUNCA invoca fetch (F10)', async () => {
+      const malformedPayloads: unknown[] = [
+        { ...basePayload, model: '' },
+        { ...basePayload, model: 42 },
+        { ...basePayload, messages: [] },
+        { ...basePayload, messages: 'hola' },
+        { ...basePayload, messages: [{}] },
+        { ...basePayload, messages: [{ role: 1, content: 'x' }] }
+      ]
+
+      for (const payload of malformedPayloads) {
+        const result = await handleChatCompletion(
+          payload as Parameters<typeof handleChatCompletion>[0]
+        )
+        expect(result.success).toBe(false)
+        expect(result.error).toBe('Payload de mensajes inválido')
+      }
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('rechaza un payload ausente con error controlado y NUNCA invoca fetch (F10)', async () => {
+      const result = await handleChatCompletion(
+        undefined as unknown as Parameters<typeof handleChatCompletion>[0]
+      )
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Payload de mensajes inválido')
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
     it('devuelve error controlado y NUNCA invoca fetch ante una baseUrl rechazada', async () => {
       const result = await handleChatCompletion({ ...basePayload, baseUrl: 'http://10.0.0.5:1234' })
 
