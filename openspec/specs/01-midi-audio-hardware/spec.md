@@ -145,6 +145,7 @@ La función `sendAllNotesOff(channel?: number)` MUST:
    - `Note Off` explícito para las 88 notas físicas del piano (21 a 108) — `[0x80 | chByte, note, 0]`
 6. Si no hay salida, MUST retornar de forma segura tras limpiar el estado interno.
 7. Cualquier excepción de `outputPort.send` MUST ser contenida y NO propagarse al llamador.
+8. El pánico de desmontaje MUST dispararse únicamente en el desmonte final del hook: el efecto de limpieza global MUST invocar siempre la versión vigente de `sendAllNotesOff` y MUST NOT re-ejecutarse ante cambios de identidad de `sendAllNotesOff` derivados de `midiAccess`, `selectedOutputId` o `isDeviceDisconnected`. En consecuencia, una transición de dispositivo (cambio de puerto de salida, reconexión tras desconexión o fluctuación del estado de conexión) MUST NOT emitir la ráfaga de pánico (~180 mensajes por canal activo) hacia ningún puerto.
 
 #### Scenario: Emisión del cuádruple silenciador en Canal 1
 
@@ -186,6 +187,19 @@ La función `sendAllNotesOff(channel?: number)` MUST:
 - **GIVEN** un puerto de salida cuyo método `send` lanza una excepción
 - **WHEN** se invoca `sendAllNotesOff()`
 - **THEN** el estado interno se limpia y la excepción NO se propaga al llamador
+
+#### Scenario: La transición de dispositivo no dispara ráfaga de pánico
+
+- **GIVEN** el hook `useMidi` conectado con un puerto de salida seleccionado
+- **WHEN** ocurre una transición de dispositivo (desconexión y reconexión del adaptador, o cambio de puerto de salida seleccionado)
+- **THEN** ninguna ráfaga de pánico (CC 120/123/64/121, Pitch Bend centrado o NoteOff masivo) se emite como consecuencia de la transición
+- **AND** el pánico solo se emite cuando el hook se desmonta definitivamente
+
+#### Scenario: El pánico de seguridad se mantiene en el desmonte final
+
+- **GIVEN** el hook `useMidi` conectado con un puerto de salida seleccionado
+- **WHEN** el hook se desmonta
+- **THEN** el puerto recibe la secuencia canónica completa de pánico global sobre los canales activos `[1, 10]`
 
 ### Requirement: Aislamiento de Temporizadores por Clave Compuesta
 
@@ -321,6 +335,8 @@ El subsistema MUST (DEBE) permitir ensayar con metrónomo sin iniciar una sesió
 El subsistema MUST (DEBE) tolerar la conexión y desconexión física del adaptador MIDI en caliente, sin bloquear la aplicación ni requerir recarga.
 
 - El hook MUST solicitar acceso con `navigator.requestMIDIAccess({ sysex: false })`.
+- El hook MUST registrar la escucha de cambios de estado del acceso MIDI mediante `access.addEventListener('statechange', handler)` y MUST desregistrarla de forma simétrica en el cleanup del mismo efecto mediante `access.removeEventListener('statechange', handler)` sobre la misma referencia de handler.
+- Tras el desmontaje del hook, el acceso MIDI MUST NOT conservar ninguna escucha de `statechange` registrada por el hook (sin listeners zombi).
 - Cuando no quede ningún puerto de entrada, el hook MUST marcar `isDeviceDisconnected = true` e invocar `onDeviceDisconnected`.
 - Las callbacks `onDeviceDisconnected` / `onDeviceReconnected` MUST dispararse solo en transiciones de estado (flanco).
 - Al reconectar, el hook MUST re-seleccionar preferentemente el último nombre de dispositivo conocido (`lastKnownInputNameRef`).
@@ -337,6 +353,19 @@ El subsistema MUST (DEBE) tolerar la conexión y desconexión física del adapta
 - **GIVEN** el hook `useMidi` conectado con `onDeviceDisconnected` suscrito
 - **WHEN** se vacían los puertos de entrada y se dispara `onstatechange`
 - **THEN** `isDeviceDisconnected === true` y `onDeviceDisconnected` se invocó exactamente una vez
+
+#### Scenario: Desregistro simétrico del listener statechange al desmontar
+
+- **GIVEN** el hook `useMidi` montado con un acceso MIDI resuelto y la escucha `statechange` registrada
+- **WHEN** el hook se desmonta
+- **THEN** `removeEventListener('statechange', ...)` se invoca sobre el acceso MIDI con la misma referencia de handler que fue registrada
+- **AND** el acceso MIDI queda sin ninguna escucha `statechange` registrada por el hook
+
+#### Scenario: La escucha statechange sigue operativa durante toda la vida del hook
+
+- **GIVEN** el hook `useMidi` montado y conectado
+- **WHEN** el acceso MIDI dispara `statechange` en cualquier momento anterior al desmontaje
+- **THEN** el hook refresca los puertos y actualiza el estado de conexión con normalidad
 
 ### Requirement: Redirección de Entrada (Software THRU) y Cambio de Programa
 

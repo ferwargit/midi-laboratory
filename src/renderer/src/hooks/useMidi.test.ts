@@ -23,6 +23,8 @@ interface MockMidiAccessResult {
     inputs: Map<string, MockMidiInput>
     outputs: Map<string, MockMidiOutput>
     onstatechange: (() => void) | null
+    addEventListener: ReturnType<typeof vi.fn>
+    removeEventListener: ReturnType<typeof vi.fn>
   }
   mockInput: MockMidiInput
   mockOutput: MockMidiOutput
@@ -48,10 +50,24 @@ function createMockMidiAccess(): MockMidiAccessResult {
   const inputsMap = new Map<string, MockMidiInput>([['um-one-in-id', mockInput]])
   const outputsMap = new Map<string, MockMidiOutput>([['um-one-out-id', mockOutput]])
 
+  // Registro interno de listeners 'statechange' del mock. El puente de
+  // compatibilidad mantiene `onstatechange` apuntando al último handler
+  // registrado, de modo que los tests existentes que disparan
+  // `access.onstatechange?.()` sigan funcionando con el patrón de eventos.
   const access = {
     inputs: inputsMap,
     outputs: outputsMap,
-    onstatechange: null
+    onstatechange: null as (() => void) | null,
+    addEventListener: vi.fn((type: string, listener: () => void): void => {
+      if (type === 'statechange') {
+        access.onstatechange = listener
+      }
+    }),
+    removeEventListener: vi.fn((type: string, listener: () => void): void => {
+      if (type === 'statechange' && access.onstatechange === listener) {
+        access.onstatechange = null
+      }
+    })
   }
 
   return { access, mockInput, mockOutput }
@@ -511,6 +527,205 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
     expect(result.current.isDeviceDisconnected).toBe(true)
     expect(result.current.status).toContain('desconectado')
     expect(onDeviceDisconnected).toHaveBeenCalledTimes(1)
+  })
+
+  it('al desmontar desregistra el listener statechange con la misma referencia registrada', async () => {
+    const { access } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result, unmount } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.status).toContain('conectado')
+
+    // La escucha quedó registrada exactamente una vez con el evento 'statechange'
+    expect(access.addEventListener).toHaveBeenCalledTimes(1)
+    const registered = access.addEventListener.mock.calls[0]
+    expect(registered[0]).toBe('statechange')
+    const registeredHandler = registered[1] as () => void
+    expect(typeof registeredHandler).toBe('function')
+
+    unmount()
+
+    // Desregistro simétrico: misma referencia de handler, mismo tipo de evento
+    expect(access.removeEventListener).toHaveBeenCalledTimes(1)
+    const removed = access.removeEventListener.mock.calls[0]
+    expect(removed[0]).toBe('statechange')
+    expect(removed[1]).toBe(registeredHandler)
+
+    // El acceso MIDI queda sin ninguna escucha statechange del hook
+    expect(access.onstatechange).toBeNull()
+  })
+
+  it('una transición de dispositivo NO dispara la ráfaga de pánico; solo el desmonte final la emite', async () => {
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result, unmount } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.status).toContain('conectado')
+
+    // Transición de dispositivo: desconexión física (sin puertos de entrada).
+    // El puerto de salida permanece en el mapa de MIDIAccess (como en el
+    // hardware real), de modo que el pánico espurio sí alcanzaría al puerto.
+    access.inputs.clear()
+    act(() => {
+      access.onstatechange?.()
+    })
+    expect(result.current.isDeviceDisconnected).toBe(true)
+
+    // ...y reconexión del adaptador
+    access.inputs.set('um-one-in-id', {
+      id: 'um-one-in-id',
+      name: 'Roland UM-ONE',
+      state: 'connected',
+      type: 'input',
+      onmidimessage: null
+    })
+    act(() => {
+      access.onstatechange?.()
+    })
+    expect(result.current.isDeviceDisconnected).toBe(false)
+
+    // Ningún mensaje de pánico fue emitido como consecuencia de la transición
+    const panicMessages = mockOutput.send.mock.calls.filter(
+      ([msg]) =>
+        (Array.isArray(msg) &&
+          (msg[0] === 0xb0 ||
+            msg[0] === 0xb9 ||
+            msg[0] === 0xe0 ||
+            msg[0] === 0xe9 ||
+            msg[0] === 0x80 ||
+            msg[0] === 0x89)) ||
+        !Array.isArray(msg)
+    )
+    expect(panicMessages).toEqual([])
+
+    // El desmonte final SÍ emite la secuencia canónica de pánico global [1, 10]
+    unmount()
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 123, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 64, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 121, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xe0, 0x00, 0x40])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 21, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 108, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 120, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 123, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 64, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 121, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xe9, 0x00, 0x40])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x89, 21, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x89, 108, 0])
+  })
+
+  it('el cambio de puerto de salida seleccionado no dispara ráfaga de pánico; el desmonte final usa el puerto vigente', async () => {
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const secondOutput: MockMidiOutput = {
+      id: 'second-out-id',
+      name: 'Second Interface',
+      state: 'connected',
+      type: 'output',
+      send: vi.fn()
+    }
+
+    const { result, unmount } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.selectedOutputId).toBe('um-one-out-id')
+
+    // Segundo puerto de salida disponible en el acceso MIDI
+    access.outputs.set('second-out-id', secondOutput)
+
+    // Cambio explícito de puerto de salida seleccionado (transición de dispositivo)
+    act(() => {
+      result.current.setSelectedOutputId('second-out-id')
+    })
+    expect(result.current.selectedOutputId).toBe('second-out-id')
+
+    // Ninguna ráfaga de pánico en el puerto antiguo como consecuencia del cambio
+    const oldPortPanic = mockOutput.send.mock.calls.filter(
+      ([msg]) =>
+        (Array.isArray(msg) &&
+          (msg[0] === 0xb0 ||
+            msg[0] === 0xb9 ||
+            msg[0] === 0xe0 ||
+            msg[0] === 0xe9 ||
+            msg[0] === 0x80 ||
+            msg[0] === 0x89)) ||
+        !Array.isArray(msg)
+    )
+    expect(oldPortPanic).toEqual([])
+    // Ni llamada alguna al puerto nuevo por el mero cambio de selección
+    expect(secondOutput.send).not.toHaveBeenCalled()
+
+    // El desmonte final invoca la versión vigente de sendAllNotesOff (vía ref):
+    // el pánico canónico completo [1, 10] sale por el puerto NUEVO
+    unmount()
+    expect(secondOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0xb0, 123, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0xb0, 64, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0xb0, 121, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0xe0, 0x00, 0x40])
+    expect(secondOutput.send).toHaveBeenCalledWith([0x80, 21, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0x80, 108, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0xb9, 120, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0xb9, 123, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0xb9, 64, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0xb9, 121, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0xe9, 0x00, 0x40])
+    expect(secondOutput.send).toHaveBeenCalledWith([0x89, 21, 0])
+    expect(secondOutput.send).toHaveBeenCalledWith([0x89, 108, 0])
+    // El puerto antiguo no recibe mensaje alguno en todo el ciclo de vida
+    expect(mockOutput.send).not.toHaveBeenCalled()
+  })
+
+  it('el desmonte final emite la secuencia canónica de pánico global sobre los canales activos [1, 10]', async () => {
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { unmount } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    unmount()
+
+    // Canal 1 (0xB0 / 0xE0 / 0x80)
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 123, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 64, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 121, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xe0, 0x00, 0x40])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 21, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 108, 0])
+
+    // Canal 10 (0xB9 / 0xE9 / 0x89)
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 120, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 123, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 64, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb9, 121, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0xe9, 0x00, 0x40])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x89, 21, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x89, 108, 0])
   })
 
   it('addLog formatea adecuadamente los mensajes con timestamp y recorta historial a 35 items', () => {
