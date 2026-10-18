@@ -1,9 +1,48 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { isSessionPermissionAllowed } from './sessionPermissions'
 
 const LM_STUDIO_DEFAULT_HOST = 'http://127.0.0.1:1234'
+
+/**
+ * Política de permisos de sesión (capacidad 08-electron-session-security,
+ * hallazgo F4 de la auditoría V7). Electron aprueba automáticamente cualquier
+ * solicitud de permiso cuando no hay handler configurado; este cableado aplica
+ * el allowlist canónico de sessionPermissions.ts en ambos puntos de entrada:
+ * solicitudes asíncronas (setPermissionRequestHandler) y comprobaciones
+ * síncronas (setPermissionCheckHandler). Debe invocarse antes de crear la
+ * primera ventana para que ninguna solicitud pueda llegar sin política.
+ */
+function registerSessionPermissionHandlers(): void {
+  const deny = (permission: string, origin?: string, isMainFrame?: boolean): void => {
+    const context: string[] = []
+    if (origin) context.push(`origen: ${origin}`)
+    if (isMainFrame !== undefined) context.push(`marco principal: ${isMainFrame}`)
+    const suffix = context.length > 0 ? ` (${context.join(', ')})` : ''
+    console.warn(`[Permisos] Denegado: '${permission}'${suffix}`)
+  }
+
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, permission, callback, details) => {
+      if (isSessionPermissionAllowed(permission)) {
+        callback(true)
+        return
+      }
+      deny(permission, details?.requestingUrl, details?.isMainFrame)
+      callback(false)
+    }
+  )
+
+  session.defaultSession.setPermissionCheckHandler(
+    (_webContents, permission, requestingOrigin, details) => {
+      if (isSessionPermissionAllowed(permission)) return true
+      deny(permission, requestingOrigin, details?.isMainFrame)
+      return false
+    }
+  )
+}
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -122,6 +161,8 @@ ipcMain.handle(
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron')
+
+  registerSessionPermissionHandlers()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
