@@ -142,6 +142,18 @@ export function useMidi({
     [midiAccess, selectedOutputId, isDeviceDisconnected]
   )
 
+  // Referencia siempre vigente a la última versión de sendAllNotesOff: el
+  // efecto de pánico de desmontaje (deps []) la invoca sin re-ejecutarse en
+  // cada transición de dispositivo (hallazgo F11.3 de la auditoría V8).
+  const sendAllNotesOffRef = useRef(sendAllNotesOff)
+
+  // Sincronización en cada render (efecto sin guard de montaje), siguiendo el
+  // patrón de las refs de callbacks del hook. Declarado tras sendAllNotesOff
+  // para no acceder a la variable antes de su declaración (react-hooks).
+  useEffect(() => {
+    sendAllNotesOffRef.current = sendAllNotesOff
+  })
+
   const clearAllPressedNotes = useCallback((): void => {
     sendAllNotesOff()
   }, [sendAllNotesOff])
@@ -197,17 +209,24 @@ export function useMidi({
     if (!navigator.requestMIDIAccess) return
 
     let isMounted = true
+    let access: MIDIAccess | null = null
+
+    // Handler nombrado y estable: la misma referencia se usa en el registro y
+    // en el desregistro, garantizando la simetría del par add/remove.
+    const handleStateChange = (): void => {
+      if (isMounted && access) refreshPorts(access)
+    }
+
     navigator
       .requestMIDIAccess({ sysex: false })
-      .then((access) => {
+      .then((resolvedAccess) => {
         if (!isMounted) return
+        access = resolvedAccess
         setMidiAccess(access)
         setStatus('Web MIDI conectado.')
         refreshPorts(access)
 
-        access.onstatechange = (): void => {
-          if (isMounted) refreshPorts(access)
-        }
+        access.addEventListener('statechange', handleStateChange)
       })
       .catch((err: Error) => {
         if (isMounted) setStatus(`Error MIDI: ${err.message}`)
@@ -215,14 +234,21 @@ export function useMidi({
 
     return (): void => {
       isMounted = false
+      // Desregistro simétrico: sin listeners zombi sobre el MIDIAccess.
+      if (access) access.removeEventListener('statechange', handleStateChange)
     }
   }, [refreshPorts])
 
+  // Pánico de seguridad exclusivo del desmonte final del hook: dependencias
+  // vacías garantizan que el cleanup NO se re-ejecute ante cambios de
+  // identidad de sendAllNotesOff (cambio de puerto, reconexión o fluctuación
+  // del estado de conexión), eliminando la tormenta de ~180 mensajes MIDI por
+  // transición (hallazgo F11.3 de la auditoría V8).
   useEffect(() => {
     return (): void => {
-      sendAllNotesOff()
+      sendAllNotesOffRef.current()
     }
-  }, [sendAllNotesOff])
+  }, [])
 
   useEffect(() => {
     if (!midiAccess || !selectedInputId || isDeviceDisconnected) return
