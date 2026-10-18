@@ -1,11 +1,10 @@
 import React, { useRef, useEffect, memo } from 'react'
-import { MidiLogEntry } from '../../hooks/useMidi'
+import { useTelemetryStore, MidiLogEntry } from '../../stores/useTelemetryStore'
 
-interface MidiMonitorProps {
-  logs: MidiLogEntry[]
-}
-
-function MidiMonitorComponent({ logs }: MidiMonitorProps): React.ReactElement {
+function MidiMonitorComponent(): React.ReactElement {
+  // Suscripción directa al buffer del store de telemetría (SSOT): el monitor
+  // se re-renderiza por sí solo ante eventos de log, sin props del dock.
+  const logs = useTelemetryStore((state) => state.logs)
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

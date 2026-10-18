@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useMidi } from './useMidi'
+import { useTelemetryStore } from '../stores/useTelemetryStore'
 
 interface MockMidiInput {
   id: string
@@ -77,6 +78,8 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
   beforeEach(() => {
     vi.restoreAllMocks()
     delete (navigator as unknown as { requestMIDIAccess?: unknown }).requestMIDIAccess
+    // Reset del buffer de telemetría global entre tests
+    useTelemetryStore.setState({ logs: [] })
   })
 
   it('debe inicializarse con estado de error si Web MIDI API no está disponible', () => {
@@ -728,6 +731,25 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
     expect(mockOutput.send).toHaveBeenCalledWith([0x89, 108, 0])
   })
 
+  it('addLog NO re-renderiza al consumidor del hook (stream de telemetría desacoplado del render raíz)', () => {
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders++
+      return useMidi()
+    })
+
+    const rendersBefore = renders
+
+    act(() => {
+      result.current.addLog({ type: 'IN', message: 'Evento de telemetría' })
+    })
+
+    // El buffer vive en el store de telemetría, no en el estado del hook:
+    // un evento de log no provoca re-render del consumidor (F12.1)
+    expect(renders).toBe(rendersBefore)
+    expect(useTelemetryStore.getState().logs).toHaveLength(1)
+  })
+
   it('addLog formatea adecuadamente los mensajes con timestamp y recorta historial a 35 items', () => {
     const { result } = renderHook(() => useMidi())
 
@@ -737,7 +759,9 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
       }
     })
 
-    expect(result.current.logs.length).toBe(35)
-    expect(result.current.logs[result.current.logs.length - 1].message).toBe('Evento 39')
+    // La ventana deslizante se verifica contra el store de telemetría (SSOT)
+    const logs = useTelemetryStore.getState().logs
+    expect(logs.length).toBe(35)
+    expect(logs[logs.length - 1].message).toBe('Evento 39')
   })
 })

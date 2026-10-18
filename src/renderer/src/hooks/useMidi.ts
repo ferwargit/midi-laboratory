@@ -2,17 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { parseMidiData, ParsedMidiMessage } from '../services/midi/midiParser'
 import { MidiInputFilter } from '../services/midi/midiInputFilter'
 import { DEFAULT_APP_CONFIG } from '../domain/ai/appConfig'
+import { useTelemetryStore, MidiLogEntry } from '../stores/useTelemetryStore'
 
-export interface MidiLogEntry {
-  id: number
-  time: string
-  type: 'IN' | 'OUT' | 'AI' | 'EVAL'
-  message: string
-  noteNumber?: number
-  velocity?: number
-}
+// Compatibilidad de imports: el tipo canónico vive en el store de telemetría
+// (fuente única de verdad del buffer), pero los consumidores existentes lo
+// importan desde este módulo.
+export type { MidiLogEntry }
 
-interface UseMidiOptions {
+export interface UseMidiOptions {
   onNoteOn?: (noteNumber: number, velocity: number) => void
   onNoteOff?: (noteNumber: number) => void
   onDeviceDisconnected?: () => void
@@ -31,7 +28,6 @@ export interface UseMidiReturn {
   setSelectedOutputId: (id: string) => void
   pressedNotes: number[]
   activeStimulusNotes: number[]
-  logs: MidiLogEntry[]
   addLog: (entry: Omit<MidiLogEntry, 'id' | 'time'>) => void
   sendNote: (noteNumber: number, durationMs?: number, velocity?: number, channel?: number) => void
   changeProgram: (programNumber: number, channel?: number) => void
@@ -66,7 +62,6 @@ export function useMidi({
       ? 'Iniciando Web MIDI...'
       : 'Error: Web MIDI API no disponible'
   )
-  const [logs, setLogs] = useState<MidiLogEntry[]>([])
 
   // SSOT: Consumo de constantes centralizadas
   const filterRef = useRef<MidiInputFilter>(
@@ -89,17 +84,12 @@ export function useMidi({
     onReconnectedRef.current = onDeviceReconnected
   })
 
+  // Fachada de escritura sobre el store de telemetría: el buffer NO vive en
+  // el estado de este hook ni del componente raíz, de modo que un evento de
+  // log no re-renderiza el árbol (auditoría V8, F12.1). Se usa getState()
+  // para no suscribir el hook al buffer.
   const addLog = useCallback((entry: Omit<MidiLogEntry, 'id' | 'time'>): void => {
-    const now = new Date()
-    const time = `${now.getHours().toString().padStart(2, '0')}:${now
-      .getMinutes()
-      .toString()
-      .padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now
-      .getMilliseconds()
-      .toString()
-      .padStart(3, '0')}`
-
-    setLogs((prev) => [...prev, { id: Date.now() + Math.random(), time, ...entry }].slice(-35))
+    useTelemetryStore.getState().addLog(entry)
   }, [])
 
   const sendAllNotesOff = useCallback(
@@ -387,7 +377,6 @@ export function useMidi({
     setSelectedOutputId,
     pressedNotes,
     activeStimulusNotes,
-    logs,
     addLog,
     sendNote,
     changeProgram,

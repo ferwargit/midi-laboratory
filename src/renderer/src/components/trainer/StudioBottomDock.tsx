@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { useDatabaseStore } from '../../stores/useDatabaseStore'
+import { useTelemetryStore } from '../../stores/useTelemetryStore'
 import { MASTERY_THRESHOLDS } from '../../domain/analytics/historyAnalytics'
-import { MidiLogEntry } from '../../hooks/useMidi'
 import { MidiMonitor } from './MidiMonitor'
 import {
   Download,
@@ -15,14 +15,20 @@ import {
 } from 'lucide-react'
 
 interface StudioBottomDockProps {
-  logs: MidiLogEntry[]
   onOpenResetModal: () => void
 }
 
-function StudioBottomDockImpl({
-  logs,
-  onOpenResetModal
-}: StudioBottomDockProps): React.ReactElement {
+// Badge de conteo aislado y memoizado: se suscribe al store de telemetría con
+// un selector primitivo (s.logs.length), de modo que los eventos de log
+// re-renderizan SOLO este nodo hoja y no el cuerpo del dock (auditoría V8, F12.2).
+function TelemetryCountBadgeImpl(): React.ReactElement {
+  const count = useTelemetryStore((state) => state.logs.length)
+  return <span>Telemetría ({count})</span>
+}
+
+export const TelemetryCountBadge = React.memo(TelemetryCountBadgeImpl)
+
+function StudioBottomDockImpl({ onOpenResetModal }: StudioBottomDockProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false)
   const summary = useDatabaseStore((state) => state.summary)
   const exportBackupJson = useDatabaseStore((state) => state.exportBackupJson)
@@ -187,7 +193,7 @@ function StudioBottomDockImpl({
             className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 px-2.5 py-1 rounded-lg text-zinc-300 text-[11px] cursor-pointer transition-colors"
           >
             <Terminal className="w-3.5 h-3.5 mr-1" />
-            <span>Telemetría ({logs.length})</span>
+            <TelemetryCountBadge />
             {isOpen ? (
               <ChevronUp className="w-3.5 h-3.5 text-zinc-500" />
             ) : (
@@ -200,7 +206,7 @@ function StudioBottomDockImpl({
       {/* DRAWER DESPLEGABLE CON EL MONITOR TELEMÉTRICO */}
       {isOpen && (
         <div className="p-3 border-t border-zinc-800/80 bg-zinc-950/90 animate-in slide-in-from-bottom-2 duration-150">
-          <MidiMonitor logs={logs} />
+          <MidiMonitor />
         </div>
       )}
     </footer>
