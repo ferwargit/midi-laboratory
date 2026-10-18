@@ -39,6 +39,12 @@ export default function App(): React.ReactElement {
   const [appMode, setAppMode] = useState<AppMode>('single_note')
   const [visualCueMode, setVisualCueMode] = useState<VisualCueMode>('blind')
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false)
+
+  // Callback de identidad estable para el dock: su React.memo cortocircuita
+  // ante re-renders de App (auditoría V8, F12.2)
+  const handleOpenResetModal = useCallback((): void => {
+    setIsResetModalOpen(true)
+  }, [])
   const handleNoteRef = useRef<
     (note: number, velocity?: number, source?: 'midi_hardware' | 'virtual_ui') => void
   >(() => {})
@@ -589,7 +595,7 @@ export default function App(): React.ReactElement {
       </main>
 
       {/* 3. DOCK INFERIOR PLEGABLE */}
-      <StudioBottomDock logs={midi.logs} onOpenResetModal={(): void => setIsResetModalOpen(true)} />
+      <StudioBottomDock onOpenResetModal={handleOpenResetModal} />
 
       <ConfirmModal
         isOpen={isResetModalOpen}
