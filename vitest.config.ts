@@ -13,6 +13,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       include: [
+        'src/main/**',
         'src/renderer/src/domain/**',
         'src/renderer/src/stores/**',
         'src/renderer/src/hooks/**',
