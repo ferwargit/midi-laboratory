@@ -1,8 +1,5 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
-
 declare global {
   interface Window {
-    electron: ElectronAPI
     customAPI: {
       checkLmStudioModels: (baseUrl?: string) => Promise<string | null>
       chatLmStudio: (payload: {
@@ -20,3 +17,7 @@ declare global {
     }
   }
 }
+
+// El archivo debe permanecer como módulo externo para que `declare global`
+// siga aplicando la augmentación de Window al proyecto del renderer.
+export {}
