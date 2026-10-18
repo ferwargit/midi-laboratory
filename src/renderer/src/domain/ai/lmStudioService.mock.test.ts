@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import { LmStudioService } from './lmStudioService'
 import { AnalyticsMetrics, DetailedSessionAnalysis } from '../analytics/historyAnalytics'
 import { DbAiConsultationRecord, DbAiReportRecord } from '../database/types'
@@ -91,42 +93,28 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
     vi.restoreAllMocks()
   })
 
-  it('debe comunicarse exitosamente vía fetch HTTP y parsear la respuesta del modelo', async () => {
-    const fakeModelsResponse = { data: [{ id: 'qwen3.5-mock' }] }
-    const fakeChatResponse = {
-      model: 'qwen3.5-mock',
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              analysisText: 'Diagnóstico generado vía mock.',
-              prescription: {
-                title: 'Prescripción Mock',
-                rationale: 'Razón',
-                targetMode: 'single_note',
-                instrumentId: 'acoustic_grand_piano',
-                recommendedNotes: [60, 62],
-                limitType: 'questions',
-                questionsCount: 10,
-                durationMinutes: 5,
-                advanceMode: 'smart'
-              }
-            })
+  it('debe comunicarse exitosamente vía IPC customAPI y parsear la respuesta del modelo', async () => {
+    window.customAPI = {
+      checkLmStudioModels: vi.fn().mockResolvedValue('qwen3.5-mock'),
+      chatLmStudio: vi.fn().mockResolvedValue({
+        success: true,
+        model: 'qwen3.5-mock',
+        content: JSON.stringify({
+          analysisText: 'Diagnóstico generado vía mock.',
+          prescription: {
+            title: 'Prescripción Mock',
+            rationale: 'Razón',
+            targetMode: 'single_note',
+            instrumentId: 'acoustic_grand_piano',
+            recommendedNotes: [60, 62],
+            limitType: 'questions',
+            questionsCount: 10,
+            durationMinutes: 5,
+            advanceMode: 'smart'
           }
-        }
-      ]
+        })
+      })
     }
-
-    global.fetch = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => fakeModelsResponse
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => fakeChatResponse
-      } as Response)
 
     const service = new LmStudioService('http://127.0.0.1:1234')
     const result = await service.analyzeAndPrescribe(mockMetrics)
@@ -135,31 +123,20 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
     expect(result.modelName).toBe('qwen3.5-mock')
     expect(result.analysisText).toBe('Diagnóstico generado vía mock.')
     expect(result.prescription.title).toBe('Prescripción Mock')
+
+    delete (window as unknown as { customAPI?: unknown }).customAPI
   })
 
-  it('askCustomConsultation debe transmitir la secuencia Multi-Turn con historial conversacional vía fetch', async () => {
-    const fakeModelsResponse = { data: [{ id: 'qwen3.5-mock' }] }
-    const fakeChatResponse = {
+  it('askCustomConsultation debe transmitir la secuencia Multi-Turn con historial conversacional vía IPC', async () => {
+    const chatLmStudioSpy = vi.fn().mockResolvedValue({
+      success: true,
       model: 'qwen3.5-mock',
-      choices: [
-        {
-          message: {
-            content: 'Respuesta del tutor recordando el diálogo previo sobre F4.'
-          }
-        }
-      ]
+      content: 'Respuesta del tutor recordando el diálogo previo sobre F4.'
+    })
+    window.customAPI = {
+      checkLmStudioModels: vi.fn().mockResolvedValue('qwen3.5-mock'),
+      chatLmStudio: chatLmStudioSpy
     }
-
-    global.fetch = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => fakeModelsResponse
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => fakeChatResponse
-      } as Response)
 
     const service = new LmStudioService('http://127.0.0.1:1234')
     const result = await service.askCustomConsultation(
@@ -172,7 +149,13 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
 
     expect(result.modelName).toBe('qwen3.5-mock')
     expect(result.content).toBe('Respuesta del tutor recordando el diálogo previo sobre F4.')
-    expect(global.fetch).toHaveBeenCalledTimes(2)
+
+    const payload = chatLmStudioSpy.mock.calls[0][0]
+    const serializedMessages = JSON.stringify(payload.messages)
+    expect(serializedMessages).toContain('Roland FP-8')
+    expect(serializedMessages).toContain('F4 tiene armónicos')
+
+    delete (window as unknown as { customAPI?: unknown }).customAPI
   })
 
   it('askCustomConsultation debe comunicarse vía Electron IPC customAPI si está disponible', async () => {
@@ -274,5 +257,18 @@ describe('lmStudioService - Pruebas de Integración con Mocks (Inferencia, IPC y
     )
 
     delete (window as unknown as { customAPI?: unknown }).customAPI
+  })
+})
+
+describe('lmStudioService - Política de transporte IPC exclusivo (hallazgo F1)', () => {
+  const serviceSource = readFileSync(resolve(__dirname, 'lmStudioService.ts'), 'utf-8')
+
+  it('el servicio NO contiene llamadas fetch() directas', () => {
+    expect(serviceSource).not.toContain('fetch(')
+  })
+
+  it('window.customAPI es la única vía de comunicación referenciada', () => {
+    expect(serviceSource).toContain('window.customAPI')
+    expect(serviceSource).not.toContain('global.fetch')
   })
 })

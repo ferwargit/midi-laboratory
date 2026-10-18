@@ -37,25 +37,12 @@ export class LmStudioService {
   async getLoadedModelId(): Promise<string | null> {
     if (!this.circuitBreaker.canExecute()) return null
 
+    // Canal único (hallazgo F1): sin IPC se degrada con null (contrato "servidor caído").
     if (typeof window !== 'undefined' && window.customAPI?.checkLmStudioModels) {
       return await window.customAPI.checkLmStudioModels(this.config.baseUrl)
     }
 
-    try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), this.config.checkModelTimeoutMs)
-
-      const res = await fetch(`${this.config.baseUrl}/v1/models`, {
-        signal: controller.signal
-      })
-      clearTimeout(timeout)
-
-      if (!res.ok) return null
-      const data = await res.json()
-      return data.data?.[0]?.id || null
-    } catch {
-      return null
-    }
+    return null
   }
 
   async checkConnection(): Promise<boolean> {
@@ -64,48 +51,32 @@ export class LmStudioService {
   }
 
   /**
-   * Método centralizado (DRY): ejecuta la llamada a LM Studio vía IPC o fallback a fetch
+   * Método centralizado (DRY): canal IPC exclusivo hacia LM Studio (hallazgo F1).
+   * Sin window.customAPI lanza un Error controlado que el circuit breaker
+   * convierte en fallback algorítmico; nunca hay llamadas de red directas.
    */
   private async sendChat(
     messages: ChatMessage[],
     temperature: number,
     model: string
   ): Promise<{ content: string; modelName: string }> {
-    if (typeof window !== 'undefined' && window.customAPI?.chatLmStudio) {
-      const result = await window.customAPI.chatLmStudio({
-        model,
-        messages,
-        temperature,
-        timeoutMs: this.config.chatTimeoutMs,
-        baseUrl: this.config.baseUrl
-      })
-      if (!result.success || !result.content) {
-        throw new Error(result.error || 'Respuesta vacía de IPC')
-      }
-      return {
-        content: result.content,
-        modelName: result.model || model
-      }
+    if (typeof window === 'undefined' || !window.customAPI?.chatLmStudio) {
+      throw new Error('Canal IPC no disponible')
     }
 
-    const res = await fetch(`${this.config.baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature
-      })
+    const result = await window.customAPI.chatLmStudio({
+      model,
+      messages,
+      temperature,
+      timeoutMs: this.config.chatTimeoutMs,
+      baseUrl: this.config.baseUrl
     })
-
-    if (!res.ok) throw new Error(`HTTP error ${res.status}`)
-    const data = await res.json()
-    const message = data.choices?.[0]?.message
-    const content = message?.content || message?.reasoning_content || ''
-
+    if (!result.success || !result.content) {
+      throw new Error(result.error || 'Respuesta vacía de IPC')
+    }
     return {
-      content,
-      modelName: data.model || model
+      content: result.content,
+      modelName: result.model || model
     }
   }
 

@@ -51,14 +51,12 @@ function createWindow(): void {
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'), // sandbox: false es intencional. Con sandbox: true, window.customAPI
-      // (expuesto vía contextBridge) deja de estar disponible en el renderer,
-      // forzando el fallback a fetch() directo en lmStudioService, que a su vez
-      // choca con el Content-Security-Policy de index.html. Para una app de
-      // uso 100% personal y local, el costo funcional de sandbox no compensa
-      // la ganancia de seguridad. contextIsolation: true ya aísla el contexto
-      // del renderer del de Node, que es la mitigación relevante acá.
-      sandbox: false,
+      preload: join(__dirname, '../preload/index.js'),
+      // sandbox activo (hallazgo F1): el renderer corre como proceso sandboxeado
+      // de Chromium sin acceso a Node. El canal único hacia LM Studio es IPC
+      // (window.customAPI, compatible con sandbox); el fallback a fetch() que
+      // motivaba desactivar el sandbox fue eliminado de lmStudioService.
+      sandbox: true,
       contextIsolation: true
     }
   })
