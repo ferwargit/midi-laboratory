@@ -765,3 +765,164 @@ describe('useMidi - Cobertura Integral de Hardware, Eventos y MIDI Panic', () =>
     expect(logs[logs.length - 1].message).toBe('Evento 39')
   })
 })
+
+describe('useMidi - Estabilidad Referencial del Retorno (F12.3/R1)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    delete (navigator as unknown as { requestMIDIAccess?: unknown }).requestMIDIAccess
+    useTelemetryStore.setState({ logs: [] })
+  })
+
+  it('dos re-renders sin cambios de estado devuelven la misma referencia de objeto y de métodos clave', async () => {
+    const { access } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result, rerender } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const first = result.current
+    rerender()
+
+    expect(result.current).toBe(first)
+    expect(result.current.sendNote).toBe(first.sendNote)
+    expect(result.current.sendAllNotesOff).toBe(first.sendAllNotesOff)
+    expect(result.current.changeProgram).toBe(first.changeProgram)
+    expect(result.current.clearAllPressedNotes).toBe(first.clearAllPressedNotes)
+    expect(result.current.addLog).toBe(first.addLog)
+  })
+
+  it('un cambio de estado reactivo (Note On) produce identidad nueva y pressedNotes fresco', async () => {
+    const { access, mockInput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const before = result.current
+
+    act(() => {
+      mockInput.onmidimessage?.({ data: new Uint8Array([0x90, 64, 100]) })
+    })
+
+    expect(result.current).not.toBe(before)
+    expect(result.current.pressedNotes).toContain(64)
+  })
+
+  it('sendNote emite por el puerto vigente tras cambiar selectedOutputId y mantiene identidad ante cambios de estado ajenos', async () => {
+    const { access, mockInput, mockOutput } = createMockMidiAccess()
+
+    const secondOutput: MockMidiOutput = {
+      id: 'second-out-id',
+      name: 'Second Interface',
+      state: 'connected',
+      type: 'output',
+      send: vi.fn()
+    }
+    access.outputs.set('second-out-id', secondOutput)
+
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const beforePortChange = result.current
+
+    act(() => {
+      result.current.setSelectedOutputId('second-out-id')
+    })
+
+    // El cambio de puerto reactivo invalida la identidad del retorno (valor fresco)
+    expect(result.current).not.toBe(beforePortChange)
+    expect(result.current.selectedOutputId).toBe('second-out-id')
+
+    act(() => {
+      result.current.sendNote(60, 500)
+    })
+    // El método opera sobre el puerto vigente, no sobre el capturado previamente
+    expect(secondOutput.send).toHaveBeenCalledWith([0x90, 60, 100])
+    expect(mockOutput.send).not.toHaveBeenCalledWith([0x90, 60, 100])
+
+    // Un cambio de estado ajeno a las deps de sendNote (pressedNotes) NO altera
+    // la identidad del método: este sigue operando correctamente
+    const sendNoteAfterPortChange = result.current.sendNote
+
+    act(() => {
+      mockInput.onmidimessage?.({ data: new Uint8Array([0x90, 72, 100]) })
+    })
+
+    expect(result.current.sendNote).toBe(sendNoteAfterPortChange)
+
+    act(() => {
+      result.current.sendNote(72, 500)
+    })
+    expect(secondOutput.send).toHaveBeenCalledWith([0x90, 72, 100])
+  })
+
+  it('cada valor reactivo restante invalida la identidad del retorno con valor fresco', async () => {
+    const { access, mockInput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi())
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // selectedInputId
+    const beforeInput = result.current
+    act(() => {
+      result.current.setSelectedInputId('other-in-id')
+    })
+    expect(result.current).not.toBe(beforeInput)
+    expect(result.current.selectedInputId).toBe('other-in-id')
+
+    // activeStimulusNotes (sendNote en Canal 1 melódico)
+    const beforeStimulus = result.current
+    act(() => {
+      result.current.sendNote(60, 500)
+    })
+    expect(result.current).not.toBe(beforeStimulus)
+    expect(result.current.activeStimulusNotes).toContain(60)
+
+    // Desconexión total: status, isDeviceDisconnected e inputs cambian juntos
+    // (transición real de dispositivo)
+    const beforeDisconnect = result.current
+    act(() => {
+      access.inputs.clear()
+      access.onstatechange?.()
+    })
+    expect(result.current).not.toBe(beforeDisconnect)
+    expect(result.current.isDeviceDisconnected).toBe(true)
+    expect(result.current.inputs).toEqual([])
+    expect(result.current.status).toContain('desconectado')
+
+    // Reconexión: status, isDeviceDisconnected, inputs y outputs frescos
+    const beforeReconnect = result.current
+    act(() => {
+      access.inputs.set('um-one-in-id', mockInput)
+      access.onstatechange?.()
+    })
+    expect(result.current).not.toBe(beforeReconnect)
+    expect(result.current.isDeviceDisconnected).toBe(false)
+    expect(result.current.inputs.length).toBe(1)
+    expect(result.current.outputs.length).toBe(1)
+    expect(result.current.status).toContain('conectado')
+  })
+})

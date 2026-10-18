@@ -963,3 +963,280 @@ describe('useTrainerCore - Kernel Unificado del Ciclo de Vida de Sesión', () =>
     expect(result.current.isWaitingAnswer).toBe(true)
   })
 })
+
+describe('useTrainerCore - Estabilidad Referencial del Retorno (F12.3/R1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('dos re-renders sin cambios de estado devuelven la misma referencia de objeto y de métodos de acción', () => {
+    const onBuildSessionRecord = vi.fn()
+    const { result, rerender } = renderHook(() => useTrainerCore({ onBuildSessionRecord }))
+
+    const first = result.current
+    rerender()
+
+    expect(result.current).toBe(first)
+    expect(result.current.startCoreSession).toBe(first.startCoreSession)
+    expect(result.current.advanceToNextQuestion).toBe(first.advanceToNextQuestion)
+    expect(result.current.recordAnswer).toBe(first.recordAnswer)
+    expect(result.current.stopCoreSession).toBe(first.stopCoreSession)
+    expect(result.current.resetCoreToConfig).toBe(first.resetCoreToConfig)
+  })
+
+  it('un cambio de estado reactivo produce identidad nueva y valor fresco', () => {
+    const onBuildSessionRecord = vi.fn()
+    const { result } = renderHook(() => useTrainerCore({ onBuildSessionRecord }))
+
+    const before = result.current
+
+    act(() => {
+      result.current.setSessionLimitType('time')
+    })
+
+    expect(result.current).not.toBe(before)
+    expect(result.current.sessionLimitType).toBe('time')
+
+    const beforeHistory = result.current
+
+    act(() => {
+      result.current.setSessionHistory([{ correct: true }])
+    })
+
+    expect(result.current).not.toBe(beforeHistory)
+    expect(result.current.sessionHistory).toEqual([{ correct: true }])
+  })
+
+  it('los getters en vivo leen el estado vigente aunque el contenedor no cambie de identidad', () => {
+    const onBuildSessionRecord = vi.fn()
+    const { result } = renderHook(() => useTrainerCore({ onBuildSessionRecord }))
+
+    act(() => {
+      result.current.startCoreSession()
+    })
+
+    expect(result.current.isSessionActive).toBe(true)
+    expect(result.current.sessionId).toMatch(/^session_/)
+
+    // generateQuestionToken solo muta refs (sin setState): el contenedor no se
+    // re-crea, pero el getter questionToken lee el valor vigente en el acceso
+    const containerBefore = result.current
+
+    act(() => {
+      result.current.generateQuestionToken('token')
+    })
+
+    expect(result.current).toBe(containerBefore)
+    expect(result.current.questionToken).toMatch(/^token_/)
+    expect(result.current.questionToken).not.toBeNull()
+  })
+
+  it('cada setter de estado reactivo restante invalida la identidad con valor fresco', () => {
+    const onBuildSessionRecord = vi.fn()
+    const { result } = renderHook(() => useTrainerCore({ onBuildSessionRecord }))
+
+    // sessionQuestionsCount
+    const beforeQuestions = result.current
+    act(() => {
+      result.current.setSessionQuestionsCount(5)
+    })
+    expect(result.current).not.toBe(beforeQuestions)
+    expect(result.current.sessionQuestionsCount).toBe(5)
+
+    // sessionDurationMinutes
+    const beforeDuration = result.current
+    act(() => {
+      result.current.setSessionDurationMinutes(3)
+    })
+    expect(result.current).not.toBe(beforeDuration)
+    expect(result.current.sessionDurationMinutes).toBe(3)
+
+    // timeRemainingSeconds
+    const beforeTime = result.current
+    act(() => {
+      result.current.setTimeRemainingSeconds(100)
+    })
+    expect(result.current).not.toBe(beforeTime)
+    expect(result.current.timeRemainingSeconds).toBe(100)
+
+    // advanceMode
+    const beforeMode = result.current
+    act(() => {
+      result.current.setAdvanceMode('manual')
+    })
+    expect(result.current).not.toBe(beforeMode)
+    expect(result.current.advanceMode).toBe('manual')
+
+    // isWaitingAnswer
+    const beforeWaiting = result.current
+    act(() => {
+      result.current.setIsWaitingAnswer(true)
+    })
+    expect(result.current).not.toBe(beforeWaiting)
+    expect(result.current.isWaitingAnswer).toBe(true)
+
+    // lastResult
+    const beforeResult = result.current
+    act(() => {
+      result.current.setLastResult({ correct: true })
+    })
+    expect(result.current).not.toBe(beforeResult)
+    expect(result.current.lastResult).toEqual({ correct: true })
+  })
+
+  it('currentQuestionIndex avanza e invalida la identidad del retorno', () => {
+    const onBuildSessionRecord = vi.fn()
+    const { result } = renderHook(() => useTrainerCore({ onBuildSessionRecord }))
+
+    act(() => {
+      result.current.startCoreSession({ limitType: 'infinite' })
+    })
+    expect(result.current.currentQuestionIndex).toBe(1)
+
+    const beforeAdvance = result.current
+    act(() => {
+      result.current.advanceToNextQuestion(() => {})
+    })
+
+    expect(result.current).not.toBe(beforeAdvance)
+    expect(result.current.currentQuestionIndex).toBe(2)
+  })
+
+  it('sessionElapsedSeconds e isSessionFinished se consolidan al finalizar e invalidan la identidad', async () => {
+    const saveSpy = vi
+      .spyOn(useDatabaseStore.getState(), 'saveSession')
+      .mockResolvedValue(undefined)
+    const onBuildSessionRecord = vi.fn().mockReturnValue({
+      id: 'sess_elapsed',
+      createdAt: new Date().toISOString(),
+      strategyId: 'test',
+      instrumentId: 'piano',
+      presetName: 'Test',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 10
+    })
+    const { result } = renderHook(() => useTrainerCore({ onBuildSessionRecord }))
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken()
+      result.current.setIsWaitingAnswer(true)
+      result.current.setSessionHistory([{ correct: true }])
+    })
+
+    const beforeFinalize = result.current
+
+    await act(async () => {
+      await result.current.finalizeAndSaveSession()
+    })
+
+    expect(result.current).not.toBe(beforeFinalize)
+    expect(result.current.sessionElapsedSeconds).toBeGreaterThanOrEqual(1)
+    expect(result.current.isSessionFinished).toBe(true)
+
+    saveSpy.mockRestore()
+  })
+
+  it('isWaitingManualAdvance se activa tras un fallo en modo smart e invalida la identidad', () => {
+    const onBuildSessionRecord = vi.fn()
+    const { result } = renderHook(() =>
+      useTrainerCore({ defaultAdvanceMode: 'smart', onBuildSessionRecord })
+    )
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken()
+      result.current.setIsWaitingAnswer(true)
+    })
+
+    const beforeAnswer = result.current
+
+    act(() => {
+      result.current.recordAnswer(
+        { correct: false },
+        {
+          id: 'a1',
+          sessionId: result.current.sessionId,
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 62,
+          isCorrect: false,
+          semitoneDistance: 2,
+          responseTimeMs: 1200,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: new Date().toISOString()
+        },
+        false,
+        vi.fn(),
+        result.current.questionToken!
+      )
+    })
+
+    expect(result.current).not.toBe(beforeAnswer)
+    expect(result.current.isWaitingManualAdvance).toBe(true)
+  })
+
+  it('saveError se registra ante fallo de persistencia e invalida la identidad', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const saveSpy = vi
+      .spyOn(useDatabaseStore.getState(), 'saveSession')
+      .mockRejectedValueOnce(new Error('QuotaExceededError: Disco lleno'))
+    const onBuildSessionRecord = vi.fn().mockReturnValue({
+      id: 'sess_save_err',
+      createdAt: new Date().toISOString(),
+      strategyId: 'test',
+      instrumentId: 'piano',
+      presetName: 'Test',
+      totalQuestions: 1,
+      correctAnswers: 1,
+      accuracyPercentage: 100,
+      avgResponseTimeMs: 1000,
+      durationSeconds: 10
+    })
+    const { result } = renderHook(() => useTrainerCore({ onBuildSessionRecord }))
+
+    act(() => {
+      result.current.startCoreSession()
+      result.current.generateQuestionToken()
+      result.current.setIsWaitingAnswer(true)
+    })
+
+    act(() => {
+      result.current.recordAnswer(
+        { correct: true },
+        {
+          id: 'a1',
+          sessionId: result.current.sessionId,
+          questionIndex: 1,
+          expectedNote: 60,
+          playedNote: 60,
+          isCorrect: true,
+          semitoneDistance: 0,
+          responseTimeMs: 900,
+          velocity: 90,
+          reasonTelemetry: '',
+          createdAt: new Date().toISOString()
+        },
+        true,
+        vi.fn(),
+        result.current.questionToken!
+      )
+    })
+
+    const beforeFinalize = result.current
+
+    await act(async () => {
+      await result.current.finalizeAndSaveSession()
+    })
+
+    expect(result.current).not.toBe(beforeFinalize)
+    expect(result.current.saveError).toContain('QuotaExceededError')
+
+    saveSpy.mockRestore()
+    consoleSpy.mockRestore()
+  })
+})

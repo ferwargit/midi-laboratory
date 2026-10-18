@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { parseMidiData, ParsedMidiMessage } from '../services/midi/midiParser'
 import { MidiInputFilter } from '../services/midi/midiInputFilter'
 import { DEFAULT_APP_CONFIG } from '../domain/ai/appConfig'
@@ -366,21 +366,43 @@ export function useMidi({
     [midiAccess, selectedOutputId, isDeviceDisconnected]
   )
 
-  return {
-    status,
-    inputs,
-    outputs,
-    selectedInputId,
-    selectedOutputId,
-    isDeviceDisconnected,
-    setSelectedInputId,
-    setSelectedOutputId,
-    pressedNotes,
-    activeStimulusNotes,
-    addLog,
-    sendNote,
-    changeProgram,
-    clearAllPressedNotes,
-    sendAllNotesOff
-  }
+  // Estabilidad referencial del retorno (auditoría V8, F12.3/R1): el objeto
+  // UseMidiReturn se memoiza con las dependencias reactivas reales, de modo que
+  // los consumidores (App, callbacks con `midi` en sus deps) no se invaliden en
+  // cada ciclo de render. Los setters de useState son estables por garantía de
+  // React y no figuran en las deps.
+  return useMemo(
+    () => ({
+      status,
+      inputs,
+      outputs,
+      selectedInputId,
+      selectedOutputId,
+      isDeviceDisconnected,
+      setSelectedInputId,
+      setSelectedOutputId,
+      pressedNotes,
+      activeStimulusNotes,
+      addLog,
+      sendNote,
+      changeProgram,
+      clearAllPressedNotes,
+      sendAllNotesOff
+    }),
+    [
+      status,
+      inputs,
+      outputs,
+      selectedInputId,
+      selectedOutputId,
+      isDeviceDisconnected,
+      pressedNotes,
+      activeStimulusNotes,
+      addLog,
+      sendNote,
+      changeProgram,
+      clearAllPressedNotes,
+      sendAllNotesOff
+    ]
+  )
 }
