@@ -23,7 +23,7 @@ const { callLog, sessionMocks, MockBrowserWindow } = vi.hoisted(() => {
     },
     MockBrowserWindow: class {
       on = vi.fn()
-      webContents = { setWindowOpenHandler: vi.fn() }
+      webContents = { setWindowOpenHandler: vi.fn(), on: vi.fn() }
       loadFile = vi.fn()
       loadURL = vi.fn()
       constructor() {

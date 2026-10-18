@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { isSessionPermissionAllowed } from './sessionPermissions'
 import { handleCheckModels, handleChatCompletion } from './lmStudioHandlers'
+import { isOpenExternalUrlAllowed, isAllowedNavigation } from './windowNavigationGuard'
 
 /**
  * Política de permisos de sesión (capacidad 08-electron-session-security,
@@ -57,7 +58,10 @@ function createWindow(): void {
       // (window.customAPI, compatible con sandbox); el fallback a fetch() que
       // motivaba desactivar el sandbox fue eliminado de lmStudioService.
       sandbox: true,
-      contextIsolation: true
+      contextIsolation: true,
+      // DevTools según entorno (hallazgo F9): habilitadas en desarrollo,
+      // deshabilitadas en el binario empaquetado.
+      devTools: is.dev
     }
   })
 
@@ -65,8 +69,23 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  // Prevención de navegaciones in-frame no autorizadas (hallazgo F8): solo se
+  // permite navegar al origen local de la aplicación (dev server en desarrollo,
+  // file:// en producción); cualquier otro origen se cancela con log auditable.
+  const allowedOrigin = is.dev
+    ? new URL(process.env['ELECTRON_RENDERER_URL'] ?? 'http://localhost:5173').origin
+    : 'file://'
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedNavigation(url, allowedOrigin)) {
+      event.preventDefault()
+      console.warn(`[Navegación] Cancelada: "${url}" (origen permitido: ${allowedOrigin})`)
+    }
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    if (details.url.startsWith('https:') || details.url.startsWith('http:')) {
+    // Validación estricta de esquema (hallazgo F7): solo http/https bien
+    // formados llegan a shell.openExternal; el resto se deniega sin abrir.
+    if (isOpenExternalUrlAllowed(details.url)) {
       shell.openExternal(details.url)
     }
     return { action: 'deny' }

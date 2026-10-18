@@ -1,4 +1,5 @@
 import { resolveLmStudioHost } from './lmStudioHostValidator'
+import { isValidChatCompletionPayload } from './chatPayloadValidator'
 
 /**
  * Lógica de los handlers IPC de LM Studio (capacidad 06-local-ai-integration,
@@ -73,6 +74,12 @@ export async function handleCheckModels(baseUrl?: string): Promise<string | null
 export async function handleChatCompletion(
   payload: ChatCompletionPayload
 ): Promise<{ success: boolean; content?: string; model?: string; error?: string }> {
+  // Validación de esquema (hallazgo F10): antes de cualquier llamada de red,
+  // un payload malformado se rechaza de forma controlada sin emitir fetch.
+  if (!isValidChatCompletionPayload(payload)) {
+    return { success: false, error: 'Payload de mensajes inválido' }
+  }
+
   const resolution = resolveLmStudioHost(payload?.baseUrl)
   if (!resolution.ok) {
     logRejectedBaseUrl('lm-studio:chat-completion', payload?.baseUrl, resolution.reason)
