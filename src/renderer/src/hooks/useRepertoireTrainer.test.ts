@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useRepertoireTrainer } from './useRepertoireTrainer'
+import { stimulusScheduler } from '../services/audio/stimulusScheduler'
 import { ScoreDataModel } from '../domain/music/scoreTypes'
 import { useDatabaseStore } from '../stores/useDatabaseStore'
 
@@ -519,5 +520,135 @@ describe('useRepertoireTrainer - Hook de Entrenamiento Audiomotor de Repertorio'
       saveSpy.mockRestore()
       vi.useRealTimers()
     })
+  })
+})
+
+describe('useRepertoireTrainer - Gating del Indicador Visual de Pulso (F12.5/R3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('con el indicador desactivado, el callback visual está desregistrado y los pulsos no mutan activeBeatIndex', () => {
+    vi.useFakeTimers()
+    const onPlayMetronomeTick = vi.fn()
+    const { result } = renderHook(() =>
+      useRepertoireTrainer({
+        onPlaySlice: vi.fn(),
+        onPlayMetronomeTick
+      })
+    )
+
+    act(() => {
+      result.current.setVisualBeatEnabled(false)
+    })
+
+    // El callback visual queda desregistrado del scheduler
+    expect(stimulusScheduler.onBeatTick).toBeUndefined()
+    expect(result.current.activeBeatIndex).toBeNull()
+
+    // Metrónomo continuo activo: los pulsos emiten ticks acústicos con normalidad
+    act(() => {
+      result.current.toggleFreeMetronome()
+    })
+    expect(result.current.isFreeMetronomeActive).toBe(true)
+
+    const ticksBefore = onPlayMetronomeTick.mock.calls.length
+    act(() => {
+      vi.advanceTimersByTime(2100)
+    })
+    expect(onPlayMetronomeTick.mock.calls.length).toBeGreaterThan(ticksBefore)
+    // Pero el estado visual no se muta por pulso
+    expect(result.current.activeBeatIndex).toBeNull()
+
+    // Limpieza: detener el metrónomo para no filtrar intervalos a otros tests
+    act(() => {
+      result.current.toggleFreeMetronome()
+    })
+    expect(stimulusScheduler.isContinuousMetronomeActive()).toBe(false)
+
+    vi.useRealTimers()
+  })
+
+  it('con el indicador activado, el callback está registrado y el LED sigue el pulso con precisión', () => {
+    vi.useFakeTimers()
+    const onPlayMetronomeTick = vi.fn()
+    const { result } = renderHook(() =>
+      useRepertoireTrainer({
+        onPlaySlice: vi.fn(),
+        onPlayMetronomeTick
+      })
+    )
+
+    // visualBeatEnabled es true por defecto: el callback está registrado
+    expect(stimulusScheduler.onBeatTick).toBeDefined()
+
+    act(() => {
+      result.current.toggleFreeMetronome()
+    })
+
+    // El pulso inmediato de arranque (downbeat) enciende el LED
+    expect(result.current.activeBeatIndex).toBe(0)
+
+    // Apagado temporizado del LED (~140 ms)
+    act(() => {
+      vi.advanceTimersByTime(140)
+    })
+    expect(result.current.activeBeatIndex).toBeNull()
+
+    // El siguiente beat (86 BPM ≈ 697 ms) reenciende con su índice
+    act(() => {
+      vi.advanceTimersByTime(560)
+    })
+    expect(result.current.activeBeatIndex).not.toBeNull()
+
+    act(() => {
+      vi.advanceTimersByTime(140)
+    })
+    expect(result.current.activeBeatIndex).toBeNull()
+
+    // Limpieza
+    act(() => {
+      result.current.toggleFreeMetronome()
+    })
+
+    vi.useRealTimers()
+  })
+
+  it('desactivar el indicador en curso limpia activeBeatIndex y ningún pulso posterior lo reactiva', () => {
+    vi.useFakeTimers()
+    const onPlayMetronomeTick = vi.fn()
+    const { result } = renderHook(() =>
+      useRepertoireTrainer({
+        onPlaySlice: vi.fn(),
+        onPlayMetronomeTick
+      })
+    )
+
+    act(() => {
+      result.current.toggleFreeMetronome()
+    })
+    expect(result.current.activeBeatIndex).toBe(0)
+
+    // Desactivación en curso: limpieza inmediata y desregistro
+    act(() => {
+      result.current.setVisualBeatEnabled(false)
+    })
+    expect(result.current.activeBeatIndex).toBeNull()
+    expect(stimulusScheduler.onBeatTick).toBeUndefined()
+
+    // Pulsos posteriores: acústicos sí, visuales no
+    const ticksBefore = onPlayMetronomeTick.mock.calls.length
+    act(() => {
+      vi.advanceTimersByTime(2100)
+    })
+    expect(onPlayMetronomeTick.mock.calls.length).toBeGreaterThan(ticksBefore)
+    expect(result.current.activeBeatIndex).toBeNull()
+
+    // Limpieza
+    act(() => {
+      result.current.toggleFreeMetronome()
+    })
+
+    vi.useRealTimers()
   })
 })

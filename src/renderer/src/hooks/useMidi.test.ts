@@ -926,3 +926,144 @@ describe('useMidi - Estabilidad Referencial del Retorno (F12.3/R1)', () => {
     expect(result.current.status).toContain('conectado')
   })
 })
+
+describe('useMidi - Gating en Origen de la Pista Visual (F12.4/R3)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    delete (navigator as unknown as { requestMIDIAccess?: unknown }).requestMIDIAccess
+    useTelemetryStore.setState({ logs: [] })
+  })
+
+  it('con visualCuesEnabled: false, sendNote melódica no muta activeStimulusNotes ni provoca re-renders', async () => {
+    vi.useFakeTimers()
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders++
+      return useMidi({ visualCuesEnabled: false })
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const rendersBefore = renders
+
+    act(() => {
+      result.current.sendNote(60, 500)
+    })
+
+    // El mensaje MIDI se emite con normalidad
+    expect(mockOutput.send).toHaveBeenCalledWith([0x90, 60, 100])
+    // Pero la pista visual no se registra ni re-renderiza (sin setState alguno)
+    expect(result.current.activeStimulusNotes).toEqual([])
+    expect(renders).toBe(rendersBefore)
+
+    // La liberación programada no provoca actualización de estado: el valor
+    // permanece vacío y la identidad del retorno es estable (React puede
+    // re-ejecutar el wrapper una vez en el bail-out, pero el objeto memoizado
+    // no cambia y los consumidores no se invalidan)
+    const beforeRelease = result.current
+    act(() => {
+      vi.advanceTimersByTime(501)
+    })
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 60, 0])
+    expect(result.current.activeStimulusNotes).toEqual([])
+    expect(result.current).toBe(beforeRelease)
+
+    vi.useRealTimers()
+  })
+
+  it('toggle a mitad de vuelo: la liberación retira la nota residual y no muta notas nunca registradas', async () => {
+    vi.useFakeTimers()
+    const { access } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    let renders = 0
+    const { result, rerender } = renderHook(
+      (props: { visualCuesEnabled: boolean }) => {
+        renders++
+        return useMidi(props)
+      },
+      { initialProps: { visualCuesEnabled: true } }
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // Fase A: nota articulada con pistas activadas queda registrada
+    act(() => {
+      result.current.sendNote(60, 500)
+    })
+    expect(result.current.activeStimulusNotes).toContain(60)
+
+    // Se desactivan las pistas antes de la liberación programada
+    rerender({ visualCuesEnabled: false })
+
+    act(() => {
+      vi.advanceTimersByTime(501)
+    })
+    // La liberación retira la nota residual
+    expect(result.current.activeStimulusNotes).not.toContain(60)
+
+    // Fase B: nota articulada con pistas ya desactivadas
+    const rendersBefore = renders
+    const beforeUnregistered = result.current
+    act(() => {
+      result.current.sendNote(72, 500)
+    })
+    expect(result.current.activeStimulusNotes).not.toContain(72)
+    // sendNote con gate no ejecuta setState alguno: sin re-render del wrapper
+    expect(renders).toBe(rendersBefore)
+
+    act(() => {
+      vi.advanceTimersByTime(501)
+    })
+    // La liberación de una nota nunca registrada no provoca mutación: el valor
+    // permanece vacío y la identidad del retorno es estable
+    expect(result.current.activeStimulusNotes).toEqual([])
+    expect(result.current).toBe(beforeUnregistered)
+
+    vi.useRealTimers()
+  })
+
+  it('con pistas desactivadas el comportamiento acústico se preserva (re-articulación y pánico)', async () => {
+    vi.useFakeTimers()
+    const { access, mockOutput } = createMockMidiAccess()
+    ;(navigator as unknown as { requestMIDIAccess: unknown }).requestMIDIAccess = vi
+      .fn()
+      .mockResolvedValue(access)
+
+    const { result } = renderHook(() => useMidi({ visualCuesEnabled: false }))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // Re-articulación rápida: cancela el temporizador previo y emite Note Off inmediato
+    act(() => {
+      result.current.sendNote(60, 500)
+    })
+    act(() => {
+      result.current.sendNote(60, 500)
+    })
+    expect(mockOutput.send).toHaveBeenCalledWith([0x90, 60, 100])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 60, 0])
+
+    // Pánico canónico en Canal 1
+    act(() => {
+      result.current.sendAllNotesOff(1)
+    })
+    expect(mockOutput.send).toHaveBeenCalledWith([0xb0, 120, 0])
+    expect(mockOutput.send).toHaveBeenCalledWith([0x80, 21, 0])
+
+    vi.useRealTimers()
+  })
+})
