@@ -3,14 +3,15 @@ import { render, screen } from '@testing-library/react'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import {
-  COGNITIVE_LATENCY_THRESHOLDS,
   COGNITIVE_LATENCY_THRESHOLDS_BY_MODE,
   getLatencyThresholds,
   MASTERY_THRESHOLDS,
   computeAnalyticsMetrics
 } from './historyAnalytics'
+import * as thresholdsModule from './thresholds'
 import { ConfusionMatrixTab } from '../../components/views/analytics/ConfusionMatrixTab'
 import { AnalyticsKpiCards } from '../../components/views/analytics/AnalyticsKpiCards'
+import { AnalyticsCharts } from '../../components/trainer/AnalyticsCharts'
 import { AnalyticsMetrics } from './historyAnalytics'
 import { LatencySpectrumDiagram } from '../../components/views/guide/LatencySpectrumDiagram'
 import { generateDiagnosticReport } from './diagnosticReportGenerator'
@@ -76,10 +77,10 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
   ]
 
   it('las constantes canónicas deben estar fijadas en 1400ms y 2800ms', () => {
-    expect(COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS).toBe(1400)
-    expect(COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_MAX_MS).toBe(2800)
-    expect(COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL).toBe('< 1.4s')
-    expect(COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL).toBe('1.4s - 2.8s')
+    expect(getLatencyThresholds('single_note').FAST_MAX_MS).toBe(1400)
+    expect(getLatencyThresholds('single_note').MEDIUM_MAX_MS).toBe(2800)
+    expect(getLatencyThresholds('single_note').FAST_LABEL).toBe('< 1.4s')
+    expect(getLatencyThresholds('single_note').MEDIUM_LABEL).toBe('1.4s - 2.8s')
     expect(MASTERY_THRESHOLDS.MASTERED_MIN).toBe(85)
     expect(MASTERY_THRESHOLDS.LEARNING_MIN).toBe(60)
     expect(MASTERY_THRESHOLDS.CRITICAL_MAX).toBe(60)
@@ -99,12 +100,15 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
 
     expect(
       screen.getByText(
-        new RegExp(`Reflejo Inmediato \\(${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}\\)`, 'i')
+        new RegExp(`Reflejo Inmediato \\(${getLatencyThresholds('single_note').FAST_LABEL}\\)`, 'i')
       )
     ).toBeDefined()
     expect(
       screen.getByText(
-        new RegExp(`Deducción Activa \\(${COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL}\\)`, 'i')
+        new RegExp(
+          `Deducción Activa \\(${getLatencyThresholds('single_note').MEDIUM_LABEL}\\)`,
+          'i'
+        )
       )
     ).toBeDefined()
     expect(screen.queryByText(/< 1.2s/i)).toBeNull()
@@ -148,7 +152,9 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
     render(<LatencySpectrumDiagram />)
 
     expect(
-      screen.getByText(new RegExp(`Zona 1 \\(${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}\\)`, 'i'))
+      screen.getByText(
+        new RegExp(`Zona 1 \\(${getLatencyThresholds('single_note').FAST_LABEL}\\)`, 'i')
+      )
     ).toBeDefined()
     expect(screen.queryByText(/1.2s/i)).toBeNull()
   })
@@ -184,11 +190,19 @@ describe('thresholdsConsistency - Certificación de Constantes y Umbrales Psicom
   it('diagnosticReportGenerator y promptBuilder deben derivar de la constante canónica', () => {
     const metrics = computeAnalyticsMetrics([mockSession], [mockAnswers[0]], 'all')
     const report = generateDiagnosticReport(metrics)
-    expect(report.cognitiveLatencyAnalysis).toContain(COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL)
+    expect(report.cognitiveLatencyAnalysis).toContain(
+      getLatencyThresholds('single_note').FAST_LABEL
+    )
 
     const prompt = buildUserPrompt(metrics)
     // Validación usando la constante central
-    expect(prompt).toContain(`Respuestas Rápidas (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})`)
+    expect(prompt).toContain(
+      `Respuestas Rápidas (${getLatencyThresholds('single_note').FAST_LABEL})`
+    )
+  })
+
+  it('el módulo thresholds ya NO exporta el alias deprecado COGNITIVE_LATENCY_THRESHOLDS', () => {
+    expect('COGNITIVE_LATENCY_THRESHOLDS' in thresholdsModule).toBe(false)
   })
 })
 
@@ -267,6 +281,10 @@ describe('AnalyticsView - Pipeline de Dominio Puro (F-01, spec 05)', () => {
     expect(viewSource).toMatch(/inputSource:\s*selectedInputSource/)
     expect(viewSource).toMatch(/biasFilter:\s*selectedBias/)
     expect(viewSource).toMatch(/isiFilter:\s*selectedIsi/)
+  })
+
+  it('suministra el modeFilter vigente al gráfico de latencia (F22)', () => {
+    expect(viewSource).toMatch(/<AnalyticsCharts[\s\S]{0,200}modeFilter=\{modeFilter\}/)
   })
 })
 
@@ -427,5 +445,90 @@ describe('SSOT Propagation - Diccionario Pedagógico e Informes sincronizados po
         )
       )
     ).toBeNull()
+  })
+})
+
+describe('AnalyticsCharts - Gráfico de Latencia Coherente con la Modalidad (F22)', () => {
+  const chartSession: DbSessionRecord = {
+    id: 's_chart',
+    createdAt: new Date().toISOString(),
+    strategyId: 'adaptive_v1',
+    instrumentId: 'piano',
+    presetName: 'Test Chart',
+    totalQuestions: 2,
+    correctAnswers: 2,
+    accuracyPercentage: 100,
+    avgResponseTimeMs: 4000,
+    durationSeconds: 30
+  }
+
+  const makeChartAnswer = (
+    id: string,
+    expectedNote: number,
+    responseTimeMs: number
+  ): DbAnswerRecord => ({
+    id,
+    sessionId: 's_chart',
+    questionIndex: 0,
+    expectedNote,
+    playedNote: expectedNote,
+    isCorrect: true,
+    semitoneDistance: 0,
+    responseTimeMs,
+    velocity: 90,
+    reasonTelemetry: '',
+    createdAt: new Date().toISOString()
+  })
+
+  it('con modeFilter="sequences" la línea de referencia, la leyenda y los colores siguen la SSOT de sequences', () => {
+    const answers = [
+      makeChartAnswer('c_fast', 60, 2000), // reflejo en sequences (< 3500)
+      makeChartAnswer('c_slow', 62, 6000) // duda en sequences (> 5000)
+    ]
+    const { container } = render(
+      <AnalyticsCharts sessions={[chartSession]} answers={answers} modeFilter="sequences" />
+    )
+
+    // Línea de referencia en 3500ms con su etiqueta de eje
+    expect(screen.getByText('3.5s')).toBeDefined()
+    // Leyenda construida desde las etiquetas SSOT de sequences
+    expect(screen.getByText(/< 3\.5s \(Reflejo\)/i)).toBeDefined()
+    expect(screen.getByText(/3\.5s - 5\.0s \(Deducción\)/i)).toBeDefined()
+    expect(screen.getByText(/> 5\.0s \(Duda\)/i)).toBeDefined()
+    // Sin literales de single_note
+    expect(screen.queryByText(/1\.4s/)).toBeNull()
+    expect(screen.queryByText(/2\.8s/)).toBeNull()
+    // Colores: 2000ms reflejo (esmeralda), 6000ms duda (rosa)
+    const chartSvg = container.querySelector('svg[viewBox="0 0 900 130"]')
+    expect(chartSvg).not.toBeNull()
+    expect(chartSvg!.querySelector('rect[fill="#10b981"]')).not.toBeNull()
+    expect(chartSvg!.querySelector('rect[fill="#f43f5e"]')).not.toBeNull()
+    expect(chartSvg!.querySelector('rect[fill="#f59e0b"]')).toBeNull()
+  })
+
+  it('con modeFilter="intervals" la leyenda refleja las etiquetas de intervals', () => {
+    const answers = [makeChartAnswer('i1', 60, 3000)]
+    render(<AnalyticsCharts sessions={[chartSession]} answers={answers} modeFilter="intervals" />)
+
+    expect(screen.getByText(/< 2\.4s \(Reflejo\)/i)).toBeDefined()
+    expect(screen.getByText(/2\.4s - 3\.8s \(Deducción\)/i)).toBeDefined()
+    expect(screen.getByText(/> 3\.8s \(Duda\)/i)).toBeDefined()
+    expect(screen.queryByText(/1\.4s/)).toBeNull()
+    expect(screen.queryByText(/2\.8s/)).toBeNull()
+  })
+
+  it('con modeFilter="all" usa la configuración de single_note (coincide con el motor)', () => {
+    const answers = [makeChartAnswer('a1', 60, 2000)] // deducción en single_note
+    const { container } = render(
+      <AnalyticsCharts sessions={[chartSession]} answers={answers} modeFilter="all" />
+    )
+
+    expect(screen.getByText(/< 1\.4s \(Reflejo\)/i)).toBeDefined()
+    expect(screen.getByText(/1\.4s - 2\.8s \(Deducción\)/i)).toBeDefined()
+    expect(screen.getByText(/> 2\.8s \(Duda\)/i)).toBeDefined()
+    // 2000ms en single_note es deducción (ámbar), no reflejo
+    const chartSvg = container.querySelector('svg[viewBox="0 0 900 130"]')
+    expect(chartSvg!.querySelector('rect[fill="#f59e0b"]')).not.toBeNull()
+    expect(chartSvg!.querySelector('rect[fill="#10b981"]')).toBeNull()
   })
 })

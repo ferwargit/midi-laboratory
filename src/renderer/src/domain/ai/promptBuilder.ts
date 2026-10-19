@@ -2,7 +2,7 @@ import {
   AnalyticsMetrics,
   AnalyticsModeFilter,
   DetailedSessionAnalysis,
-  COGNITIVE_LATENCY_THRESHOLDS
+  getLatencyThresholds
 } from '../analytics/historyAnalytics'
 import { getConcept } from '../analytics/pedagogicalDictionary'
 import { DbAiConsultationRecord, DbAiReportRecord } from '../database/types'
@@ -16,10 +16,11 @@ export function buildSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
   let specializedInstructions = ''
 
   if (mode === 'single_note') {
+    const thresholds = getLatencyThresholds(mode)
     specializedInstructions = `
 ENFOQUE CLÍNICO PARA NOTA INDIVIDUAL (PITCH DISCRIMINATION):
 - Analiza el sesgo de semitono (+st hacia agudo vs -st hacia grave).
-- Examina la velocidad de reflejo inmediato (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}) vs sobrepensamiento (${COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL}).
+- Examina la velocidad de reflejo inmediato (${thresholds.FAST_LABEL}) vs sobrepensamiento (${thresholds.SLOW_LABEL}).
 - Identifica zonas de incertidumbre en teclas negras (alteraciones) vs teclas blancas (diatónicas).
 - En la prescripción, targetMode DEBE ser 'single_note' y DEBES recomendar un pool de 2 a 8 notas MIDI exactas.`
   } else if (mode === 'intervals') {
@@ -96,6 +97,8 @@ export function buildUserPrompt(
       'Diseña un plan de estudio semanal estructurado de 7 días combinando Nota Aislada, Intervalos y Secuencias según los puntos ciegos detectados.'
   }
 
+  const latencyThresholds = getLatencyThresholds(metrics.modeFilter)
+
   const sessionsTelemetry = (metrics.sessionPsychometricsList || []).slice(0, 10).map((s) => ({
     id: s.session.id,
     fecha: s.session.createdAt,
@@ -118,7 +121,7 @@ export function buildUserPrompt(
     poolNotas: s.poolSize,
     cadenciaRPM: s.responsesPerMinute,
     tiempoMedioMs: s.session.avgResponseTimeMs,
-    reflejoInmediatoPct: `${s.fastPercent}% (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})`,
+    reflejoInmediatoPct: `${s.fastPercent}% (${latencyThresholds.FAST_LABEL})`,
     sesgoDominante:
       s.dominantBias === 'sharp'
         ? 'Hacia lo Agudo (+st)'
@@ -148,7 +151,7 @@ export function buildUserPrompt(
 - Precisión Corregida por Azar (Oído Real Normalizado): ${metrics.normalizedOverallAccuracy}%
 - Entropía Media del Contexto (Incertidumbre del Pool): ${metrics.avgEntropyBits} bits
 - Tiempo Medio de Reacción: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s
-- Respuestas Rápidas (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}): ${metrics.fastResponsesCount} | Medias (${COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL}): ${metrics.mediumResponsesCount} | Lentas (${COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL}): ${metrics.slowResponsesCount}
+- Respuestas Rápidas (${latencyThresholds.FAST_LABEL}): ${metrics.fastResponsesCount} | Medias (${latencyThresholds.MEDIUM_LABEL}): ${metrics.mediumResponsesCount} | Lentas (${latencyThresholds.SLOW_LABEL}): ${metrics.slowResponsesCount}
 - Sesgo Hacia lo Agudo (+st): ${metrics.sharpBiasCount} | Sesgo Hacia lo Grave (-st): ${metrics.flatBiasCount}
 - Top Pares de Confusión Recurrentes: ${JSON.stringify(metrics.topConfusions)}
 - Notas con Mayor Dificultad (<80%): ${JSON.stringify(metrics.mostDifficultNotes)}
@@ -208,6 +211,8 @@ export function buildConsultationUserPrompt(
     }
   }
 
+  const consultationThresholds = getLatencyThresholds(metrics.modeFilter)
+
   return `CONSULTA DEL ALUMNO:
 "${userQuery}"
 ${conceptContext}
@@ -217,7 +222,7 @@ PERFIL Y TELEMETRÍA DEL ALUMNO (Contexto clínico):
 - Total Ejercicios: ${metrics.totalAnswers} en ${metrics.filteredSessionsCount} sesiones.
 - Precisión Cruda: ${metrics.overallAccuracy}% | Oído Real IRT: ${metrics.normalizedOverallAccuracy}%
 - Entropía Media: ${metrics.avgEntropyBits} bits.
-- Latencia Media: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s (Reflejo: ${metrics.fastResponsesCount} resp ${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}, Deducción: ${metrics.mediumResponsesCount} resp ${COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_LABEL}, Fatiga/Lentas: ${metrics.slowResponsesCount} resp ${COGNITIVE_LATENCY_THRESHOLDS.SLOW_LABEL}).
+- Latencia Media: ${(metrics.avgResponseTimeMs / 1000).toFixed(2)}s (Reflejo: ${metrics.fastResponsesCount} resp ${consultationThresholds.FAST_LABEL}, Deducción: ${metrics.mediumResponsesCount} resp ${consultationThresholds.MEDIUM_LABEL}, Fatiga/Lentas: ${metrics.slowResponsesCount} resp ${consultationThresholds.SLOW_LABEL}).
 - Sesgos: +st Agudo (${metrics.sharpBiasCount}) vs -st Grave (${metrics.flatBiasCount}).
 - Pares Confundidos: ${JSON.stringify(metrics.topConfusions)}
 - Tonos Críticos: ${JSON.stringify(metrics.mostDifficultNotes)}
@@ -263,6 +268,7 @@ export function buildConversationalMessages(
 }
 
 export function buildMultiSessionComparisonSystemPrompt(mode: AnalyticsModeFilter = 'all'): string {
+  const comparisonThresholds = getLatencyThresholds(mode)
   return `Eres un Profesor de Oído Musical, Neurociencia Auditiva y Psicoacústica Experimental de Élite.
 Tu objetivo es realizar un ANÁLISIS COMPARATIVO CRUZADO EXHAUSTIVO entre las sesiones de entrenamiento específicas seleccionadas por el alumno.
 Modalidad de estudio: ${mode.toUpperCase()}.
@@ -271,7 +277,7 @@ DIRECTIVAS CLÍNICAS PARA LA COMPARATIVA CRUZADA:
 1. Analiza la progresión cronológica estricta (de la sesión más antigua a la más reciente de la selección).
 2. Evalúa las 4 variables clave:
    • Precisión y Oído Real (IRT Normalizado).
-   • Velocidad Cognitiva: Latencia media (ms) y tasa de reflejo inmediato (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL}).
+   • Velocidad Cognitiva: Latencia media (ms) y tasa de reflejo inmediato (${comparisonThresholds.FAST_LABEL}).
    • Variaciones de Timbre y Motor: Si hubo cambios de instrumento (ej: Piano vs Flauta) o algoritmo (Adaptativo vs Leitner).
    • Sesgo Tonal (+st / -st) y persistencia de fatiga auditiva.
 3. Concluye con un diagnóstico sintético de tu plasticidad cerebral y una recomendación práctica directa.`
@@ -281,6 +287,7 @@ export function buildMultiSessionComparisonPrompt(
   selectedSessions: DetailedSessionAnalysis[],
   metrics: AnalyticsMetrics
 ): string {
+  const comparisonThresholds = getLatencyThresholds(metrics.modeFilter)
   const sortedSelected = [...selectedSessions].sort(
     (a, b) => new Date(a.session.createdAt).getTime() - new Date(b.session.createdAt).getTime()
   )
@@ -301,7 +308,7 @@ export function buildMultiSessionComparisonPrompt(
     poolNotas: s.poolSize,
     cadenciaRPM: s.responsesPerMinute,
     tiempoMedioMs: s.session.avgResponseTimeMs,
-    reflejoInmediatoPct: `${s.fastPercent}% (${COGNITIVE_LATENCY_THRESHOLDS.FAST_LABEL})`,
+    reflejoInmediatoPct: `${s.fastPercent}% (${comparisonThresholds.FAST_LABEL})`,
     sesgoDominante:
       s.dominantBias === 'sharp'
         ? 'Hacia lo Agudo (+st)'

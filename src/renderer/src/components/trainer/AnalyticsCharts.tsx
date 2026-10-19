@@ -5,7 +5,7 @@ import {
   SessionPsychometrics,
   MASTERY_THRESHOLDS,
   AnalyticsModeFilter,
-  COGNITIVE_LATENCY_THRESHOLDS,
+  getLatencyThresholds,
   computeNotePerformancesFromAnswers,
   computePerNoteLatencyStats,
   PerNoteLatencyStat
@@ -57,8 +57,12 @@ function AnalyticsChartsComponent({
     [keyboardPerformances]
   )
 
-  // Cronometría de Latencia por Nota y Octavas
-  const latencyAnalysis = useMemo(() => computePerNoteLatencyStats(answers), [answers])
+  // Cronometría de Latencia por Nota y Octavas (umbrales según la modalidad activa)
+  const latencyThresholds = useMemo(() => getLatencyThresholds(modeFilter), [modeFilter])
+  const latencyAnalysis = useMemo(
+    () => computePerNoteLatencyStats(answers, modeFilter),
+    [answers, modeFilter]
+  )
 
   const { biasDistribution, maxBiasCount } = useMemo(() => {
     const dist: Record<number, number> = {
@@ -456,9 +460,15 @@ function AnalyticsChartsComponent({
           </div>
 
           <div className="flex items-center gap-3 text-xs font-sans">
-            <span className="text-emerald-400 font-semibold">● &lt;1.4s (Reflejo)</span>
-            <span className="text-amber-400 font-semibold">● 1.4s-2.8s (Deducción)</span>
-            <span className="text-rose-400 font-semibold">● &gt;2.8s (Duda)</span>
+            <span className="text-emerald-400 font-semibold">
+              ● {latencyThresholds.FAST_LABEL} (Reflejo)
+            </span>
+            <span className="text-amber-400 font-semibold">
+              ● {latencyThresholds.MEDIUM_LABEL} (Deducción)
+            </span>
+            <span className="text-rose-400 font-semibold">
+              ● {latencyThresholds.SLOW_LABEL} (Duda)
+            </span>
           </div>
         </div>
 
@@ -488,13 +498,13 @@ function AnalyticsChartsComponent({
                   {(maxNoteLatencyMs / 1000).toFixed(1)}s
                 </text>
 
-                {COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS <= maxNoteLatencyMs && (
+                {latencyThresholds.FAST_MAX_MS <= maxNoteLatencyMs && (
                   <>
                     <line
                       x1="40"
-                      y1={115 - (COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS / maxNoteLatencyMs) * 105}
+                      y1={115 - (latencyThresholds.FAST_MAX_MS / maxNoteLatencyMs) * 105}
                       x2="880"
-                      y2={115 - (COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS / maxNoteLatencyMs) * 105}
+                      y2={115 - (latencyThresholds.FAST_MAX_MS / maxNoteLatencyMs) * 105}
                       stroke="#10b981"
                       strokeWidth="1.5"
                       strokeDasharray="4 4"
@@ -502,13 +512,13 @@ function AnalyticsChartsComponent({
                     />
                     <text
                       x="5"
-                      y={118 - (COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS / maxNoteLatencyMs) * 105}
+                      y={118 - (latencyThresholds.FAST_MAX_MS / maxNoteLatencyMs) * 105}
                       fill="#34d399"
                       fontSize="9"
                       fontFamily="monospace"
                       fontWeight="bold"
                     >
-                      1.4s
+                      {(latencyThresholds.FAST_MAX_MS / 1000).toFixed(1)}s
                     </text>
                   </>
                 )}
@@ -540,9 +550,9 @@ function AnalyticsChartsComponent({
                     const y = yBottom - height
 
                     const color =
-                      stat.avgLatencyMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS
+                      stat.avgLatencyMs < latencyThresholds.FAST_MAX_MS
                         ? '#10b981'
-                        : stat.avgLatencyMs <= COGNITIVE_LATENCY_THRESHOLDS.MEDIUM_MAX_MS
+                        : stat.avgLatencyMs <= latencyThresholds.MEDIUM_MAX_MS
                           ? '#f59e0b'
                           : '#f43f5e'
 

@@ -53,9 +53,6 @@ export function getLatencyThresholds(mode?: string): LatencyThresholdConfig {
   )
 }
 
-/** @deprecated Use getLatencyThresholds('single_note') or COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.single_note. Kept for backward compatibility. */
-export const COGNITIVE_LATENCY_THRESHOLDS = COGNITIVE_LATENCY_THRESHOLDS_BY_MODE.single_note
-
 export const MASTERY_THRESHOLDS = {
   MASTERED_MIN: 85,
   LEARNING_MIN: 60,
