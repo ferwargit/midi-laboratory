@@ -31,6 +31,68 @@ interface DatabaseState {
   importBackupJson: (jsonContent: string, mode?: 'merge' | 'replace') => Promise<ImportResult>
 }
 
+/**
+ * Recalcula el `DatabaseSummary` a partir de la lista de sesiones en memoria,
+ * replicando exactamente la matemática ponderada de `DatabaseEngine.getSummary`
+ * (medias ponderadas por `totalQuestions`, `Math.round`, `durationSeconds || 0`).
+ * Evita re-leer IndexedDB tras cada escritura incremental (hallazgo F14.2).
+ */
+export function computeSummaryFromSessions(sessions: DbSessionRecord[]): DatabaseSummary {
+  const totalSessions = sessions.length
+
+  if (totalSessions === 0) {
+    return {
+      totalSessions: 0,
+      totalExercises: 0,
+      overallAccuracy: 0,
+      overallAvgTimeMs: 0,
+      totalDurationSeconds: 0
+    }
+  }
+
+  const totalExercises = sessions.reduce((acc, s) => acc + s.totalQuestions, 0)
+  const totalCorrect = sessions.reduce((acc, s) => acc + s.correctAnswers, 0)
+  const totalDuration = sessions.reduce((acc, s) => acc + (s.durationSeconds || 0), 0)
+
+  const overallAccuracy = totalExercises > 0 ? Math.round((totalCorrect / totalExercises) * 100) : 0
+
+  const weightedTimeSum = sessions.reduce(
+    (acc, s) => acc + s.avgResponseTimeMs * s.totalQuestions,
+    0
+  )
+  const overallAvgTimeMs = totalExercises > 0 ? Math.round(weightedTimeSum / totalExercises) : 0
+
+  return {
+    totalSessions,
+    totalExercises,
+    overallAccuracy,
+    overallAvgTimeMs,
+    totalDurationSeconds: totalDuration
+  }
+}
+
+/**
+ * Borrado incremental (F14.2): filtra de las colecciones en memoria las sesiones
+ * eliminadas y sus respuestas hijas, y recalcula el resumen, sin re-leer IndexedDB.
+ */
+function applySessionDeletion(
+  sessionIds: string[],
+  set: (partial: Partial<DatabaseState>) => void,
+  get: () => DatabaseState
+): void {
+  const deletedIds = new Set(sessionIds)
+  const { sessions, answers } = get()
+
+  const nextSessions = sessions.filter((s) => !deletedIds.has(s.id))
+  const nextAnswers = answers.filter((a) => !deletedIds.has(a.sessionId))
+
+  set({
+    sessions: nextSessions,
+    answers: nextAnswers,
+    summary: computeSummaryFromSessions(nextSessions)
+  })
+}
+
 export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   engine: null,
   summary: {
@@ -73,38 +135,69 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   saveSession: async (session: DbSessionRecord, answers: DbAnswerRecord[]): Promise<void> => {
-    const { engine, reloadAllData } = get()
+    const { engine } = get()
     if (!engine) return
     await engine.saveSession(session, answers)
-    await reloadAllData()
+
+    // Actualización incremental (F14.2): upsert en memoria + resumen recalculado,
+    // sin re-leer las tablas de IndexedDB.
+    const { sessions, answers: currentAnswers } = get()
+    const nextSessions = [...sessions.filter((s) => s.id !== session.id), session].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    const nextAnswers = [
+      ...currentAnswers.filter((a) => !answers.some((na) => na.id === a.id)),
+      ...answers
+    ]
+
+    set({
+      sessions: nextSessions,
+      answers: nextAnswers,
+      summary: computeSummaryFromSessions(nextSessions)
+    })
   },
 
   deleteSession: async (sessionId: string): Promise<void> => {
-    const { engine, reloadAllData } = get()
+    const { engine } = get()
     if (!engine) return
     await engine.deleteSession(sessionId)
-    await reloadAllData()
+    applySessionDeletion([sessionId], set, get)
   },
 
   deleteSessions: async (sessionIds: string[]): Promise<void> => {
-    const { engine, reloadAllData } = get()
+    const { engine } = get()
     if (!engine) return
     await engine.deleteSessions(sessionIds)
-    await reloadAllData()
+    applySessionDeletion(sessionIds, set, get)
   },
 
   saveAiReport: async (report: DbAiReportRecord): Promise<void> => {
-    const { engine, reloadAllData } = get()
+    const { engine } = get()
     if (!engine) return
     await engine.saveAiReport(report)
-    await reloadAllData()
+
+    // Actualización incremental (F14.2): upsert en memoria con orden canónico,
+    // sin re-leer las tablas de IndexedDB.
+    const nextReports = [...get().aiReports.filter((r) => r.id !== report.id), report].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+
+    set({ aiReports: nextReports })
   },
 
   saveAiConsultation: async (consultation: DbAiConsultationRecord): Promise<void> => {
-    const { engine, reloadAllData } = get()
+    const { engine } = get()
     if (!engine) return
     await engine.saveAiConsultation(consultation)
-    await reloadAllData()
+
+    // Actualización incremental (F14.2): upsert en memoria con orden canónico,
+    // sin re-leer las tablas de IndexedDB.
+    const nextConsultations = [
+      ...get().aiConsultations.filter((c) => c.id !== consultation.id),
+      consultation
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    set({ aiConsultations: nextConsultations })
   },
 
   exportBackupJson: async (): Promise<string> => {
