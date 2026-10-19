@@ -9,6 +9,14 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!vitest.config.*'
+  - '!coverage/**'
+  - '!{.opencode,.engram,.codebase-memory,.vscode}/**'
+  - '!openspec/**'
+  - '!repomix-output.xml'
+  - '!*.backup'
+  - '!{AUDIT_REPORT_*.md,PROJECT_EXPLANATION_*.md,README_V1.md,TECH_STACK_ANALYSIS.md,REPERTOIRE_LEARNING_*.md,ARCHITECTURE.md}'
+  - '!renderer/**'
 asarUnpack:
   - resources/**
 win:
