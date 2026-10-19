@@ -1,7 +1,7 @@
 import { DbAnswerRecord } from '../database/types'
 import { NotePerformance } from '../adaptation/types'
 import { midiNoteToName } from '../music/noteUtils'
-import { COGNITIVE_LATENCY_THRESHOLDS } from './thresholds'
+import { getLatencyThresholds } from './thresholds'
 import { OctaveLatencySummary, PerNoteLatencyAnalysis, PerNoteLatencyStat } from './types'
 
 export function computeNotePerformancesFromAnswers(
@@ -35,9 +35,15 @@ export function computeNotePerformancesFromAnswers(
 }
 
 /**
- * Computa la Cronometría de Latencia por Nota y el Desglose por Octava
+ * Computa la Cronometría de Latencia por Nota y el Desglose por Octava.
+ * El umbral de reflejo rápido se resuelve desde la SSOT según la modalidad
+ * indicada (`getLatencyThresholds(mode)`); sin modo explícito usa `single_note`.
  */
-export function computePerNoteLatencyStats(answers: DbAnswerRecord[]): PerNoteLatencyAnalysis {
+export function computePerNoteLatencyStats(
+  answers: DbAnswerRecord[],
+  mode?: string
+): PerNoteLatencyAnalysis {
+  const fastMaxMs = getLatencyThresholds(mode).FAST_MAX_MS
   const noteMap = new Map<
     number,
     { latencies: number[]; correctCount: number; totalCount: number; fastCount: number }
@@ -55,7 +61,7 @@ export function computePerNoteLatencyStats(answers: DbAnswerRecord[]): PerNoteLa
     if (ans.isCorrect) {
       item.correctCount++
       item.latencies.push(ans.responseTimeMs)
-      if (ans.responseTimeMs < COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS) {
+      if (ans.responseTimeMs < fastMaxMs) {
         item.fastCount++
       }
     }

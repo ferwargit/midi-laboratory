@@ -234,4 +234,60 @@ describe('promptBuilder - Generación de Prompts Especializados y Tutor Psicoac�
       expect(prompt).toContain('"precisionCruda": "80%"')
     })
   })
+
+  describe('promptBuilder - Etiquetas SSOT por modalidad (F22)', () => {
+    const intervalsMetrics: AnalyticsMetrics = {
+      ...mockMetrics,
+      modeFilter: 'intervals'
+    }
+    const sequencesMetrics: AnalyticsMetrics = {
+      ...mockMetrics,
+      modeFilter: 'sequences'
+    }
+
+    it('buildUserPrompt con modeFilter="intervals" cita las etiquetas SSOT de intervals', () => {
+      const prompt = buildUserPrompt(intervalsMetrics)
+      expect(prompt).toContain('Respuestas Rápidas (< 2.4s)')
+      expect(prompt).toContain('Medias (2.4s - 3.8s)')
+      expect(prompt).toContain('Lentas (> 3.8s)')
+      expect(prompt).not.toContain('< 1.4s')
+      expect(prompt).not.toContain('1.4s - 2.8s')
+    })
+
+    it('buildUserPrompt con modeFilter="sequences" cita las etiquetas SSOT de sequences', () => {
+      const prompt = buildUserPrompt(sequencesMetrics)
+      expect(prompt).toContain('Respuestas Rápidas (< 3.5s)')
+      expect(prompt).toContain('Medias (3.5s - 5.0s)')
+      expect(prompt).toContain('Lentas (> 5.0s)')
+      expect(prompt).not.toContain('< 1.4s')
+    })
+
+    it('buildConsultationUserPrompt con modeFilter="intervals" cita las etiquetas de intervals', () => {
+      const prompt = buildConsultationUserPrompt('¿Cómo mejoro mi velocidad?', intervalsMetrics)
+      expect(prompt).toContain('Reflejo: 14 resp < 2.4s')
+      expect(prompt).toContain('Deducción: 4 resp 2.4s - 3.8s')
+      expect(prompt).not.toContain('< 1.4s')
+    })
+
+    it('buildMultiSessionComparisonSystemPrompt con mode="sequences" cita la etiqueta FAST de sequences', () => {
+      const sys = buildMultiSessionComparisonSystemPrompt('sequences')
+      expect(sys).toContain('tasa de reflejo inmediato (< 3.5s)')
+      expect(sys).not.toContain('< 1.4s')
+    })
+
+    it('buildMultiSessionComparisonPrompt con modeFilter="sequences" cita las etiquetas de sequences', () => {
+      const prompt = buildMultiSessionComparisonPrompt(
+        sequencesMetrics.sessionPsychometricsList,
+        sequencesMetrics
+      )
+      expect(prompt).toContain('(< 3.5s)')
+      expect(prompt).not.toContain('< 1.4s')
+    })
+
+    it('buildSystemPrompt("single_note") mantiene las etiquetas de single_note', () => {
+      const prompt = buildSystemPrompt('single_note')
+      expect(prompt).toContain('< 1.4s')
+      expect(prompt).toContain('> 2.8s')
+    })
+  })
 })

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { computePerNoteLatencyStats, computeNotePerformancesFromAnswers } from './latencyStats'
-import { COGNITIVE_LATENCY_THRESHOLDS } from './thresholds'
+import { getLatencyThresholds } from './thresholds'
 import { DbAnswerRecord } from '../database/types'
 
 function makeAnswer(partial: Partial<DbAnswerRecord> = {}): DbAnswerRecord {
@@ -125,7 +125,7 @@ describe('latencyStats - computePerNoteLatencyStats', () => {
   })
 
   it('cuenta respuestas rápidas según FAST_MAX_MS (frontera inclusiva)', () => {
-    const boundary = COGNITIVE_LATENCY_THRESHOLDS.FAST_MAX_MS
+    const boundary = getLatencyThresholds('single_note').FAST_MAX_MS
     const answers: DbAnswerRecord[] = [
       makeAnswer({ id: 'fr1', expectedNote: 60, isCorrect: true, responseTimeMs: 1000 }),
       makeAnswer({ id: 'fr2', expectedNote: 60, isCorrect: true, responseTimeMs: 2000 }),
@@ -136,6 +136,46 @@ describe('latencyStats - computePerNoteLatencyStats', () => {
     const byNote = new Map(analysis.notes.map((n) => [n.noteNumber, n]))
     expect(byNote.get(60)?.fastReflexPercent).toBe(50)
     expect(byNote.get(62)?.fastReflexPercent).toBe(0)
+  })
+
+  it('clasifica fastReflexPercent según la modalidad indicada (mode-aware)', () => {
+    const answers: DbAnswerRecord[] = [
+      makeAnswer({ id: 'm1', expectedNote: 60, isCorrect: true, responseTimeMs: 2000 }),
+      makeAnswer({ id: 'm2', expectedNote: 60, isCorrect: true, responseTimeMs: 3000 })
+    ]
+
+    // Con single_note (FAST_MAX_MS 1400) ambas superan el umbral → 0%
+    const asSingleNote = computePerNoteLatencyStats(answers, 'single_note')
+    expect(asSingleNote.notes[0].fastReflexPercent).toBe(0)
+
+    // Con sequences (FAST_MAX_MS 3500) ambas quedan por debajo → 100%
+    const asSequences = computePerNoteLatencyStats(answers, 'sequences')
+    expect(asSequences.notes[0].fastReflexPercent).toBe(100)
+
+    // Con intervals (FAST_MAX_MS 2400) solo la de 2000ms es rápida → 50%
+    const asIntervals = computePerNoteLatencyStats(answers, 'intervals')
+    expect(asIntervals.notes[0].fastReflexPercent).toBe(50)
+  })
+
+  it('la frontera < FAST_MAX_MS es estricta por modalidad', () => {
+    const sequencesBoundary = getLatencyThresholds('sequences').FAST_MAX_MS
+    const answers: DbAnswerRecord[] = [
+      makeAnswer({ id: 'b1', expectedNote: 60, isCorrect: true, responseTimeMs: sequencesBoundary })
+    ]
+
+    const analysis = computePerNoteLatencyStats(answers, 'sequences')
+    expect(analysis.notes[0].fastReflexPercent).toBe(0)
+  })
+
+  it('sin modo explícito resuelve single_note (comportamiento histórico)', () => {
+    const answers: DbAnswerRecord[] = [
+      makeAnswer({ id: 'd1', expectedNote: 60, isCorrect: true, responseTimeMs: 2000 })
+    ]
+
+    const implicit = computePerNoteLatencyStats(answers)
+    const explicit = computePerNoteLatencyStats(answers, 'single_note')
+    expect(implicit.notes[0].fastReflexPercent).toBe(explicit.notes[0].fastReflexPercent)
+    expect(implicit.notes[0].fastReflexPercent).toBe(0)
   })
 
   it('calcula accuracyPercentage con aciertos y errores mezclados', () => {

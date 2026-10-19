@@ -456,6 +456,7 @@ export function AnalyticsView({ onLoadPrescription }: AnalyticsViewProps): React
         <AnalyticsCharts
           sessions={displayedSessions}
           answers={displayedAnswers}
+          modeFilter={modeFilter}
           psychometrics={displayedAnalysisList.map((d) => ({
             sessionId: d.session.id,
             poolSize: d.poolSize,
