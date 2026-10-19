@@ -1,8 +1,7 @@
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 import { AiExercisePrescription } from '../ai/types'
-import { EXERCISE_PRESETS } from '../music/presets'
 import { DetailedSessionAnalysis, LongitudinalComparison } from './types'
-import { isIntervalSession, isSequenceSession } from './sessionClassification'
+import { resolveSessionMode, resolveSessionPresetNotes } from './sessionModality'
 
 export function reconstructSessionConfig(
   session: DbSessionRecord,
@@ -10,14 +9,13 @@ export function reconstructSessionConfig(
 ): AiExercisePrescription {
   const sessionAnswers = allAnswers.filter((a) => a.sessionId === session.id)
 
-  let targetMode: 'single_note' | 'intervals' | 'sequences' = 'single_note'
-  if (session.targetMode && session.targetMode !== 'repertoire') {
-    targetMode = session.targetMode
-  } else if (isIntervalSession(session)) {
-    targetMode = 'intervals'
-  } else if (isSequenceSession(session)) {
-    targetMode = 'sequences'
-  }
+  // Modalidad resuelta por el SSOT (remediación F21): `targetMode` canónico
+  // primero, heurísticas históricas como fallback. Repertorio y sesiones no
+  // clasificables se re-testean como notas sueltas, preservando el
+  // comportamiento histórico de la clonación.
+  const resolvedMode = resolveSessionMode(session)
+  const targetMode: 'single_note' | 'intervals' | 'sequences' =
+    resolvedMode === 'intervals' || resolvedMode === 'sequences' ? resolvedMode : 'single_note'
 
   let recommendedNotes: number[] = [60, 62, 64]
   let recommendedIntervals: number[] | undefined = undefined
@@ -26,32 +24,11 @@ export function reconstructSessionConfig(
   const pName = (session.presetName || '').toLowerCase()
 
   if (targetMode === 'single_note') {
-    if (pName.includes('nivel 1')) {
-      recommendedNotes = [
-        ...(EXERCISE_PRESETS.find((p) => p.id === 'level_1_c_d_e')?.notes || [60, 62, 64])
-      ]
-    } else if (pName.includes('nivel 2')) {
-      recommendedNotes = [
-        ...(EXERCISE_PRESETS.find((p) => p.id === 'level_2_c_to_g')?.notes || [60, 62, 64, 65, 67])
-      ]
-    } else if (pName.includes('nivel 3') || pName.includes('octava diatónica')) {
-      recommendedNotes = [
-        ...(EXERCISE_PRESETS.find((p) => p.id === 'level_3_octave_diatonic')?.notes || [
-          60, 62, 64, 65, 67, 69, 71, 72
-        ])
-      ]
-    } else if (pName.includes('nivel 4') || pName.includes('cromático')) {
-      recommendedNotes = [
-        ...(EXERCISE_PRESETS.find((p) => p.id === 'level_4_octave_chromatic')?.notes || [
-          60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72
-        ])
-      ]
-    } else if (pName.includes('pentatónica')) {
-      recommendedNotes = [
-        ...(EXERCISE_PRESETS.find((p) => p.id === 'pentatonic_c_major')?.notes || [
-          60, 62, 64, 67, 69, 72
-        ])
-      ]
+    // Notas resueltas por el SSOT (preset canónico exacto o alias histórico);
+    // sin coincidencia, notas esperadas únicas de las respuestas.
+    const presetNotes = resolveSessionPresetNotes(session)
+    if (presetNotes) {
+      recommendedNotes = [...presetNotes]
     } else {
       const uniqueNotes = Array.from(new Set(sessionAnswers.map((a) => a.expectedNote))).sort(
         (a, b) => a - b

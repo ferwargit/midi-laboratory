@@ -202,8 +202,7 @@ describe('SessionDetailModal - Coherencia Score CPI con la tabla (F5-09)', () =>
     const answers = buildHardwareAnswers(60)
 
     // Calcular el CPI canónico con los mismos parámetros que la tabla
-    const uniqueExpected = new Set(answers.map((a) => a.expectedNote))
-    const poolSize = resolveNominalPoolSize(session, uniqueExpected.size)
+    const poolSize = resolveNominalPoolSize(session, answers)
     const chanceBaseline = 1 / poolSize
     const rawAccuracy = session.accuracyPercentage / 100
     const normalizedAccuracy =
