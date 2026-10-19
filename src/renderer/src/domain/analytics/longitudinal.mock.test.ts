@@ -1,11 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import { reconstructSessionConfig } from './longitudinal'
-import { DbSessionRecord } from '../database/types'
+import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 
-// Los presets reales siempre existen en EXERCISE_PRESETS, por lo que las
-// ramas `|| [...]` de reconstructSessionConfig son defensivas. Este mock las
-// ejerce vaciando el catálogo, siguiendo la convención de
-// lmStudioService.mock.test.ts.
+// Tras la remediación F21, `reconstructSessionConfig` ya no contiene arrays
+// de fallback hardcodeados: las notas se resuelven desde los presets
+// canónicos vía el SSOT `sessionModality.ts` y, en su defecto, desde las
+// notas esperadas únicas de las respuestas. Este mock ejerce esa rama
+// defensiva vaciando el catálogo de presets de notas, siguiendo la
+// convención de lmStudioService.mock.test.ts.
 vi.mock('../music/presets', () => ({ EXERCISE_PRESETS: [] }))
 
 function makeSession(partial: Partial<DbSessionRecord> = {}): DbSessionRecord {
@@ -24,33 +26,43 @@ function makeSession(partial: Partial<DbSessionRecord> = {}): DbSessionRecord {
   }
 }
 
-describe('longitudinal - fallbacks de presets documentados', () => {
-  it('nivel 1 usa el fallback [60, 62, 64]', () => {
+function makeAnswer(partial: Partial<DbAnswerRecord> = {}): DbAnswerRecord {
+  return {
+    id: 'a_mock',
+    sessionId: 's_mock',
+    questionIndex: 0,
+    expectedNote: 60,
+    playedNote: 60,
+    isCorrect: true,
+    semitoneDistance: 0,
+    responseTimeMs: 1000,
+    velocity: 90,
+    reasonTelemetry: '',
+    createdAt: new Date('2026-09-01T10:01:00Z').toISOString(),
+    inputSource: 'midi_hardware',
+    ...partial
+  }
+}
+
+describe('longitudinal - fallback defensivo sin catálogo canónico (SSOT)', () => {
+  it('sin catálogo, usa las notas esperadas únicas de las respuestas', () => {
+    const session = makeSession({ presetName: 'Nivel 2 (C a G)' })
+    const answers: DbAnswerRecord[] = [
+      makeAnswer({ id: 'm1', expectedNote: 67 }),
+      makeAnswer({ id: 'm2', expectedNote: 69 }),
+      makeAnswer({ id: 'm3', expectedNote: 67 })
+    ]
+    expect(reconstructSessionConfig(session, answers).recommendedNotes).toEqual([67, 69])
+  })
+
+  it('sin catálogo ni respuestas (o < 2 notas únicas), usa el fallback seguro [60, 62, 64]', () => {
     const session = makeSession({ presetName: 'Nivel 1 (C, D, E)' })
     expect(reconstructSessionConfig(session, []).recommendedNotes).toEqual([60, 62, 64])
-  })
 
-  it('nivel 2 usa el fallback [60, 62, 64, 65, 67]', () => {
-    const session = makeSession({ presetName: 'Nivel 2 (C a G)' })
-    expect(reconstructSessionConfig(session, []).recommendedNotes).toEqual([60, 62, 64, 65, 67])
-  })
-
-  it('nivel 3 / octava diatónica usa el fallback de 8 notas', () => {
-    const session = makeSession({ presetName: 'Nivel 3 (C4 a C5)' })
-    expect(reconstructSessionConfig(session, []).recommendedNotes).toEqual([
-      60, 62, 64, 65, 67, 69, 71, 72
-    ])
-  })
-
-  it('nivel 4 / cromático usa el fallback de 13 notas', () => {
-    const session = makeSession({ presetName: 'Nivel 4 (Cromático C4-C5)' })
-    expect(reconstructSessionConfig(session, []).recommendedNotes).toEqual([
-      60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72
-    ])
-  })
-
-  it('pentatónica usa el fallback [60, 62, 64, 67, 69, 72]', () => {
-    const session = makeSession({ presetName: 'Pentatónica de Do' })
-    expect(reconstructSessionConfig(session, []).recommendedNotes).toEqual([60, 62, 64, 67, 69, 72])
+    const repeated: DbAnswerRecord[] = [
+      makeAnswer({ id: 'r1', expectedNote: 60 }),
+      makeAnswer({ id: 'r2', expectedNote: 60 })
+    ]
+    expect(reconstructSessionConfig(session, repeated).recommendedNotes).toEqual([60, 62, 64])
   })
 })

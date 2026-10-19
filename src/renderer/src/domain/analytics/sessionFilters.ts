@@ -7,11 +7,11 @@ import {
   isRepertoireSession,
   isSequenceSession,
   isSingleNoteSession,
-  resolveNominalPoolSize,
   resolveSessionDominantBias,
   resolveSessionFormat,
   resolveSessionInputMethod
 } from './sessionClassification'
+import { matchesSessionPreset, resolveNominalPoolSize } from './sessionModality'
 
 /**
  * Extrae la dirección del estímulo grabada en la telemetría de una respuesta
@@ -42,24 +42,24 @@ export function filterSessionsAdvanced(
   // cuando estas no se proporcionan, según la Decisión 2 de design.md.
   const hasAnswers = answers.length > 0
 
-  // Calcular empiricalUniqueCount por sesión (notas únicas respondidas) para
-  // consistencia entre la columna visual CARGA (POOL) y el predicado de filtro.
-  // Fix pool-size-filter-for-intervals-and-presets.
-  const empiricalUniqueCountMap = new Map<string, number>()
-  if (hasAnswers) {
-    const sessionAnswers = new Map<string, Set<number>>()
+  // Respuestas agrupadas por sesión para el fallback empírico del resolvedor
+  // SSOT de pool (remediación F21). Se construye una sola vez en O(n) solo
+  // cuando el filtro de pool está activo; el conteo de notas únicas esperadas
+  // vive dentro del SSOT, alineado con la columna visual CARGA (que consume
+  // el poolSize de historyAnalytics, también basado en notas esperadas).
+  const needsPoolFilter = !!filters.poolSizeFilter && filters.poolSizeFilter !== 'all'
+  const sessionAnswersMap = new Map<string, DbAnswerRecord[]>()
+  if (needsPoolFilter && hasAnswers) {
     for (const ans of answers) {
-      const set = sessionAnswers.get(ans.sessionId) || new Set<number>()
-      set.add(ans.playedNote)
-      sessionAnswers.set(ans.sessionId, set)
-    }
-    for (const [sessionId, noteSet] of sessionAnswers) {
-      empiricalUniqueCountMap.set(sessionId, noteSet.size)
+      const list = sessionAnswersMap.get(ans.sessionId) || []
+      list.push(ans)
+      sessionAnswersMap.set(ans.sessionId, list)
     }
   }
 
   // Mapa de direcciones de estímulo por sesión (derivadas de reasonTelemetry),
-  // precomputado fuera del bucle siguiendo el patrón de empiricalUniqueCountMap.
+  // precomputado fuera del bucle en O(n) con el mismo patrón de agrupación
+  // por sesión que el mapa de respuestas del filtro de pool.
   // Solo las sesiones de Intervalos registran dirección en su telemetría.
   const needsDirectionFilter = !!filters.directionFilter && filters.directionFilter !== 'all'
   const directionTarget = needsDirectionFilter ? filters.directionFilter : undefined
@@ -95,38 +95,10 @@ export function filterSessionsAdvanced(
       return false
     }
 
-    // 4. Preset / Contenido Musical
+    // 4. Preset / Contenido Musical — matching canónico-primero del SSOT
+    // (remediación F21), con la matriz heurística histórica como fallback.
     if (filters.presetFilter && filters.presetFilter !== 'all') {
-      const pName = (s.presetName || '').toLowerCase()
-      const target = filters.presetFilter.toLowerCase()
-
-      const isLevel3 =
-        (target.includes('nivel 3') || target.includes('octava diatónica')) &&
-        (pName.includes('nivel 3') ||
-          pName.includes('octava diatónica') ||
-          pName.includes('c4 a c5'))
-      const isLevel1 = target.includes('nivel 1') && pName.includes('nivel 1')
-      const isLevel2 = target.includes('nivel 2') && pName.includes('nivel 2')
-      const isLevel4 =
-        (target.includes('nivel 4') || target.includes('cromático')) &&
-        (pName.includes('nivel 4') || pName.includes('cromático'))
-      const isPentatonic = target.includes('pentatónica') && pName.includes('pentatónica')
-      const isCustom =
-        target.includes('personalizadas') &&
-        (pName.includes('personalizadas') || pName.includes('notas ('))
-      const isDirectMatch = pName.includes(target)
-
-      if (
-        !isLevel3 &&
-        !isLevel1 &&
-        !isLevel2 &&
-        !isLevel4 &&
-        !isPentatonic &&
-        !isCustom &&
-        !isDirectMatch
-      ) {
-        return false
-      }
+      if (!matchesSessionPreset(s, filters.presetFilter)) return false
     }
 
     // 5. Formato y Duración Quirúrgica con SSOT
@@ -158,11 +130,11 @@ export function filterSessionsAdvanced(
       }
     }
 
-    // 6. Carga / Tamaño de Pool
+    // 6. Carga / Tamaño de Pool — resolución SSOT (canónico → heurístico →
+    // empírico con piso 2), consistente con la columna visual CARGA.
     if (filters.poolSizeFilter && filters.poolSizeFilter !== 'all') {
       const targetPool = parseInt(filters.poolSizeFilter, 10)
-      const empiricalCount = empiricalUniqueCountMap.get(s.id) || 0
-      const nominalPool = resolveNominalPoolSize(s, empiricalCount)
+      const nominalPool = resolveNominalPoolSize(s, sessionAnswersMap.get(s.id))
       if (nominalPool !== targetPool) return false
     }
 

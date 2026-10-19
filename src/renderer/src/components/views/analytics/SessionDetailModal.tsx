@@ -8,11 +8,9 @@ import {
   calculateSessionCPI,
   resolveNominalPoolSize,
   resolveSessionInputMethod,
+  resolveSessionMode,
   getLatencyThresholds,
-  MASTERY_THRESHOLDS,
-  isIntervalSession,
-  isSequenceSession,
-  isRepertoireSession
+  MASTERY_THRESHOLDS
 } from '../../../domain/analytics/historyAnalytics'
 import { PianoKeyboard } from '../../trainer/PianoKeyboard'
 import { generateMidiRange } from '../../../domain/music/noteUtils'
@@ -84,8 +82,9 @@ export function SessionDetailModal({
 
   const cpiParams = useMemo(() => {
     if (!session || sessionAnswers.length === 0) return null
-    const uniqueExpected = new Set(sessionAnswers.map((a) => a.expectedNote))
-    const poolSize = resolveNominalPoolSize(session, uniqueExpected.size)
+    // Pool resuelto por el SSOT (remediación F21): el conteo empírico de
+    // notas únicas esperadas vive dentro del resolvedor.
+    const poolSize = resolveNominalPoolSize(session, sessionAnswers)
     const chanceBaseline = 1 / poolSize
     const rawAccuracy = session.accuracyPercentage / 100
     const normalizedAccuracy =
@@ -98,16 +97,10 @@ export function SessionDetailModal({
     )
     const inputMethod = resolveSessionInputMethod(session, sessionAnswers)
 
-    // Resolver sessionMode igual que en historyAnalytics.ts
-    const sessionMode =
-      session.targetMode ||
-      (isIntervalSession(session)
-        ? 'intervals'
-        : isSequenceSession(session)
-          ? 'sequences'
-          : isRepertoireSession(session)
-            ? 'repertoire'
-            : 'single_note')
+    // Modalidad resuelta por el SSOT de analítica (remediación F21), la
+    // misma resolución que usa historyAnalytics.ts: `targetMode` canónico
+    // primero, heurísticas históricas como fallback, default `single_note`.
+    const sessionMode = resolveSessionMode(session) ?? 'single_note'
 
     const cpiScore = calculateSessionCPI(
       normalizedAccuracy,

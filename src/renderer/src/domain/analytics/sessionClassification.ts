@@ -1,6 +1,10 @@
 import { DbAnswerRecord, DbSessionRecord } from '../database/types'
 import { BIAS_DOMINANCE_RATIO } from './thresholds'
 import { InterSessionGapInfo, SessionFormatInfo } from './types'
+import {
+  resolveNominalPoolSize as resolveNominalPoolSizeSSOT,
+  resolveSessionMode
+} from './sessionModality'
 
 export function resolveSessionFormat(session: DbSessionRecord): SessionFormatInfo {
   const name = (session.presetName || '').toLowerCase()
@@ -46,62 +50,18 @@ export function resolveSessionFormat(session: DbSessionRecord): SessionFormatInf
 /**
  * Resuelve el tamaño nominal del pool de notas activas de una sesión.
  *
- * Corrección F-06/F-14 (Auditoría Frente 3): la cadena histórica de
- * `name.includes('nivel 1')` colisionaba con niveles de dos dígitos
- * ("nivel 10" contiene "nivel 1"), y la rama regex de notas personalizadas
- * no aplicaba piso. Se unifica la resolución por regex numérica exacta y se
- * aplica `Math.max(2, ...)` a toda rama derivada, garantizando
- * `poolSize >= 2` (y por tanto `chanceBaseline <= 0.5`) aguas abajo.
- *
- * Fix pool-size-filter-for-intervals-and-presets: añadido soporte para
- * nomenclatura de intervalos "Intervalos (N activos)" y presets nivel 1.x
- * (contraste, referencia, cromático completo).
+ * Delegador del SSOT `sessionModality.ts` (remediación F21, Auditoría V9):
+ * la cadena canónico → heurístico → empírico vive exclusivamente allí. La
+ * firma acepta las respuestas de la sesión (`answers?`) en lugar del conteo
+ * empírico precalculado; el piso `poolSize >= 2` se garantiza en el SSOT.
+ * Se conserva el export para no romper la superficie pública del barrel
+ * `historyAnalytics.ts` (OLA 4.3, Decisión 1).
  */
 export function resolveNominalPoolSize(
   session: DbSessionRecord,
-  empiricalUniqueCount: number
+  answers?: DbAnswerRecord[]
 ): number {
-  const name = (session.presetName || '').toLowerCase()
-
-  // 1. Regex inclusiva para capturar pool numérico entre paréntesis:
-  // "Intervalos (6 activos)" → 6, "Intervalos (4 notas)" → 4, etc.
-  const poolMatch = name.match(/\((\d+)\s*(?:activos|notas|tonos|intervalos)?\)/i)
-  if (poolMatch) {
-    return Math.max(2, parseInt(poolMatch[1], 10))
-  }
-
-  // 2. Presets de intervalos nivel 1.x (DEBEN ir ANTES del match genérico 'nivel')
-  if (name.includes('nivel 1.0') || name.includes('contraste')) return 2
-  if (name.includes('nivel 1.1') || name.includes('nivel 1.2') || name.includes('referencia'))
-    return 5
-  if (
-    name.includes('nivel 1.3') ||
-    name.includes('nivel 1.4') ||
-    name.includes('cromático completo')
-  )
-    return 12
-
-  // 3. Niveles enteros 1/2/3/4 (existente)
-  const match = name.match(/nivel\s*(\d+)/i)
-  if (match) {
-    const level = parseInt(match[1], 10)
-    if (level === 1) return 3
-    if (level === 2) return 5
-    if (level === 3 || name.includes('octava diatónica')) return 8
-    if (level === 4 || name.includes('cromático')) return 13
-  }
-
-  // 4. Pentatónica (existente)
-  if (name.includes('pentatónica')) return 6
-
-  // 5. Notas personalizadas (existente)
-  const custom = name.match(/notas\s*(?:personalizadas)?\s*\((\d+)\)/i)
-  if (custom) {
-    return Math.max(2, parseInt(custom[1], 10))
-  }
-
-  // 6. Default: empiricalUniqueCount con piso 2
-  return Math.max(2, empiricalUniqueCount)
+  return resolveNominalPoolSizeSSOT(session, answers)
 }
 
 export function formatInterSessionGap(gapMs: number | null): string {
@@ -190,50 +150,27 @@ export function resolveSessionDominantBias(
       : 'balanced'
 }
 
+/**
+ * Predicados de modalidad delegados en el SSOT `resolveSessionMode`
+ * (remediación F21): la prioridad `targetMode` canónico y las heurísticas
+ * históricas de fallback viven exclusivamente en `sessionModality.ts`. Con
+ * el resolvedor los predicados son mutuamente excluyentes y una sesión sin
+ * señales clasificables (`null`) no es aceptada por ninguno. Se conservan
+ * los exports para no romper la superficie pública del barrel
+ * `historyAnalytics.ts` (OLA 4.3, Decisión 1).
+ */
 export function isRepertoireSession(s: DbSessionRecord): boolean {
-  if (s.targetMode) return s.targetMode === 'repertoire'
-  const name = (s.presetName || '').toLowerCase()
-  return (
-    s.strategyId.includes('repertoire') ||
-    s.instrumentId.includes('repertoire') ||
-    name.includes('partitura') ||
-    name.includes('repertorio')
-  )
+  return resolveSessionMode(s) === 'repertoire'
 }
 
 export function isSequenceSession(s: DbSessionRecord): boolean {
-  if (s.targetMode) return s.targetMode === 'sequences'
-  if (isRepertoireSession(s)) return false
-  const name = (s.presetName || '').toLowerCase()
-  return (
-    s.strategyId.includes('sequences') ||
-    s.instrumentId === 'piano_sequences' ||
-    name.includes('secuencia')
-  )
+  return resolveSessionMode(s) === 'sequences'
 }
 
 export function isIntervalSession(s: DbSessionRecord): boolean {
-  if (s.targetMode) return s.targetMode === 'intervals'
-  if (isRepertoireSession(s)) return false
-  const name = (s.presetName || '').toLowerCase()
-  return (
-    s.strategyId.includes('intervals') ||
-    s.instrumentId === 'piano_intervals' ||
-    name.includes('intervalo')
-  )
+  return resolveSessionMode(s) === 'intervals'
 }
 
 export function isSingleNoteSession(s: DbSessionRecord): boolean {
-  if (s.targetMode) return s.targetMode === 'single_note'
-  if (isSequenceSession(s) || isIntervalSession(s) || isRepertoireSession(s)) return false
-  const name = (s.presetName || '').toLowerCase()
-  return (
-    s.strategyId === 'random' ||
-    s.strategyId === 'adaptive_v1' ||
-    s.strategyId === 'spaced_repetition' ||
-    name.includes('nota') ||
-    name.includes('maestría') ||
-    name.includes('tiempo') ||
-    name.includes('cronometrado')
-  )
+  return resolveSessionMode(s) === 'single_note'
 }

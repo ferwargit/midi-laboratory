@@ -199,6 +199,21 @@ describe('sessionFilters - filterSessionsAdvanced', () => {
       const out = filterSessionsAdvanced(withEmpty, { mode: 'all', presetFilter: 'Nivel 1' })
       expect(out.map((s) => s.id)).toEqual(['p_l1', 'p_direct'])
     })
+
+    it('matching canónico de punta a punta: preset con sufijo de formato coincide por segmento de contenido (delegación en el SSOT)', () => {
+      const sessions = [
+        makeSession({ id: 'canon_suffix', presetName: 'Nivel 1 (C, D, E) • Cronometrado 1m' }),
+        makeSession({ id: 'other_level', presetName: 'Nivel 2 (C a G) • Bloque 10 preguntas' })
+      ]
+      const out = filterSessionsAdvanced(sessions, {
+        mode: 'all',
+        presetFilter: 'Nivel 1 (C, D, E)'
+      })
+      // canon_suffix coincide por la vía canónica del SSOT (segmento de
+      // contenido exacto); other_level no coincide ni canónica ni
+      // heurísticamente.
+      expect(out.map((s) => s.id)).toEqual(['canon_suffix'])
+    })
   })
 
   describe('5. Formato y Duración', () => {
@@ -381,7 +396,8 @@ describe('sessionFilters - filterSessionsAdvanced', () => {
     })
 
     it('sin answers, poolSizeFilter usa fallback (puede devolver 0 sesiones si no matchea)', () => {
-      // Sin answers, empiricalUniqueCount = 0 → default pool 2
+      // Sin respuestas, el fallback empírico del SSOT no tiene notas que
+      // contar y aplica el piso 2 (azar 2AFC).
       // Estas sesiones tienen pool 6, 4, 12 → no matchean pool 2
       const out = filterSessionsAdvanced(sessions, { mode: 'all', poolSizeFilter: '2' })
       expect(out).toHaveLength(0)

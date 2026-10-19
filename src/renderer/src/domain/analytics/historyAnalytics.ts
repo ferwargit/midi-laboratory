@@ -4,8 +4,17 @@ import { midiNoteToName } from '../music/noteUtils'
 // Barrel export: preserva el 100% de la API pública del módulo para que
 // ninguno de los 35 sitios consumidores (stores, hooks, views, dominio
 // IA/adaptación y tests) deba modificar sus imports (OLA 4.3, Decisión 1).
+// El SSOT sessionModality se re-exporta de forma explícita (no `export *`)
+// porque `resolveNominalPoolSize` ya llega vía el delegador de
+// sessionClassification; duplicarlo sería una ambigüedad de star-export.
 export * from './thresholds'
 export * from './types'
+export {
+  resolveSessionMode,
+  resolveSessionPresetNotes,
+  matchesSessionPreset
+} from './sessionModality'
+export type { SessionMode } from './sessionModality'
 export * from './sessionClassification'
 export * from './psychometrics'
 export * from './latencyStats'
@@ -23,15 +32,12 @@ import {
   DetailedSessionAnalysis
 } from './types'
 import { calculateSessionCPI } from './psychometrics'
+import { resolveNominalPoolSize, resolveSessionMode } from './sessionModality'
 import {
   computeInterSessionGapMap,
-  resolveNominalPoolSize,
   resolveSessionDominantBias,
   resolveSessionFormat,
-  resolveSessionInputMethod,
-  isIntervalSession,
-  isSequenceSession,
-  isRepertoireSession
+  resolveSessionInputMethod
 } from './sessionClassification'
 import { computeLongitudinalComparisons } from './longitudinal'
 import { filterSessionsAdvanced, filterSessionsByMode } from './sessionFilters'
@@ -88,9 +94,10 @@ export function computeAnalyticsMetrics(
 
   const sessionPsychometricsList: DetailedSessionAnalysis[] = filteredSessions.map((session) => {
     const sAnswers = filteredAnswers.filter((a) => a.sessionId === session.id)
-    const uniqueExpected = new Set(sAnswers.map((a) => a.expectedNote))
 
-    const poolSize = resolveNominalPoolSize(session, uniqueExpected.size)
+    // Pool resuelto por el SSOT (remediación F21): canónico → heurístico →
+    // empírico (notas únicas esperadas) con piso 2.
+    const poolSize = resolveNominalPoolSize(session, sAnswers)
     const chanceBaseline = 1 / poolSize
     const entropyBits = Number(Math.log2(poolSize).toFixed(2))
 
@@ -110,15 +117,10 @@ export function computeAnalyticsMetrics(
     let sSharp = 0
     let sFlat = 0
 
-    const sessionMode =
-      session.targetMode ||
-      (isIntervalSession(session)
-        ? 'intervals'
-        : isSequenceSession(session)
-          ? 'sequences'
-          : isRepertoireSession(session)
-            ? 'repertoire'
-            : 'single_note')
+    // Modalidad resuelta por el SSOT (remediación F21): `targetMode`
+    // canónico primero, heurísticas históricas como fallback, default
+    // `single_note` para sesiones no clasificables.
+    const sessionMode = resolveSessionMode(session) ?? 'single_note'
     const thresholds = getLatencyThresholds(sessionMode)
 
     sAnswers.forEach((ans) => {
@@ -184,15 +186,8 @@ export function computeAnalyticsMetrics(
     totalTime += ans.responseTimeMs
 
     const session = sessionById.get(ans.sessionId)
-    const sessionMode =
-      session?.targetMode ||
-      (session && isIntervalSession(session)
-        ? 'intervals'
-        : session && isSequenceSession(session)
-          ? 'sequences'
-          : session && isRepertoireSession(session)
-            ? 'repertoire'
-            : 'single_note')
+    // Misma resolución SSOT que el bloque de sesiones (remediación F21).
+    const sessionMode = (session && resolveSessionMode(session)) ?? 'single_note'
     const thresholds = getLatencyThresholds(sessionMode)
 
     if (ans.responseTimeMs < thresholds.FAST_MAX_MS) fastCount++
