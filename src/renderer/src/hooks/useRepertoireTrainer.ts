@@ -234,7 +234,7 @@ export function useRepertoireTrainer({
   const [autoSpeedRamp, setAutoSpeedRampState] = useState<boolean>(false)
 
   const [activeBeatIndex, setActiveBeatIndex] = useState<number | null>(null)
-  const [visualBeatEnabled, setVisualBeatEnabled] = useState<boolean>(true)
+  const [visualBeatEnabled, setVisualBeatEnabledState] = useState<boolean>(true)
   const [isFreeMetronomeActive, setIsFreeMetronomeActive] = useState<boolean>(false)
   const isFreeMetronomeActiveRef = useRef<boolean>(false)
 
@@ -247,15 +247,36 @@ export function useRepertoireTrainer({
   const endMeasureRef = useRef<number>(4)
   const chainingDirectionRef = useRef<ChainingDirection>('forward')
 
+  // Gating en origen del indicador visual de pulso (auditoría V8, F12.5/R3):
+  // el registro del callback visual está gobernado por visualBeatEnabled.
+  // Con el indicador desactivado el callback se desregistra del scheduler y
+  // activeBeatIndex se limpia, eliminando los 2-4 re-renders por segundo del
+  // metrónomo continuo. La sincronización auditiva no se ve afectada: el
+  // scheduler tolera onBeatTick indefinido (guard interno).
   useEffect(() => {
-    stimulusScheduler.onBeatTick = (beatIndex: number): void => {
-      setActiveBeatIndex(beatIndex)
-      setTimeout(() => {
-        setActiveBeatIndex((prev) => (prev === beatIndex ? null : prev))
-      }, 140)
+    if (visualBeatEnabled) {
+      stimulusScheduler.onBeatTick = (beatIndex: number): void => {
+        setActiveBeatIndex(beatIndex)
+        setTimeout(() => {
+          setActiveBeatIndex((prev) => (prev === beatIndex ? null : prev))
+        }, 140)
+      }
+    } else {
+      stimulusScheduler.onBeatTick = undefined
     }
     return (): void => {
       stimulusScheduler.onBeatTick = undefined
+    }
+  }, [visualBeatEnabled])
+
+  // Gating en origen (F12.5/R3): la desactivación del indicador es un evento de
+  // UI, no un efecto — la limpieza de activeBeatIndex vive en el manejador
+  // (única vía de desactivación), evitando el setState síncrono en el efecto
+  // (react-hooks/set-state-in-effect).
+  const setVisualBeatEnabled = useCallback((enabled: boolean): void => {
+    setVisualBeatEnabledState(enabled)
+    if (!enabled) {
+      setActiveBeatIndex(null)
     }
   }, [])
 

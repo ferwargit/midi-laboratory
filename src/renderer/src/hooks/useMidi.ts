@@ -15,6 +15,7 @@ export interface UseMidiOptions {
   onDeviceDisconnected?: () => void
   onDeviceReconnected?: () => void
   enableSoftwareThru?: boolean
+  visualCuesEnabled?: boolean
 }
 
 export interface UseMidiReturn {
@@ -47,7 +48,8 @@ export function useMidi({
   onNoteOff,
   onDeviceDisconnected,
   onDeviceReconnected,
-  enableSoftwareThru = true
+  enableSoftwareThru = true,
+  visualCuesEnabled = true
 }: UseMidiOptions = {}): UseMidiReturn {
   const [midiAccess, setMidiAccess] = useState<MIDIAccess | null>(null)
   const [inputs, setInputs] = useState<MIDIInput[]>([])
@@ -76,12 +78,18 @@ export function useMidi({
   const onNoteOffRef = useRef(onNoteOff)
   const onDisconnectedRef = useRef(onDeviceDisconnected)
   const onReconnectedRef = useRef(onDeviceReconnected)
+  // Ref espejo del flag de pistas visuales (auditoría V8, F12.4/R3): sendNote
+  // la lee en el momento de la invocación. El flag NO entra en las deps de
+  // sendNote ni del useMemo del retorno, preservando la estabilidad
+  // referencial lograda en stabilize-hook-return-identities.
+  const visualCuesEnabledRef = useRef(visualCuesEnabled)
 
   useEffect(() => {
     onNoteOnRef.current = onNoteOn
     onNoteOffRef.current = onNoteOff
     onDisconnectedRef.current = onDeviceDisconnected
     onReconnectedRef.current = onDeviceReconnected
+    visualCuesEnabledRef.current = visualCuesEnabled
   })
 
   // Fachada de escritura sobre el store de telemetría: el buffer NO vive en
@@ -344,7 +352,9 @@ export function useMidi({
 
       // Note ON
       outputPort.send([0x90 | chByte, noteNumber, velocity])
-      if (isMelodicStimulus) {
+      // Gate en origen (F12.4/R3): con las pistas visuales desactivadas la nota
+      // se articula acústicamente pero no se registra en la pista visual.
+      if (isMelodicStimulus && visualCuesEnabledRef.current) {
         setActiveStimulusNotes((prev) => (prev.includes(noteNumber) ? prev : [...prev, noteNumber]))
       }
 
@@ -356,7 +366,12 @@ export function useMidi({
           // No-op
         }
         if (isMelodicStimulus) {
-          setActiveStimulusNotes((prev) => prev.filter((n) => n !== noteNumber))
+          // Cortocircuito (bail-out): si la nota no está registrada (p. ej.
+          // articulada con las pistas desactivadas), se retorna prev sin
+          // cambios y React no re-renderiza.
+          setActiveStimulusNotes((prev) =>
+            prev.includes(noteNumber) ? prev.filter((n) => n !== noteNumber) : prev
+          )
         }
         stimulusTimersRef.current.delete(timerKey)
       }, durationMs)

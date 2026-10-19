@@ -58,7 +58,10 @@ export default function App(): React.ReactElement {
 
   const midi = useMidi({
     onNoteOn: (note, vel) => handleNoteRef.current(note, vel, 'midi_hardware'),
-    enableSoftwareThru: true
+    enableSoftwareThru: true,
+    // Gating en origen (auditoría V8, F12.4/R3): en modo blind el hook omite
+    // el alta en activeStimulusNotes, eliminando el setState espurio en la raíz.
+    visualCuesEnabled: visualCueMode === 'assisted'
   })
 
   const playTonalContextMidi = useCallback(
