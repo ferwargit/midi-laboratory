@@ -4,8 +4,16 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  main: {},
-  preload: {},
+  main: {
+    build: {
+      sourcemap: 'hidden'
+    }
+  },
+  preload: {
+    build: {
+      sourcemap: 'hidden'
+    }
+  },
   renderer: {
     resolve: {
       alias: {

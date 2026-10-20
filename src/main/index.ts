@@ -107,7 +107,7 @@ ipcMain.handle('lm-studio:check-models', (_, baseUrl?: string) => handleCheckMod
 ipcMain.handle('lm-studio:chat-completion', (_, payload) => handleChatCompletion(payload))
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.ferwarno.midilaboratory')
 
   registerSessionPermissionHandlers()
 
