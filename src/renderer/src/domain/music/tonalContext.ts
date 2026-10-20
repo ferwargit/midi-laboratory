@@ -1,5 +1,3 @@
-import { midiNoteToName } from './noteUtils'
-
 export type TonalContextMode = 'none' | 'cadence' | 'tonic' | 'drone'
 
 export interface TonalContextOption {
@@ -85,13 +83,4 @@ export function getTonalContextSteps(mode: TonalContextMode, rootMidi = 60): Mid
 export function getTotalContextDurationMs(mode: TonalContextMode, rootMidi = 60): number {
   const steps = getTonalContextSteps(mode, rootMidi)
   return steps.reduce((acc, step) => acc + step.delayAfterMs, 0)
-}
-
-export function getTonalContextDescription(mode: TonalContextMode, rootMidi = 60): string {
-  if (mode === 'none') return 'Aislado'
-  const rootName = midiNoteToName(rootMidi)
-  if (mode === 'cadence') return `Cadencia en ${rootName} Mayor`
-  if (mode === 'tonic') return `Tónica ${rootName}`
-  if (mode === 'drone') return `Drone en ${rootName}`
-  return 'Aislado'
 }

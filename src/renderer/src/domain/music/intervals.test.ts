@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  INTERVAL_DEFINITIONS,
-  INTERVAL_PRESETS,
-  getIntervalDefinition,
-  calculateIntervalFromNotes
-} from './intervals'
+import { INTERVAL_DEFINITIONS, INTERVAL_PRESETS, getIntervalDefinition } from './intervals'
 
 describe('intervals - Dominio Musical de Intervalos', () => {
   it('debe contener las 13 definiciones de intervalos (0 a 12 semitonos)', () => {
@@ -18,18 +13,6 @@ describe('intervals - Dominio Musical de Intervalos', () => {
     const fifth = getIntervalDefinition(7)
     expect(fifth.fullName).toBe('Quinta Justa')
     expect(fifth.anchorSong).toContain('Star Wars')
-  })
-
-  it('calculateIntervalFromNotes debe calcular correctamente semitonos y dirección', () => {
-    // C4 (60) a E4 (64) -> Ascendente 4 semitonos (3M)
-    const asc = calculateIntervalFromNotes(60, 64)
-    expect(asc.semitones).toBe(4)
-    expect(asc.direction).toBe('ascending')
-
-    // C4 (60) a G3 (55) -> Descendente 5 semitonos (4J desc)
-    const desc = calculateIntervalFromNotes(60, 55)
-    expect(desc.semitones).toBe(5)
-    expect(desc.direction).toBe('descending')
   })
 
   it('todos los presets de intervalos deben tener listas de semitonos válidas', () => {

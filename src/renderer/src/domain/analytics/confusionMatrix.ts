@@ -1,20 +1,10 @@
 import { DbAnswerRecord } from '../database/types'
+import { NOTE_NAMES } from '../music/noteUtils'
 import { ConfusionMatrix2DData, PitchClassConfusionCell } from './types'
 
-export const PITCH_CLASSES = [
-  'C',
-  'C#',
-  'D',
-  'D#',
-  'E',
-  'F',
-  'F#',
-  'G',
-  'G#',
-  'A',
-  'A#',
-  'B'
-] as const
+// SSOT de los 12 nombres de clase de altura: reutiliza NOTE_NAMES del dominio
+// musical (hallazgo F25, auditoría V9) en lugar de duplicar el array.
+export const PITCH_CLASSES = NOTE_NAMES
 
 export function computePitchClassConfusionMatrix(answers: DbAnswerRecord[]): ConfusionMatrix2DData {
   const counts: number[][] = Array.from({ length: 12 }, () => Array(12).fill(0))
