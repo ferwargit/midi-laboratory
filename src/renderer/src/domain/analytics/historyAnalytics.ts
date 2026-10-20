@@ -23,16 +23,17 @@ export * from './confusionMatrix'
 export * from './sessionFilters'
 export * from './longitudinal'
 
-import { getLatencyThresholds } from './thresholds'
+import { getLatencyThresholds, LatencyThresholdConfig } from './thresholds'
 import {
   AnalyticsFilterOptions,
   AnalyticsMetrics,
   AnalyticsModeFilter,
   ConfusionPair,
-  DetailedSessionAnalysis
+  DetailedSessionAnalysis,
+  InterSessionGapInfo
 } from './types'
 import { calculateSessionCPI } from './psychometrics'
-import { resolveNominalPoolSize, resolveSessionMode } from './sessionModality'
+import { resolveNominalPoolSize, resolveSessionMode, SessionMode } from './sessionModality'
 import {
   computeInterSessionGapMap,
   resolveSessionDominantBias,
@@ -41,6 +42,275 @@ import {
 } from './sessionClassification'
 import { computeLongitudinalComparisons } from './longitudinal'
 import { filterSessionsAdvanced, filterSessionsByMode } from './sessionFilters'
+
+/**
+ * Pre-agrupación de respuestas por sesión en una única pasada O(A)
+ * (remediación F23): elimina el `filter` por sesión dentro del `.map()`
+ * de sesiones, reduciendo el costo global de O(S×A) a O(S+A).
+ */
+function buildAnswersBySession(answers: DbAnswerRecord[]): Map<string, DbAnswerRecord[]> {
+  const bySession = new Map<string, DbAnswerRecord[]>()
+  for (const ans of answers) {
+    const bucket = bySession.get(ans.sessionId)
+    if (bucket) bucket.push(ans)
+    else bySession.set(ans.sessionId, [ans])
+  }
+  return bySession
+}
+
+/**
+ * Contexto de latencia por sesión (remediación F23): la modalidad se resuelve
+ * una única vez por sesión con el SSOT `resolveSessionMode` y los umbrales se
+ * derivan una única vez, en lugar de recalcularse por respuesta en el bucle de
+ * agregación global.
+ */
+interface SessionLatencyContext {
+  mode: SessionMode
+  thresholds: LatencyThresholdConfig
+}
+
+function buildSessionLatencyContexts(
+  sessions: DbSessionRecord[]
+): Map<string, SessionLatencyContext> {
+  const contexts = new Map<string, SessionLatencyContext>()
+  for (const session of sessions) {
+    const mode = resolveSessionMode(session) ?? 'single_note'
+    contexts.set(session.id, { mode, thresholds: getLatencyThresholds(mode) })
+  }
+  return contexts
+}
+
+/**
+ * Análisis psicrométrico de una sesión individual (remediación F23): pool,
+ * entropía, precisión normalizada por azar, cronometría por umbrales de
+ * modalidad, sesgo dominante, formato, método de entrada y CPI.
+ */
+function analyzeSessionPsychometrics(
+  session: DbSessionRecord,
+  sAnswers: DbAnswerRecord[],
+  gapInfo: InterSessionGapInfo,
+  latency: SessionLatencyContext | undefined
+): DetailedSessionAnalysis {
+  // Pool resuelto por el SSOT (remediación F21): canónico → heurístico →
+  // empírico (notas únicas esperadas) con piso 2.
+  const poolSize = resolveNominalPoolSize(session, sAnswers)
+  const chanceBaseline = 1 / poolSize
+  const entropyBits = Number(Math.log2(poolSize).toFixed(2))
+
+  const rawAccuracy = session.accuracyPercentage
+  const accDec = rawAccuracy / 100
+  const normalizedAccuracy =
+    accDec <= chanceBaseline
+      ? 0
+      : Math.round(((accDec - chanceBaseline) / (1 - chanceBaseline)) * 100)
+
+  const durSec = Math.max(1, session.durationSeconds || 1)
+  const responsesPerMinute = Number(((session.totalQuestions / durSec) * 60).toFixed(1))
+
+  let sFast = 0
+  let sMed = 0
+  let sSlow = 0
+  let sSharp = 0
+  let sFlat = 0
+
+  // Modalidad y umbrales resueltos una única vez por sesión por el SSOT
+  // (remediación F21/F23): `targetMode` canónico primero, heurísticas
+  // históricas como fallback, default `single_note` para sesiones no
+  // clasificables.
+  const sessionMode = latency?.mode ?? 'single_note'
+  const thresholds = latency?.thresholds ?? getLatencyThresholds(sessionMode)
+
+  sAnswers.forEach((ans) => {
+    if (ans.responseTimeMs < thresholds.FAST_MAX_MS) sFast++
+    else if (ans.responseTimeMs <= thresholds.MEDIUM_MAX_MS) sMed++
+    else sSlow++
+
+    if (!ans.isCorrect) {
+      if (ans.semitoneDistance > 0) sSharp++
+      else if (ans.semitoneDistance < 0) sFlat++
+    }
+  })
+
+  const totalAns = Math.max(1, sAnswers.length)
+  const fastPercent = Math.round((sFast / totalAns) * 100)
+  const mediumPercent = Math.round((sMed / totalAns) * 100)
+  const slowPercent = Math.round((sSlow / totalAns) * 100)
+
+  const dominantBias = resolveSessionDominantBias(session, sAnswers)
+
+  const formatInfo = resolveSessionFormat(session)
+
+  const inputMethod = resolveSessionInputMethod(session, sAnswers)
+
+  const cpiScore = calculateSessionCPI(
+    normalizedAccuracy,
+    entropyBits,
+    responsesPerMinute,
+    session.avgResponseTimeMs,
+    inputMethod,
+    sessionMode
+  )
+
+  return {
+    session,
+    poolSize,
+    entropyBits,
+    chanceBaseline: Math.round(chanceBaseline * 100),
+    normalizedAccuracy,
+    responsesPerMinute,
+    fastPercent,
+    mediumPercent,
+    slowPercent,
+    sharpBiasCount: sSharp,
+    flatBiasCount: sFlat,
+    dominantBias,
+    formatType: formatInfo.formatType,
+    formatLabel: formatInfo.formatLabel,
+    inputMethod,
+    interSessionGapMs: gapInfo.gapMs,
+    interSessionGapLabel: gapInfo.label,
+    cpiScore
+  }
+}
+
+/** Estadística acumulada de una nota esperada (intentos y aciertos). */
+interface NoteStatAccumulator {
+  attempts: number
+  correct: number
+}
+
+/**
+ * Acumuladores globales sobre todas las respuestas filtradas (remediación
+ * F23): correctos, tiempo, buckets de latencia por umbrales de sesión,
+ * sesgos, pares de confusión tipados y estadística por nota.
+ */
+interface GlobalAnswerAccumulators {
+  totalCorrect: number
+  totalTime: number
+  fastCount: number
+  medCount: number
+  slowCount: number
+  sharpBias: number
+  flatBias: number
+  confusionMap: Map<string, ConfusionPair>
+  noteStatsMap: Map<number, NoteStatAccumulator>
+}
+
+function aggregateAnswerStats(
+  filteredAnswers: DbAnswerRecord[],
+  latencyContexts: Map<string, SessionLatencyContext>
+): GlobalAnswerAccumulators {
+  const acc: GlobalAnswerAccumulators = {
+    totalCorrect: 0,
+    totalTime: 0,
+    fastCount: 0,
+    medCount: 0,
+    slowCount: 0,
+    sharpBias: 0,
+    flatBias: 0,
+    confusionMap: new Map(),
+    noteStatsMap: new Map()
+  }
+
+  for (const ans of filteredAnswers) {
+    if (ans.isCorrect) acc.totalCorrect++
+    acc.totalTime += ans.responseTimeMs
+
+    // Umbrales reutilizados del contexto resuelto una vez por sesión (F23).
+    const thresholds =
+      latencyContexts.get(ans.sessionId)?.thresholds ?? getLatencyThresholds('single_note')
+
+    if (ans.responseTimeMs < thresholds.FAST_MAX_MS) acc.fastCount++
+    else if (ans.responseTimeMs <= thresholds.MEDIUM_MAX_MS) acc.medCount++
+    else acc.slowCount++
+
+    if (!ans.isCorrect) {
+      if (ans.semitoneDistance > 0) acc.sharpBias++
+      else if (ans.semitoneDistance < 0) acc.flatBias++
+
+      // Par tipado acumulado sin round-trip de strings (remediación F23):
+      // la clave compuesta usa los números MIDI originales y los nombres se
+      // resuelven una sola vez por par.
+      const pairKey = `${ans.expectedNote}|${ans.playedNote}`
+      const existingPair = acc.confusionMap.get(pairKey)
+      if (existingPair) {
+        existingPair.count++
+      } else {
+        acc.confusionMap.set(pairKey, {
+          expected: midiNoteToName(ans.expectedNote),
+          played: midiNoteToName(ans.playedNote),
+          count: 1
+        })
+      }
+    }
+
+    if (!acc.noteStatsMap.has(ans.expectedNote)) {
+      acc.noteStatsMap.set(ans.expectedNote, { attempts: 0, correct: 0 })
+    }
+    const stat = acc.noteStatsMap.get(ans.expectedNote)!
+    stat.attempts++
+    if (ans.isCorrect) stat.correct++
+  }
+
+  return acc
+}
+
+/**
+ * Proyección directa de pares tipados (remediación F23): sin split ni
+ * re-parseo; el orden de inserción de primera aparición se preserva en
+ * empates (sort estable).
+ */
+function projectTopConfusions(confusionMap: Map<string, ConfusionPair>): ConfusionPair[] {
+  return Array.from(confusionMap.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+}
+
+/**
+ * Rankings por nota (remediación F23): más difíciles (`accuracy < 80`) y más
+ * fuertes (`accuracy >= 80`), ambos con piso de 2 intentos y límite de 5.
+ */
+function projectNoteRankings(
+  noteStatsMap: Map<number, NoteStatAccumulator>
+): Pick<AnalyticsMetrics, 'mostDifficultNotes' | 'strongestNotes'> {
+  const notesArray = Array.from(noteStatsMap.entries()).map(([noteNumber, stat]) => ({
+    noteName: midiNoteToName(noteNumber),
+    accuracy: Math.round((stat.correct / stat.attempts) * 100),
+    attempts: stat.attempts
+  }))
+
+  return {
+    mostDifficultNotes: [...notesArray]
+      .filter((n) => n.attempts >= 2 && n.accuracy < 80)
+      .sort((a, b) => a.accuracy - b.accuracy)
+      .slice(0, 5),
+    strongestNotes: [...notesArray]
+      .filter((n) => n.attempts >= 2 && n.accuracy >= 80)
+      .sort((a, b) => b.accuracy - a.accuracy)
+      .slice(0, 5)
+  }
+}
+
+/** Promedios de entropía y precisión normalizada sobre las sesiones analizadas. */
+function computeSessionAverages(
+  sessionPsychometricsList: DetailedSessionAnalysis[]
+): Pick<AnalyticsMetrics, 'avgEntropyBits' | 'normalizedOverallAccuracy'> {
+  if (sessionPsychometricsList.length === 0) {
+    return { avgEntropyBits: 0, normalizedOverallAccuracy: 0 }
+  }
+  return {
+    avgEntropyBits: Number(
+      (
+        sessionPsychometricsList.reduce((acc, s) => acc + s.entropyBits, 0) /
+        sessionPsychometricsList.length
+      ).toFixed(2)
+    ),
+    normalizedOverallAccuracy: Math.round(
+      sessionPsychometricsList.reduce((acc, s) => acc + s.normalizedAccuracy, 0) /
+        sessionPsychometricsList.length
+    )
+  }
+}
 
 export function computeAnalyticsMetrics(
   sessions: DbSessionRecord[],
@@ -54,6 +324,7 @@ export function computeAnalyticsMetrics(
 
   const validSessionIds = new Set(filteredSessions.map((s) => s.id))
   const filteredAnswers = answers.filter((a) => validSessionIds.has(a.sessionId))
+  const answersBySessionId = buildAnswersBySession(filteredAnswers)
 
   const totalAnswers = filteredAnswers.length
   if (totalAnswers === 0) {
@@ -81,199 +352,41 @@ export function computeAnalyticsMetrics(
 
   const gapMap = computeInterSessionGapMap(filteredSessions)
 
-  let totalCorrect = 0
-  let totalTime = 0
-  let fastCount = 0
-  let medCount = 0
-  let slowCount = 0
-  let sharpBias = 0
-  let flatBias = 0
+  // Contexto de latencia por sesión (remediación F23): modalidad y umbrales
+  // resueltos una única vez por sesión y reutilizados en ambos bloques.
+  const latencyContexts = buildSessionLatencyContexts(filteredSessions)
 
-  const noteStatsMap = new Map<number, { attempts: number; correct: number }>()
-  const confusionMap = new Map<string, number>()
-
-  const sessionPsychometricsList: DetailedSessionAnalysis[] = filteredSessions.map((session) => {
-    const sAnswers = filteredAnswers.filter((a) => a.sessionId === session.id)
-
-    // Pool resuelto por el SSOT (remediación F21): canónico → heurístico →
-    // empírico (notas únicas esperadas) con piso 2.
-    const poolSize = resolveNominalPoolSize(session, sAnswers)
-    const chanceBaseline = 1 / poolSize
-    const entropyBits = Number(Math.log2(poolSize).toFixed(2))
-
-    const rawAccuracy = session.accuracyPercentage
-    const accDec = rawAccuracy / 100
-    const normalizedAccuracy =
-      accDec <= chanceBaseline
-        ? 0
-        : Math.round(((accDec - chanceBaseline) / (1 - chanceBaseline)) * 100)
-
-    const durSec = Math.max(1, session.durationSeconds || 1)
-    const responsesPerMinute = Number(((session.totalQuestions / durSec) * 60).toFixed(1))
-
-    let sFast = 0
-    let sMed = 0
-    let sSlow = 0
-    let sSharp = 0
-    let sFlat = 0
-
-    // Modalidad resuelta por el SSOT (remediación F21): `targetMode`
-    // canónico primero, heurísticas históricas como fallback, default
-    // `single_note` para sesiones no clasificables.
-    const sessionMode = resolveSessionMode(session) ?? 'single_note'
-    const thresholds = getLatencyThresholds(sessionMode)
-
-    sAnswers.forEach((ans) => {
-      if (ans.responseTimeMs < thresholds.FAST_MAX_MS) sFast++
-      else if (ans.responseTimeMs <= thresholds.MEDIUM_MAX_MS) sMed++
-      else sSlow++
-
-      if (!ans.isCorrect) {
-        if (ans.semitoneDistance > 0) sSharp++
-        else if (ans.semitoneDistance < 0) sFlat++
-      }
-    })
-
-    const totalAns = Math.max(1, sAnswers.length)
-    const fastPercent = Math.round((sFast / totalAns) * 100)
-    const mediumPercent = Math.round((sMed / totalAns) * 100)
-    const slowPercent = Math.round((sSlow / totalAns) * 100)
-
-    const dominantBias = resolveSessionDominantBias(session, sAnswers)
-
-    const formatInfo = resolveSessionFormat(session)
-
-    const inputMethod = resolveSessionInputMethod(session, sAnswers)
-
-    const gapInfo = gapMap.get(session.id) || { gapMs: null, label: 'Inicio' }
-
-    const cpiScore = calculateSessionCPI(
-      normalizedAccuracy,
-      entropyBits,
-      responsesPerMinute,
-      session.avgResponseTimeMs,
-      inputMethod,
-      sessionMode
-    )
-
-    return {
+  const sessionPsychometricsList = filteredSessions.map((session) =>
+    analyzeSessionPsychometrics(
       session,
-      poolSize,
-      entropyBits,
-      chanceBaseline: Math.round(chanceBaseline * 100),
-      normalizedAccuracy,
-      responsesPerMinute,
-      fastPercent,
-      mediumPercent,
-      slowPercent,
-      sharpBiasCount: sSharp,
-      flatBiasCount: sFlat,
-      dominantBias,
-      formatType: formatInfo.formatType,
-      formatLabel: formatInfo.formatLabel,
-      inputMethod,
-      interSessionGapMs: gapInfo.gapMs,
-      interSessionGapLabel: gapInfo.label,
-      cpiScore
-    }
-  })
+      answersBySessionId.get(session.id) ?? [],
+      gapMap.get(session.id) || { gapMs: null, label: 'Inicio' },
+      latencyContexts.get(session.id)
+    )
+  )
 
-  // Create a session lookup for per-answer modality resolution
-  const sessionById = new Map(filteredSessions.map((s) => [s.id, s]))
-
-  for (const ans of filteredAnswers) {
-    if (ans.isCorrect) totalCorrect++
-    totalTime += ans.responseTimeMs
-
-    const session = sessionById.get(ans.sessionId)
-    // Misma resolución SSOT que el bloque de sesiones (remediación F21).
-    const sessionMode = (session && resolveSessionMode(session)) ?? 'single_note'
-    const thresholds = getLatencyThresholds(sessionMode)
-
-    if (ans.responseTimeMs < thresholds.FAST_MAX_MS) fastCount++
-    else if (ans.responseTimeMs <= thresholds.MEDIUM_MAX_MS) medCount++
-    else slowCount++
-
-    if (!ans.isCorrect) {
-      if (ans.semitoneDistance > 0) sharpBias++
-      else if (ans.semitoneDistance < 0) flatBias++
-
-      const expName = midiNoteToName(ans.expectedNote)
-      const playName = midiNoteToName(ans.playedNote)
-      const key = `${expName} ➔ ${playName}`
-      confusionMap.set(key, (confusionMap.get(key) || 0) + 1)
-    }
-
-    if (!noteStatsMap.has(ans.expectedNote)) {
-      noteStatsMap.set(ans.expectedNote, { attempts: 0, correct: 0 })
-    }
-    const stat = noteStatsMap.get(ans.expectedNote)!
-    stat.attempts++
-    if (ans.isCorrect) stat.correct++
-  }
-
-  const topConfusions: ConfusionPair[] = Array.from(confusionMap.entries())
-    .map(([key, count]) => {
-      const [expected, played] = key.split(' ➔ ')
-      return { expected, played, count }
-    })
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5)
-
-  const notesArray = Array.from(noteStatsMap.entries()).map(([noteNumber, stat]) => ({
-    noteName: midiNoteToName(noteNumber),
-    accuracy: Math.round((stat.correct / stat.attempts) * 100),
-    attempts: stat.attempts
-  }))
-
-  const mostDifficultNotes = [...notesArray]
-    .filter((n) => n.attempts >= 2 && n.accuracy < 80)
-    .sort((a, b) => a.accuracy - b.accuracy)
-    .slice(0, 5)
-
-  const strongestNotes = [...notesArray]
-    .filter((n) => n.attempts >= 2 && n.accuracy >= 80)
-    .sort((a, b) => b.accuracy - a.accuracy)
-    .slice(0, 5)
-
-  const avgEntropy =
-    sessionPsychometricsList.length > 0
-      ? Number(
-          (
-            sessionPsychometricsList.reduce((acc, s) => acc + s.entropyBits, 0) /
-            sessionPsychometricsList.length
-          ).toFixed(2)
-        )
-      : 0
-
-  const avgNormalized =
-    sessionPsychometricsList.length > 0
-      ? Math.round(
-          sessionPsychometricsList.reduce((acc, s) => acc + s.normalizedAccuracy, 0) /
-            sessionPsychometricsList.length
-        )
-      : 0
-
-  const longitudinalComparisons = computeLongitudinalComparisons(sessionPsychometricsList)
+  const acc = aggregateAnswerStats(filteredAnswers, latencyContexts)
+  const averages = computeSessionAverages(sessionPsychometricsList)
+  const noteRankings = projectNoteRankings(acc.noteStatsMap)
 
   return {
     modeFilter,
     filteredSessionsCount: filteredSessions.length,
     totalAnswers,
-    totalCorrect,
-    overallAccuracy: Math.round((totalCorrect / totalAnswers) * 100),
-    normalizedOverallAccuracy: avgNormalized,
-    avgEntropyBits: avgEntropy,
-    avgResponseTimeMs: Math.round(totalTime / totalAnswers),
-    fastResponsesCount: fastCount,
-    mediumResponsesCount: medCount,
-    slowResponsesCount: slowCount,
-    sharpBiasCount: sharpBias,
-    flatBiasCount: flatBias,
-    topConfusions,
-    mostDifficultNotes,
-    strongestNotes,
+    totalCorrect: acc.totalCorrect,
+    overallAccuracy: Math.round((acc.totalCorrect / totalAnswers) * 100),
+    normalizedOverallAccuracy: averages.normalizedOverallAccuracy,
+    avgEntropyBits: averages.avgEntropyBits,
+    avgResponseTimeMs: Math.round(acc.totalTime / totalAnswers),
+    fastResponsesCount: acc.fastCount,
+    mediumResponsesCount: acc.medCount,
+    slowResponsesCount: acc.slowCount,
+    sharpBiasCount: acc.sharpBias,
+    flatBiasCount: acc.flatBias,
+    topConfusions: projectTopConfusions(acc.confusionMap),
+    mostDifficultNotes: noteRankings.mostDifficultNotes,
+    strongestNotes: noteRankings.strongestNotes,
     sessionPsychometricsList,
-    longitudinalComparisons
+    longitudinalComparisons: computeLongitudinalComparisons(sessionPsychometricsList)
   }
 }
