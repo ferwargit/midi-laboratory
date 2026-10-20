@@ -1,7 +1,5 @@
 export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const
 
-export type NoteName = (typeof NOTE_NAMES)[number]
-
 /**
  * Convierte un número de nota MIDI estándar (0-127) a su nombre científico (ej: 60 -> C4).
  */

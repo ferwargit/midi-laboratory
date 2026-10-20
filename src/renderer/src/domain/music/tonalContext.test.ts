@@ -3,8 +3,7 @@ import {
   TONAL_CONTEXT_OPTIONS,
   getTonalContextSteps,
   getTotalContextDurationMs,
-  generateCadenceSteps,
-  getTonalContextDescription
+  generateCadenceSteps
 } from './tonalContext'
 
 describe('tonalContext - Protocolo de Anclaje Tonal Dinámico y Transportable', () => {
@@ -40,13 +39,6 @@ describe('tonalContext - Protocolo de Anclaje Tonal Dinámico y Transportable', 
     expect(getTonalContextSteps('tonic', 60).length).toBe(1)
     expect(getTonalContextSteps('drone', 60).length).toBe(1)
     expect(getTonalContextSteps('cadence', 62).length).toBe(4)
-  })
-
-  it('getTonalContextDescription debe describir dinámicamente la tonalidad activa', () => {
-    expect(getTonalContextDescription('cadence', 60)).toBe('Cadencia en C4 Mayor')
-    expect(getTonalContextDescription('cadence', 62)).toBe('Cadencia en D4 Mayor')
-    expect(getTonalContextDescription('tonic', 60)).toBe('Tónica C4')
-    expect(getTonalContextDescription('none', 60)).toBe('Aislado')
   })
 
   it('getTotalContextDurationMs debe calcular la duración exacta del pre-roll', () => {

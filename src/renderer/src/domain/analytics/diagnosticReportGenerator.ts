@@ -1,5 +1,7 @@
-import { AnalyticsMetrics, MASTERY_THRESHOLDS, BIAS_DOMINANCE_RATIO } from './historyAnalytics'
-import { getLatencyThresholds } from './thresholds'
+// Imports directos a submódulos (hallazgo F24, auditoría V9): evitar el barrel
+// historyAnalytics para no crear rutas de dependencia con riesgo de ciclo.
+import { AnalyticsMetrics } from './types'
+import { MASTERY_THRESHOLDS, BIAS_DOMINANCE_RATIO, getLatencyThresholds } from './thresholds'
 
 export interface DiagnosticReport {
   title: string

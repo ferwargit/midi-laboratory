@@ -4,6 +4,12 @@
     "electron.vite.config.*",
     "src/main/**/*",
     "src/preload/**/*",
+    // Única inclusión que cruza al renderer (hallazgo F26, auditoría V9): es
+    // necesaria para tipar el test contractual src/main/lmStudioHostSync.test.ts
+    // (hallazgo F5, auditoría V7), que acopla DEFAULT_APP_CONFIG.lmStudio.baseUrl
+    // (SSOT del renderer) con LM_STUDIO_DEFAULT_HOST (allowlist del Main) para
+    // detectar desviaciones entre ambos lados del proceso. No eliminar sin
+    // resolver antes ese import cruzado.
     "src/renderer/src/domain/ai/appConfig.ts"
   ],
   "compilerOptions": {

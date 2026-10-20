@@ -159,20 +159,3 @@ export function getIntervalDefinition(semitones: number): IntervalDefinition {
   const normalized = Math.abs(semitones) % 13
   return INTERVAL_DEFINITIONS[normalized] || INTERVAL_DEFINITIONS[0]
 }
-
-/**
- * Calcula el intervalo en semitonos y dirección dadas dos notas MIDI.
- */
-export function calculateIntervalFromNotes(
-  rootNote: number,
-  targetNote: number
-): { semitones: number; direction: IntervalDirection } {
-  const diff = targetNote - rootNote
-  if (diff === 0) {
-    return { semitones: 0, direction: 'harmonic' }
-  }
-  return {
-    semitones: Math.abs(diff),
-    direction: diff > 0 ? 'ascending' : 'descending'
-  }
-}
