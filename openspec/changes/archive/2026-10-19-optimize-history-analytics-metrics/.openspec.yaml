@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-10-19
+# Refactor puro (F23): el contrato de retorno `AnalyticsMetrics` y todo el
+# comportamiento observable se mantienen idénticos; no hay delta de specs.
+skip_specs: true
