@@ -25,7 +25,12 @@
 ```text
 src/
 ├── main/                           ← PROCESO PRINCIPAL ELECTRON
-│   └── index.ts                    (Ventana BrowserWindow + Handlers IPC con AbortController/Timeouts hacia LM Studio)
+│   ├── index.ts                    (Ventana BrowserWindow + cableado de permisos, guardas e IPC con AbortController/Timeouts hacia LM Studio)
+│   ├── sessionPermissions.ts       (Allowlist fail-closed de permisos de sesión Web: solo 'midi' y 'midiSysex')
+│   ├── windowNavigationGuard.ts    (Guardas fail-closed de navegación in-frame y shell.openExternal)
+│   ├── lmStudioHandlers.ts         (Handlers IPC LM Studio: check-models / chat-completion, testeables sin Electron)
+│   ├── lmStudioHostValidator.ts    (Allowlist anti-SSRF: solo destinos 127.0.0.1 / localhost con http/https)
+│   └── chatPayloadValidator.ts     (Validación fail-closed del esquema del payload lm-studio:chat-completion)
 │
 ├── preload/                        ← PUENTE IPC AISLADO
 │   ├── index.ts                    (contextBridge seguro con electronAPI y customAPI)
@@ -33,32 +38,38 @@ src/
 │
 └── renderer/src/                   ← PROCESO DE RENDERIZADO (React 19 / UI)
     ├── domain/                     ← CAPA DE DOMINIO PURO (0 dependencias de React, 100% testeable)
-    │   ├── music/                  (noteUtils, intervals, sequences, instruments, presets, tonalContext)
-    │   ├── exercise/               (evaluator, intervalEvaluator, sequenceEvaluator, evalPolicy, rules, sync)
+    │   ├── music/                  (noteUtils, intervals, sequences, instruments, presets, tonalContext, scoreParser, scoreTypes, defaultScore)
+    │   ├── exercise/               (evaluator, intervalEvaluator, sequenceEvaluator, repertoireEvaluator, evalPolicy, exerciseGeneratorRules, visualAudioSync)
     │   ├── adaptation/             (adaptiveEngine, spacedRepetitionEngine, types)
+    │   ├── analytics/              (historyAnalytics, longitudinal, psychometrics, confusionMatrix, latencyStats, sessionClassification, sessionFilters, sessionModality, pedagogicalDictionary, diagnosticReportGenerator, thresholds, timelineTelemetry)
     │   ├── database/               (databaseEngine v5, recordValidator, types)
-    │   └── ai/                     (appConfig, lmStudioService, promptBuilder, fallbackGenerator, schemaValidator, circuitBreaker)
+    │   └── ai/                     (appConfig, lmStudioService, promptBuilder, fallbackGenerator, schemaValidator, circuitBreaker, prescriptionSanitizer)
     │
     ├── stores/                     ← GESTIÓN DE ESTADO GLOBAL (Zustand Segmentado)
     │   ├── useDatabaseStore.ts     (Persistencia IndexedDB, sesiones con targetMode, respuestas, CRUD y cascada)
     │   ├── useAnalyticsStore.ts    (Filtrado por modalidad y cálculo psicométrico reactivo)
-    │   └── useAiStore.ts           (Conexión LM Studio, inferencia GPU, prescripciones e historial de reportes)
+    │   ├── useAiStore.ts           (Conexión LM Studio, inferencia GPU, prescripciones e historial de reportes)
+    │   └── useTelemetryStore.ts    (Log en vivo de eventos MIDI/IA/EVAL para el monitor de estudio)
     │
-    ├── services/midi/              ← INFRAESTRUCTURA MIDI
-    │   ├── midiParser.ts           (Decodificación binaria NoteOn/Off y canales)
-    │   └── midiInputFilter.ts      (Filtro anti-rebote de 35ms y watchdog de notas colgadas)
+    ├── services/                   ← INFRAESTRUCTURA
+    │   ├── midi/                   (midiParser: decodificación binaria NoteOn/Off; midiInputFilter: anti-rebote de 35ms y watchdog)
+    │   ├── audio/                  (stimulusScheduler: programación Web Audio de estímulos y metrónomo)
+    │   └── keyboard/               (shortcutDecision: decisión de atajos de teclado según modo de entrenamiento)
     │
     ├── hooks/                      ← MÁQUINAS DE ESTADO Y KERNEL DE PRÁCTICA
     │   ├── useTrainerCore.ts       (KERNEL CENTRAL: Temporizadores, auto-advance, tokens anti-carrera y persistencia)
     │   ├── useMidi.ts              (Web MIDI API, software Thru, auto-reconexión hotplug y MIDI Panic CC 120/123/64)
     │   ├── useSingleNoteTrainer.ts (Adaptador de 1 nota con Modo Maestría y Anclaje Tonal)
     │   ├── useIntervalTrainer.ts   (Adaptador de 2 notas secuenciales con direcciones y raíces)
-    │   └── useSequenceTrainer.ts   (Adaptador de secuencias melódicas de 3-6 notas con Levenshtein y contorno)
+    │   ├── useSequenceTrainer.ts   (Adaptador de secuencias melódicas de 3-6 notas con Levenshtein y contorno)
+    │   └── useRepertoireTrainer.ts (Adaptador de repertorio MusicXML: hands-separate y tempo configurable)
     │
     └── components/                 ← DESIGN SYSTEM Y VISTAS
-        ├── ui/                     (Button, Card, Badge, StatCard, ConfirmModal, ErrorBoundary, MarkdownRenderer)
-        ├── trainer/                (PianoKeyboard 3D, FeedbackPanels, AnalyticsCharts, MidiMonitor, StudioTopBar, StudioBottomDock)
-        └── views/                  (SingleNoteView, IntervalsView, SequencesView, AnalyticsView, DatabaseCard)
+        ├── ui/                     (Button, Card, Badge, StatCard, ConfirmModal, ErrorBoundary, MarkdownRenderer, PedagogicalTooltip)
+        ├── trainer/                (PianoKeyboard 3D, FeedbackPanels por modalidad, SummaryCards, AnalyticsCharts, MidiMonitor, StudioTopBar, StudioBottomDock)
+        └── views/                  (SingleNoteView, IntervalsView, SequencesView, RepertoireView, AnalyticsView, DatabaseCard)
+            ├── analytics/          (Tabs de analítica: KPIs, tabla de sesiones, longitudinal, matriz de confusión, IA diagnóstico/consulta/historial)
+            └── guide/              (KnowledgeGuideModal + diagramas pedagógicos: IRT, Leitner, entropía, latencia, sesgo de semitono)
 ```
 
 ---

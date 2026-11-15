@@ -146,48 +146,56 @@ contextBridge.exposeInMainWorld('customAPI', customAPI)
 ```
 src/
 ├── main/                           # Proceso principal Electron (Node.js)
-│   └── index.ts                   # Ventana principal, IPC handlers LM Studio
+│   ├── index.ts                    # Ventana principal + cableado de permisos, guardas e IPC
+│   ├── sessionPermissions.ts       # Allowlist fail-closed de permisos (solo midi/midiSysex)
+│   ├── windowNavigationGuard.ts    # Guardas de navegación in-frame y shell.openExternal
+│   ├── lmStudioHandlers.ts         # Handlers IPC LM Studio (check-models, chat-completion)
+│   ├── lmStudioHostValidator.ts    # Allowlist anti-SSRF (solo destinos locales)
+│   └── chatPayloadValidator.ts     # Validación fail-closed del payload de chat
 ├── preload/                        # Puente seguro Main ↔ Renderer (contextBridge)
-│   └── index.ts                   # Expone customAPI + electronAPI
+│   ├── index.ts                    # Expone customAPI + electronAPI
+│   └── index.d.ts                  # Declaraciones globales de window.customAPI
 └── renderer/                       # Proceso de renderizado (React SPA)
-    ├── index.html                 # HTML base + CSP configurado
+    ├── index.html                  # HTML base + CSP configurado
     └── src/
-        ├── main.tsx               # Entry point React + ErrorBoundary
-        ├── App.tsx                # Componente raíz - orquesta 5 modos
-        ├── assets/                # CSS global (Tailwind v4 + base)
-        ├── components/            # Componentes UI por dominio
-        │   ├── trainer/           # Componentes específicos del entrenador
-        │   ├── ui/                # Componentes genéricos reutilizables
-        │   └── views/             # Vistas por modo + analytics
-        ├── domain/                # Lógica de negocio PURA (sin React)
-        │   ├── adaptation/        # Motor adaptativo + spaced repetition
-        │   ├── ai/                # Integración LM Studio (prompts, circuit breaker)
-        │   ├── analytics/         # Reportes, diccionario pedagógico, history
-        │   ├── database/          # IndexedDB via DatabaseEngine
-        │   ├── exercise/          # Evaluadores, generadores, políticas
-        │   └── music/             # Utilidades musicales (notas, tonalidad, MusicXML)
-        ├── hooks/                 # Custom React hooks
-        │   ├── useMidi.ts         # Web MIDI API centralizada
-        │   ├── use*Trainer.ts     # Hooks por modo de entrenamiento
-        │   └── ...
-        ├── services/              # Servicios de infraestructura
-        │   ├── audio/             # StimulusScheduler (Web Audio API)
-        │   └── midi/              # Parser MIDI, InputFilter
-        └── stores/                # Estado global con Zustand
+        ├── main.tsx                # Entry point React + ErrorBoundary
+        ├── App.tsx                 # Componente raíz - orquesta 5 modos
+        ├── assets/                 # CSS global (Tailwind v4 + base)
+        ├── components/             # Componentes UI por dominio
+        │   ├── trainer/            # Piano 3D, paneles de feedback, dock de estudio
+        │   ├── ui/                 # Componentes genéricos reutilizables
+        │   └── views/              # Vistas por modo + analytics/ + guide/
+        ├── domain/                 # Lógica de negocio PURA (sin React)
+        │   ├── adaptation/         # Motor adaptativo + spaced repetition
+        │   ├── ai/                 # Integración LM Studio (prompts, circuit breaker, sanitizer)
+        │   ├── analytics/          # Reportes, psicometría, longitudinal, diccionario pedagógico
+        │   ├── database/           # IndexedDB via DatabaseEngine
+        │   ├── exercise/           # Evaluadores (nota, intervalo, secuencia, repertorio), políticas
+        │   └── music/              # Utilidades musicales (notas, tonalidad, MusicXML)
+        ├── hooks/                  # Custom React hooks
+        │   ├── useMidi.ts          # Web MIDI API centralizada
+        │   ├── useTrainerCore.ts   # Kernel central de sesión de práctica
+        │   └── use*Trainer.ts      # Hooks por modo de entrenamiento
+        ├── services/               # Servicios de infraestructura
+        │   ├── audio/              # StimulusScheduler (Web Audio API)
+        │   ├── keyboard/           # Decisión de atajos de teclado por modo
+        │   └── midi/               # Parser MIDI, InputFilter
+        └── stores/                 # Estado global con Zustand
             ├── useDatabaseStore.ts
+            ├── useAnalyticsStore.ts
             ├── useAiStore.ts
-            └── ...
+            └── useTelemetryStore.ts
 ```
 
 ### Dominio: Lógica de Negocio Pura (`domain/`)
 
-| Módulo             | Archivos Clave                                                                                                                  | Responsabilidad                                           |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| **Adaptación**     | `adaptiveEngine.ts`, `spacedRepetitionEngine.ts`, `types.ts`                                                                    | Motor adaptativo + SM-2 modificado                        |
-| **IA / LM Studio** | `appConfig.ts`, `circuitBreaker.ts`, `lmStudioService.ts`, `promptBuilder.ts`, `prescriptionSanitizer.ts`, `schemaValidator.ts` | Cliente LLM resiliente, prompts estructurados, validación |
-| **Base de Datos**  | `databaseEngine.ts`, `recordValidator.ts`, `types.ts`                                                                           | Wrapper IndexedDB, stores, índices, backup JSON           |
-| **Ejercicios**     | `evaluator.ts`, `intervalEvaluator.ts`, `evalPolicy.ts`, `exerciseGeneratorRules.ts`, `visualAudioSync.ts`                      | Evaluación, políticas, generación, sync A/V               |
-| **Música**         | `noteUtils.ts`, `tonalContext.ts`, `scoreParser.ts`                                                                             | Utilidades notas, tonalidad, parser MusicXML              |
+| Módulo             | Archivos Clave                                                                                                                                               | Responsabilidad                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| **Adaptación**     | `adaptiveEngine.ts`, `spacedRepetitionEngine.ts`, `types.ts`                                                                                                 | Motor adaptativo + SM-2 modificado                        |
+| **IA / LM Studio** | `appConfig.ts`, `circuitBreaker.ts`, `lmStudioService.ts`, `promptBuilder.ts`, `prescriptionSanitizer.ts`, `schemaValidator.ts`                              | Cliente LLM resiliente, prompts estructurados, validación |
+| **Base de Datos**  | `databaseEngine.ts`, `recordValidator.ts`, `types.ts`                                                                                                        | Wrapper IndexedDB, stores, índices, backup JSON           |
+| **Ejercicios**     | `evaluator.ts`, `intervalEvaluator.ts`, `sequenceEvaluator.ts`, `repertoireEvaluator.ts`, `evalPolicy.ts`, `exerciseGeneratorRules.ts`, `visualAudioSync.ts` | Evaluación, políticas, generación, sync A/V               |
+| **Música**         | `noteUtils.ts`, `tonalContext.ts`, `scoreParser.ts`                                                                                                          | Utilidades notas, tonalidad, parser MusicXML              |
 
 ---
 
@@ -326,15 +334,15 @@ npm run build:unpack
 
 ## 🔐 Seguridad
 
-| Medida                | Configuración                              | Justificación                                             |
-| --------------------- | ------------------------------------------ | --------------------------------------------------------- |
-| **Context Isolation** | `true`                                     | Aísla renderer de Node.js (mitigación principal)          |
-| **Sandbox**           | `false`                                    | Intencional: `window.customAPI` requiere `sandbox: false` |
-| **CSP**               | `connect-src 'self' http://127.0.0.1:1234` | Permite fallback fetch directo a LM Studio                |
-| **IPC Validation**    | `AbortController` + timeouts               | Previene bloqueos indefinidos                             |
-| **Node Integration**  | `false`                                    | Renderer sin acceso a Node.js APIs                        |
+| Medida                | Configuración                | Justificación                                                                                                                                   |
+| --------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Context Isolation** | `true`                       | Aísla renderer de Node.js (mitigación principal)                                                                                                |
+| **Sandbox**           | `true`                       | Renderer sandboxeado: el canal único hacia LM Studio es IPC (`window.customAPI`, compatible con sandbox); el fallback a `fetch()` fue eliminado |
+| **CSP**               | `connect-src 'self'`         | Sin hosts de red: LM Studio se accede vía proceso Main (IPC), no desde el renderer                                                              |
+| **IPC Validation**    | `AbortController` + timeouts | Previene bloqueos indefinidos                                                                                                                   |
+| **Node Integration**  | `false`                      | Renderer sin acceso a Node.js APIs                                                                                                              |
 
-> Ver `src/main/index.ts:16-22` para documentación detallada de la decisión `sandbox: false`.
+> Ver `src/main/index.ts:56-61` para la decisión `sandbox: true` y los tests de regresión `src/renderer/src/index-csp.test.ts` que fijan esta postura (CSP sin host `127.0.0.1:1234`, sandbox activo).
 
 ---
 
@@ -345,7 +353,7 @@ npm run build:unpack
 - **IndexedDB Mock**: fake-indexeddb (tests de `DatabaseEngine`)
 - **Cobertura**: @vitest/coverage-v8 (provider nativo V8)
 - **Organización**: Tests colocalizados `*.test.ts(x)` junto al código fuente
-- **Cobertura actual**: >86% líneas, 138+ tests
+- **Cobertura actual**: 96.11% líneas, 830 tests (0 fallos) — medida con `npm run test:coverage` (noviembre 2026)
 
 ```bash
 # Ejecutar tests
@@ -368,7 +376,7 @@ npm run test:watch
 | `REPERTOIRE_LEARNING_V1_SPEC.md` | Especificación modo repertoire v1                    |
 | `REPERTOIRE_LEARNING_V2_SPEC.md` | Especificación modo repertoire v2                    |
 | `AUDIT_REPORT_V*_ARCHIVE.md`     | Auditorías históricas de código/arquitectura         |
-| `PROJECT_EXPLANATION.md`         | Análisis técnico exhaustivo generado automáticamente |
+| `PROJECT_EXPLANATION_V1.md`      | Análisis técnico exhaustivo generado automáticamente |
 
 ---
 
