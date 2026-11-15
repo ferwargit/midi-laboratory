@@ -65,9 +65,9 @@ src/
     │   └── useRepertoireTrainer.ts (Adaptador de repertorio MusicXML: hands-separate y tempo configurable)
     │
     └── components/                 ← DESIGN SYSTEM Y VISTAS
-        ├── ui/                     (Button, Card, Badge, StatCard, ConfirmModal, ErrorBoundary, MarkdownRenderer, PedagogicalTooltip)
-        ├── trainer/                (PianoKeyboard 3D, FeedbackPanels por modalidad, SummaryCards, AnalyticsCharts, MidiMonitor, StudioTopBar, StudioBottomDock)
-        └── views/                  (SingleNoteView, IntervalsView, SequencesView, RepertoireView, AnalyticsView, DatabaseCard)
+        ├── ui/                     (Button, Card, Badge, StatCard, ConfirmModal, ErrorBoundary, MarkdownRenderer, PedagogicalTooltip, markdownParser, tooltipPlacement)
+        ├── trainer/                (PianoKeyboard 3D, FeedbackPanels por modalidad, SummaryCards, AnalyticsCharts, MidiMonitor, StudioTopBar, StudioBottomDock, Header, DbSaveAlert, MidiDeviceSelect, MidiDisconnectAlert)
+        └── views/                  (SingleNoteView, IntervalsView, SequencesView, RepertoireView, AnalyticsView, DatabaseCard, sessionHeaderStyles)
             ├── analytics/          (Tabs de analítica: KPIs, tabla de sesiones, longitudinal, matriz de confusión, IA diagnóstico/consulta/historial)
             └── guide/              (KnowledgeGuideModal + diagramas pedagógicos: IRT, Leitner, entropía, latencia, sesgo de semitono)
 ```

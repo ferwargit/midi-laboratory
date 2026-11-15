@@ -370,13 +370,13 @@ npm run test:watch
 
 ## 📄 Documentación Adicional en Repo
 
-| Archivo                          | Contenido                                            |
-| -------------------------------- | ---------------------------------------------------- |
-| `ARCHITECTURE.md`                | Decisiones arquitectónicas detalladas (ADR-style)    |
-| `REPERTOIRE_LEARNING_V1_SPEC.md` | Especificación modo repertoire v1                    |
-| `REPERTOIRE_LEARNING_V2_SPEC.md` | Especificación modo repertoire v2                    |
-| `AUDIT_REPORT_V*_ARCHIVE.md`     | Auditorías históricas de código/arquitectura         |
-| `PROJECT_EXPLANATION_V1.md`      | Análisis técnico exhaustivo generado automáticamente |
+| Archivo                             | Contenido                                                        |
+| ----------------------------------- | ---------------------------------------------------------------- |
+| `ARCHITECTURE.md`                   | Decisiones arquitectónicas detalladas (ADR-style)                |
+| `REPERTOIRE_LEARNING_V1_SPEC.md`    | Especificación modo repertoire v1                                |
+| `REPERTOIRE_LEARNING_V2_SPEC.md`    | Especificación modo repertoire v2                                |
+| `AUDIT_REPORT_V*_ARCHIVE.md`        | Auditorías históricas de código/arquitectura                     |
+| `PROJECT_EXPLANATION_V1_ARCHIVE.md` | Análisis técnico exhaustivo generado automáticamente (histórico) |
 
 ---
 

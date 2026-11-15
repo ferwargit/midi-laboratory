@@ -218,7 +218,7 @@ El proyecto incluye documentación exhaustiva:
 
 - `ARCHITECTURE.md` — Decisiones arquitectónicas (ADR-style)
 - `README.md` — Documentación completa (17,874 caracteres)
-- `PROJECT_EXPLANATION_V1.md` — Análisis técnico detallado
+- `PROJECT_EXPLANATION_V1_ARCHIVE.md` — Análisis técnico detallado (histórico)
 - `REPERTOIRE_LEARNING_V1/V2_SPEC.md` — Especificaciones de modos
 - `AUDIT_REPORT_V*_ARCHIVE.md` — Auditorías históricas
 
