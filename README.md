@@ -136,8 +136,8 @@ const customAPI = {
 contextBridge.exposeInMainWorld('customAPI', customAPI)
 ```
 
-- **Seguridad**: `contextIsolation: true`, `sandbox: false` (intencional, documentado)
-- **CSP** en `index.html`: `connect-src 'self' http://127.0.0.1:1234`
+- **Seguridad**: `contextIsolation: true`, `sandbox: true`
+- **CSP** en `index.html`: `connect-src 'self'`
 
 ---
 
